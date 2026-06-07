@@ -156,6 +156,32 @@ export async function upsertProviderConnection(
 }
 
 /**
+ * Disconnect a source connection: mark it disconnected and wipe its OAuth
+ * credentials. Uses the USER client for the status update (RLS allows it) and
+ * the SECRET client to delete credentials (never exposed to authenticated).
+ */
+export async function disconnectSourceConnection(
+  connectionId: string,
+  tenantId: string,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+
+  const { error: updateError } = await supabase
+    .from("source_connections")
+    .update({ status: "disconnected" })
+    .eq("id", connectionId);
+  if (updateError) throw new Error(updateError.message);
+
+  // Wipe OAuth tokens — requires secret client (no authenticated grant).
+  const secret = createSupabaseSecretClient();
+  await secret
+    .from("integration_credentials")
+    .delete()
+    .eq("source_connection_id", connectionId)
+    .eq("tenant_id", tenantId);
+}
+
+/**
  * Persist OAuth credentials for a connection (SECRET client; tenant-scoped).
  * Replaces any prior credentials for the same connection so re-auth is clean.
  */

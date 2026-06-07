@@ -8,6 +8,26 @@
 import { revalidatePath } from "next/cache";
 import { requireTenantContext } from "@/modules/identity-tenant/server";
 import { ingestPastedText } from "@/modules/ingestion/server";
+import { disconnectSourceConnection } from "@/modules/source-connection/server";
+
+/** Disconnect a source connection and clear its OAuth credentials. */
+export async function disconnectConnectionAction(
+  _prev: { error: string | null } | null,
+  formData: FormData,
+): Promise<{ error: string | null }> {
+  const ctx = await requireTenantContext();
+  const connectionId = formData.get("connectionId");
+  if (typeof connectionId !== "string" || !connectionId) {
+    return { error: "Missing connection ID." };
+  }
+  try {
+    await disconnectSourceConnection(connectionId, ctx.tenantId);
+    revalidatePath("/sources");
+    return { error: null };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Disconnect failed." };
+  }
+}
 
 export interface UploadResult {
   readonly ok: boolean;

@@ -14,13 +14,7 @@ import { requireTenantContext } from "@/modules/identity-tenant/server";
 import { diaryService } from "@/modules/diary";
 import { auditService } from "@/modules/audit";
 
-/** Returned to client forms via useActionState for inline feedback. */
-export interface DiaryFormState {
-  readonly ok: boolean;
-  readonly error: string | null;
-}
-
-export const initialDiaryFormState: DiaryFormState = { ok: false, error: null };
+import type { DiaryFormState } from "./types";
 
 export async function createEntryAction(
   _prev: DiaryFormState,

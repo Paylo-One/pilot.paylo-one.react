@@ -13,6 +13,7 @@ import { SOURCE_SYSTEM_LABELS } from "@/modules/source-connection";
 import { isGithubOAuthConfigured } from "@/modules/source-connection/github";
 import { listRecentSourceItems } from "@/modules/knowledge-store/server";
 import { UploadForm } from "./upload-form";
+import { DisconnectButton } from "./disconnect-button";
 
 const sectionTitle: React.CSSProperties = {
   fontSize: "var(--text-h2)",
@@ -122,9 +123,12 @@ export default async function SourcesPage({
                       {SOURCE_SYSTEM_LABELS[connection.system] ?? connection.system}
                     </span>
                   </span>
-                  <span style={{ display: "flex", gap: "var(--space-sm)" }}>
+                  <span style={{ display: "flex", gap: "var(--space-sm)", alignItems: "center" }}>
                     <span className="badge">{connection.storagePolicy.replace(/_/g, " ")}</span>
                     <span className="badge">{connection.status}</span>
+                    {connection.status === "connected" && connection.system !== "file_upload" ? (
+                      <DisconnectButton connectionId={connection.id} />
+                    ) : null}
                   </span>
                 </li>
               ))}

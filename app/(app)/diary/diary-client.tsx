@@ -18,8 +18,8 @@ import {
   createEntryAction,
   updateEntryAction,
   deleteEntryAction,
-  initialDiaryFormState,
 } from "./actions";
+import { initialDiaryFormState } from "./types";
 
 /** Plain, serialisable shape passed from the server component. */
 export interface DiaryEntryView {

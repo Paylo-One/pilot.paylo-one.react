@@ -21,7 +21,7 @@ const TOKEN_URL = "https://github.com/login/oauth/access_token";
 const API_BASE = "https://api.github.com";
 
 /** Least-privilege, read-only scope (no repo write, no send). */
-const GITHUB_SCOPE = "read:user";
+const GITHUB_SCOPE = "read:user read:org";
 
 /** Lifetime of the OAuth state nonce (seconds). */
 export const OAUTH_STATE_TTL_SECONDS = 600;

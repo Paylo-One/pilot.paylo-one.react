@@ -8,7 +8,8 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { apexBaseUrl } from "@/lib/config";
+import { apexBaseUrl, tenantBaseUrl } from "@/lib/config";
+import { findPrimaryTenantSlug } from "@/modules/identity-tenant/server";
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
     return NextResponse.redirect(
@@ -28,7 +29,17 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // `next` is an app-relative path; resolve against the apex base URL.
+  // If the user already owns a workspace, skip onboarding and go straight to it.
+  // We use the userId from the exchange response directly — no cookie round-trip.
+  const userId = data.user?.id;
+  if (userId) {
+    const slug = await findPrimaryTenantSlug(userId);
+    if (slug) {
+      return NextResponse.redirect(tenantBaseUrl(slug));
+    }
+  }
+
+  // New user: send to onboarding to claim a subdomain.
   const target = next.startsWith("/") ? `${apexBaseUrl()}${next}` : next;
   return NextResponse.redirect(target);
 }

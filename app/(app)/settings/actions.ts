@@ -11,16 +11,7 @@ import { revalidatePath } from "next/cache";
 import { requireTenantContext } from "@/modules/identity-tenant/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { auditService } from "@/modules/audit";
-
-export interface ProfileFormState {
-  readonly ok: boolean;
-  readonly error: string | null;
-}
-
-export const initialProfileFormState: ProfileFormState = {
-  ok: false,
-  error: null,
-};
+import type { ProfileFormState } from "./types";
 
 /** Basic IANA-style timezone shape check; empty falls back to UTC. */
 function normaliseTimezone(raw: string): string {

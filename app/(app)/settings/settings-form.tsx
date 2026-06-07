@@ -7,7 +7,8 @@
  */
 
 import { useActionState } from "react";
-import { saveProfileAction, initialProfileFormState } from "./actions";
+import { saveProfileAction } from "./actions";
+import { initialProfileFormState } from "./types";
 
 export interface ProfileFormValues {
   displayName: string;

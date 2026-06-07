@@ -147,15 +147,24 @@ export async function findPrimaryTenantSlug(
   userId: string,
 ): Promise<string | null> {
   const secret = createSupabaseSecretClient();
-  const { data } = await secret
+
+  // Two explicit queries avoids relational-join syntax ambiguity with PostgREST.
+  const { data: membership } = await secret
     .from("tenant_users")
-    .select("tenants!inner(slug)")
+    .select("tenant_id")
     .eq("user_id", userId)
     .limit(1)
     .maybeSingle();
 
-  // tenants!inner is returned as an object under the relationship key.
-  const tenant = (data as { tenants?: { slug?: string } } | null)?.tenants;
+  if (!membership?.tenant_id) return null;
+
+  const { data: tenant } = await secret
+    .from("tenants")
+    .select("slug")
+    .eq("id", membership.tenant_id)
+    .eq("status", "active")
+    .maybeSingle();
+
   return tenant?.slug ?? null;
 }
 
