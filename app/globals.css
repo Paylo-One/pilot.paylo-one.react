@@ -1,0 +1,232 @@
+/* ============================================================================
+   Paylo.one Management OS · Application
+   globals.css
+
+   Design tokens mirrored from the marketing site (governance/design/visual-guide)
+   so the product and the site share one visual language: monochrome-first,
+   teal accent used sparingly, flat surfaces with hairline borders, IBM Plex
+   Sans + Mono, light-first with a first-class dark surface.
+
+   This file intentionally carries only the tokens + a small app-shell layer the
+   scaffold needs. Surface-specific styling is added with the product screens.
+   ========================================================================== */
+
+/* --- Tokens: light (default) ---------------------------------------------- */
+:root {
+  --colour-bg: #f4f5f7;
+  --colour-surface: #fbfbfd;
+  --colour-surface-elevated: #ffffff;
+  --colour-surface-sunken: #eef0f3;
+  --colour-surface-command: #16181d;
+
+  --colour-text-primary: #16181d;
+  --colour-text-secondary: #565d68;
+  --colour-text-tertiary: #878d98;
+  --colour-text-inverse: #f7f8fa;
+
+  --colour-border: #e3e5ea;
+  --colour-border-strong: #cdd1d8;
+
+  --colour-accent: #157a86;
+  --colour-accent-hover: #11636d;
+  --colour-accent-tint: #e4f1f2;
+  --colour-accent-on: #ffffff;
+
+  --font-body: var(--font-plex-sans), Inter, ui-sans-serif, system-ui,
+    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-heading: var(--font-body);
+  --font-mono: var(--font-plex-mono), "SF Mono", "JetBrains Mono", Consolas,
+    monospace;
+
+  --text-h1: clamp(1.75rem, 1.4rem + 1.4vw, 2.5rem);
+  --text-h2: 1.375rem;
+  --text-body: 0.9375rem;
+  --text-small: 0.8125rem;
+  --text-label: 0.6875rem;
+
+  --leading-tight: 1.15;
+  --leading-normal: 1.6;
+  --tracking-label: 0.08em;
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 40px;
+  --space-2xl: 64px;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  --content-max: 1100px;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --speed: 160ms;
+}
+
+/* --- Tokens: dark --------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --colour-bg: #0e1014;
+    --colour-surface: #15181e;
+    --colour-surface-elevated: #1b1f27;
+    --colour-surface-sunken: #0a0c0f;
+    --colour-surface-command: #07090c;
+
+    --colour-text-primary: #e8eaed;
+    --colour-text-secondary: #a0a6b0;
+    --colour-text-tertiary: #6c727d;
+    --colour-text-inverse: #16181d;
+
+    --colour-border: #262b33;
+    --colour-border-strong: #38404b;
+
+    --colour-accent: #2aa7b5;
+    --colour-accent-hover: #36b9c7;
+    --colour-accent-tint: #11353a;
+    --colour-accent-on: #07181a;
+  }
+}
+
+/* --- Reset + base --------------------------------------------------------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  line-height: var(--leading-normal);
+  color: var(--colour-text-primary);
+  background: var(--colour-bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.015em;
+  margin: 0;
+  font-weight: 600;
+}
+
+p {
+  margin: 0;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--colour-accent);
+  outline-offset: 2px;
+}
+
+/* --- App shell ------------------------------------------------------------ */
+.app-shell {
+  display: grid;
+  grid-template-columns: 248px 1fr;
+  min-height: 100vh;
+}
+
+.app-nav {
+  border-right: 1px solid var(--colour-border);
+  background: var(--colour-surface);
+  padding: var(--space-lg) var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.app-nav__brand {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.app-nav__links {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.app-nav__link {
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  color: var(--colour-text-secondary);
+  font-size: var(--text-small);
+  transition: background var(--speed) var(--ease-standard);
+}
+.app-nav__link:hover {
+  background: var(--colour-surface-sunken);
+  color: var(--colour-text-primary);
+}
+
+.app-main {
+  padding: var(--space-xl);
+  max-width: var(--content-max);
+  width: 100%;
+}
+
+.panel {
+  background: var(--colour-surface-elevated);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--colour-text-tertiary);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--colour-border-strong);
+  color: var(--colour-text-secondary);
+}
+
+.scaffold-note {
+  font-size: var(--text-small);
+  color: var(--colour-text-tertiary);
+  border-left: 2px solid var(--colour-accent);
+  padding-left: var(--space-md);
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+  .app-nav {
+    border-right: none;
+    border-bottom: 1px solid var(--colour-border);
+  }
+}
