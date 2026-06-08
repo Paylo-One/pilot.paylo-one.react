@@ -2,30 +2,23 @@
 
 /**
  * Client controls for an operator decision on a suggested action. The
- * approve/defer/dismiss buttons call the `decideAction` server action inside a
- * transition; resolved actions show their status instead of controls. No
- * external action is ever taken — only the status changes.
+ * governance model is approve / edit / dismiss / defer (product/actions.md):
+ * approve, defer, and dismiss are wired to the `decideAction` server action
+ * (status changes only — nothing is ever sent externally). Edit (adjust title /
+ * notes / due before confirming) is part of the designed flow but not yet wired,
+ * so it is presented as a clearly-disabled affordance.
+ *
+ * Resolved actions show their status instead of controls.
  */
 
 import { useState, useTransition } from "react";
 import { decideAction, type ActionDecision } from "./actions";
 
-const RESOLVED_LABEL: Record<string, string> = {
-  approved: "Approved",
-  deferred: "Deferred",
-  dismissed: "Dismissed",
-  edited: "Edited",
-};
-
-const buttonStyle: React.CSSProperties = {
-  fontFamily: "var(--font-body)",
-  fontSize: "var(--text-small)",
-  padding: "var(--space-xs) var(--space-md)",
-  borderRadius: "var(--radius-md)",
-  border: "1px solid var(--colour-border-strong)",
-  background: "var(--colour-surface-elevated)",
-  color: "var(--colour-text-primary)",
-  cursor: "pointer",
+const RESOLVED: Record<string, { label: string; tone: string }> = {
+  approved: { label: "Confirmed", tone: "ok" },
+  edited: { label: "Edited", tone: "ok" },
+  deferred: { label: "Deferred", tone: "info" },
+  dismissed: { label: "Dismissed", tone: "neutral" },
 };
 
 export function ActionControls({
@@ -39,10 +32,9 @@ export function ActionControls({
   const [error, setError] = useState<string | null>(null);
 
   if (status !== "suggested") {
+    const resolved = RESOLVED[status] ?? { label: status, tone: "neutral" };
     return (
-      <span className="badge" style={{ textTransform: "none" }}>
-        {RESOLVED_LABEL[status] ?? status}
-      </span>
+      <span className={`status status--${resolved.tone}`}>{resolved.label}</span>
     );
   }
 
@@ -57,29 +49,50 @@ export function ActionControls({
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-xs)", alignItems: "flex-end" }}>
-      <div style={{ display: "flex", gap: "var(--space-xs)" }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "var(--space-xs)",
+        alignItems: "flex-end",
+      }}
+    >
+      <div className="action-controls">
         <button
           type="button"
           onClick={() => decide("approve")}
           disabled={isPending}
-          style={{
-            ...buttonStyle,
-            border: "1px solid var(--colour-accent)",
-            color: "var(--colour-accent)",
-          }}
+          className="btn btn--accent-outline"
         >
           Approve
         </button>
-        <button type="button" onClick={() => decide("defer")} disabled={isPending} style={buttonStyle}>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          disabled
+          title="Edit before confirm — designed, not yet wired in this scaffold"
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          onClick={() => decide("defer")}
+          disabled={isPending}
+          className="btn btn--ghost"
+        >
           Defer
         </button>
-        <button type="button" onClick={() => decide("dismiss")} disabled={isPending} style={buttonStyle}>
+        <button
+          type="button"
+          onClick={() => decide("dismiss")}
+          disabled={isPending}
+          className="btn btn--ghost"
+        >
           Dismiss
         </button>
       </div>
       {error ? (
-        <p style={{ color: "#b4452f", fontSize: "var(--text-small)" }} role="alert">
+        <p className="form-message form-message--error" role="alert">
           {error}
         </p>
       ) : null}

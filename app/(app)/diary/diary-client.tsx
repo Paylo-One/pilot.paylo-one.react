@@ -2,9 +2,14 @@
 
 /**
  * Client interactivity for the Diary surface. Renders a composer for new
- * entries and a reverse-chronological list where each entry can be edited
+ * entries and a reverse-chronological timeline where each entry can be edited
  * inline or deleted. All persistence happens through the server actions in
  * ./actions; this component holds only ephemeral UI state.
+ *
+ * The Diary is private by default (product/diary.md): entries are visible only
+ * to their author and are not fed to any agent unless the operator opts in.
+ * Voice capture + transcription are designed entry types shown here as clearly
+ * scaffolded affordances — they do not record or transcribe in this build.
  */
 
 import {
@@ -39,45 +44,7 @@ function formatTimestamp(iso: string): string {
   return Number.isNaN(parsed.getTime()) ? iso : dateFormat.format(parsed);
 }
 
-const fieldStyle: React.CSSProperties = {
-  width: "100%",
-  background: "var(--colour-surface)",
-  color: "var(--colour-text-primary)",
-  border: "1px solid var(--colour-border-strong)",
-  borderRadius: "var(--radius-md)",
-  padding: "var(--space-sm) var(--space-md)",
-  font: "inherit",
-  resize: "vertical",
-};
-
-const primaryButtonStyle: React.CSSProperties = {
-  background: "var(--colour-accent)",
-  color: "var(--colour-accent-on)",
-  border: "none",
-  borderRadius: "var(--radius-md)",
-  padding: "var(--space-sm) var(--space-lg)",
-  font: "inherit",
-  cursor: "pointer",
-};
-
-const subtleButtonStyle: React.CSSProperties = {
-  background: "none",
-  color: "var(--colour-text-secondary)",
-  border: "1px solid var(--colour-border)",
-  borderRadius: "var(--radius-md)",
-  padding: "var(--space-xs) var(--space-md)",
-  font: "inherit",
-  fontSize: "var(--text-small)",
-  cursor: "pointer",
-};
-
-const errorStyle: React.CSSProperties = {
-  color: "#b4423a",
-  fontSize: "var(--text-small)",
-  marginTop: "var(--space-xs)",
-};
-
-/** Composer: create a new private text entry. */
+/** Composer: create a new private text entry, with voice capture scaffolded. */
 export function DiaryComposer() {
   const [state, action, pending] = useActionState(
     createEntryAction,
@@ -90,27 +57,60 @@ export function DiaryComposer() {
   }, [state]);
 
   return (
-    <form ref={formRef} action={action} className="panel">
-      <label
-        htmlFor="diary-body"
-        className="eyebrow"
-        style={{ display: "block", marginBottom: "var(--space-sm)" }}
-      >
-        New reflection
-      </label>
+    <form ref={formRef} action={action} className="card">
+      <div className="card-head">
+        <p className="eyebrow">New reflection</p>
+        <span className="status status--neutral">Private</span>
+      </div>
       <textarea
         id="diary-body"
         name="body"
         rows={4}
         required
-        placeholder="Capture a decision, a rationale, or a thought…"
-        style={fieldStyle}
+        placeholder="Capture a decision, the rationale behind it, or a thought…"
+        className="textarea"
       />
-      {state.error ? <p style={errorStyle}>{state.error}</p> : null}
-      <div style={{ marginTop: "var(--space-md)" }}>
-        <button type="submit" style={primaryButtonStyle} disabled={pending}>
+      {state.error ? (
+        <p className="form-message form-message--error">{state.error}</p>
+      ) : null}
+      <div
+        style={{
+          marginTop: "var(--space-md)",
+          display: "flex",
+          gap: "var(--space-sm)",
+          alignItems: "center",
+          flexWrap: "wrap",
+        }}
+      >
+        <button type="submit" className="btn btn--primary" disabled={pending}>
           {pending ? "Saving…" : "Save entry"}
         </button>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          disabled
+          title="Voice capture + transcription — designed, not yet wired in this scaffold"
+        >
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <rect x="9" y="2" width="6" height="12" rx="3" />
+            <path d="M5 10a7 7 0 0 0 14 0M12 17v4" />
+          </svg>
+          Record voice note
+        </button>
+        <span className="field__hint">
+          Voice notes transcribe alongside the audio. Audio retention follows
+          your storage policy.
+        </span>
       </div>
     </form>
   );
@@ -141,17 +141,13 @@ function DiaryEntryItem({ entry }: { entry: DiaryEntryView }) {
   }
 
   return (
-    <li className="panel" style={{ marginBottom: "var(--space-md)" }}>
-      <div
-        className="mono"
-        style={{
-          fontSize: "var(--text-label)",
-          color: "var(--colour-text-tertiary)",
-          marginBottom: "var(--space-sm)",
-        }}
-      >
-        {formatTimestamp(entry.createdAt)}
-        {edited ? " · edited" : ""}
+    <li className="diary-entry">
+      <div className="diary-entry__meta">
+        <span>{formatTimestamp(entry.createdAt)}</span>
+        {edited ? <span>· edited</span> : null}
+        <span className="status status--neutral" style={{ marginLeft: "auto" }}>
+          Private
+        </span>
       </div>
 
       {editing ? (
@@ -162,22 +158,18 @@ function DiaryEntryItem({ entry }: { entry: DiaryEntryView }) {
             rows={4}
             required
             defaultValue={entry.body ?? ""}
-            style={fieldStyle}
+            className="textarea"
           />
-          {error ? <p style={errorStyle}>{error}</p> : null}
-          <div
-            style={{
-              display: "flex",
-              gap: "var(--space-sm)",
-              marginTop: "var(--space-md)",
-            }}
-          >
-            <button type="submit" style={primaryButtonStyle} disabled={pending}>
+          {error ? (
+            <p className="form-message form-message--error">{error}</p>
+          ) : null}
+          <div className="diary-entry__controls">
+            <button type="submit" className="btn btn--primary" disabled={pending}>
               {pending ? "Saving…" : "Save changes"}
             </button>
             <button
               type="button"
-              style={subtleButtonStyle}
+              className="btn btn--ghost"
               onClick={() => {
                 setEditing(false);
                 setError(null);
@@ -190,17 +182,11 @@ function DiaryEntryItem({ entry }: { entry: DiaryEntryView }) {
         </form>
       ) : (
         <>
-          <p style={{ whiteSpace: "pre-wrap" }}>{entry.body}</p>
-          <div
-            style={{
-              display: "flex",
-              gap: "var(--space-sm)",
-              marginTop: "var(--space-md)",
-            }}
-          >
+          <p className="diary-entry__body">{entry.body}</p>
+          <div className="diary-entry__controls">
             <button
               type="button"
-              style={subtleButtonStyle}
+              className="btn btn--ghost"
               onClick={() => setEditing(true)}
             >
               Edit
@@ -218,7 +204,7 @@ function DiaryEntryItem({ entry }: { entry: DiaryEntryView }) {
               }}
             >
               <input type="hidden" name="id" value={entry.id} />
-              <button type="submit" style={subtleButtonStyle}>
+              <button type="submit" className="btn btn--ghost">
                 Delete
               </button>
             </form>
@@ -229,21 +215,24 @@ function DiaryEntryItem({ entry }: { entry: DiaryEntryView }) {
   );
 }
 
-/** The reverse-chronological list of the author's entries. */
+/** The reverse-chronological timeline of the author's entries. */
 export function DiaryList({ entries }: { entries: DiaryEntryView[] }) {
   if (entries.length === 0) {
     return (
-      <p
-        className="scaffold-note"
-        style={{ marginTop: "var(--space-lg)" }}
-      >
-        No entries yet. Your reflections are private to you.
-      </p>
+      <div className="empty" style={{ marginTop: "var(--space-lg)" }}>
+        <p className="empty__title">No entries yet</p>
+        <p className="empty__body">
+          Your reflections are private to you. Capture the first one above.
+        </p>
+      </div>
     );
   }
 
   return (
-    <ul style={{ marginTop: "var(--space-lg)" }}>
+    <ul
+      className="stack"
+      style={{ marginTop: "var(--space-lg)" }}
+    >
       {entries.map((entry) => (
         <DiaryEntryItem key={entry.id} entry={entry} />
       ))}

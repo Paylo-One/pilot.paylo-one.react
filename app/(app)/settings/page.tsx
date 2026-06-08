@@ -1,10 +1,13 @@
 /**
- * Settings — workspace + profile. multi-tenancy-design.md (user_profiles).
+ * Settings — workspace, profile, privacy, security, and routing controls.
+ * Governance: multi-tenancy-design.md (tenant/subdomain), security-and-privacy.md
+ * (storage + retention), authentication-architecture.md (passkeys + recovery),
+ * model-inference-architecture.md (model routing), mcp-tool-architecture.md
+ * (tool permissions), audit-and-source-traceability.md (audit).
  *
- * Server component: shows the resolved workspace (tenant slug), the signed-in
- * user's email and role, and an editable profile form (display name, timezone,
- * briefing time) persisted via the USER server client (RLS: own row only).
- * Sign-out lives in the app shell navigation — not duplicated here.
+ * Server component: the workspace identity and profile form are wired (RLS: own
+ * row). The remaining sections are scaffolded read-only views of the designed
+ * controls — clearly marked, with no persistence in this build.
  */
 
 import {
@@ -17,13 +20,30 @@ import {
   type ProfileFormValues,
 } from "./settings-form";
 
-const metaRowStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: "var(--space-md)",
-  padding: "var(--space-sm) 0",
-  borderBottom: "1px solid var(--colour-border)",
-};
+function SectionCard({
+  label,
+  title,
+  scaffolded,
+  children,
+}: {
+  label: string;
+  title: string;
+  scaffolded?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="card" style={{ maxWidth: "640px" }}>
+      <div className="card-head">
+        <div>
+          <p className="eyebrow">{label}</p>
+          <h2 className="card__title">{title}</h2>
+        </div>
+        {scaffolded ? <span className="badge">scaffold</span> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
 
 export default async function SettingsPage() {
   const ctx = await requireTenantContext();
@@ -39,49 +59,187 @@ export default async function SettingsPage() {
   const values: ProfileFormValues = {
     displayName: profile?.display_name ?? "",
     timezone: profile?.timezone ?? "UTC",
-    // Postgres `time` comes back as e.g. "08:30:00"; trim to HH:MM for the input.
     briefingTime: (profile?.briefing_time as string | null)?.slice(0, 5) ?? "",
   };
 
   return (
-    <main className="app-main">
-      <p className="eyebrow">Settings</p>
-      <h1 style={{ fontSize: "var(--text-h2)", margin: "8px 0 16px" }}>
-        Workspace settings
-      </h1>
-
-      <div
-        className="panel"
-        style={{ marginBottom: "var(--space-lg)", maxWidth: "520px" }}
-      >
-        <p className="eyebrow" style={{ marginBottom: "var(--space-sm)" }}>
-          Workspace
+    <main className="workspace__content">
+      <div className="page-head">
+        <p className="eyebrow">Settings</p>
+        <h1 className="page-head__title">Workspace &amp; controls</h1>
+        <p className="page-head__lead">
+          Your workspace identity, privacy posture, security, and how the system
+          routes intelligence. You can see, export, and delete your data; you
+          stay in command.
         </p>
-        <div style={metaRowStyle}>
-          <span style={{ color: "var(--colour-text-secondary)" }}>
-            Subdomain
-          </span>
-          <span className="mono">{ctx.tenantSlug}.paylo.one</span>
-        </div>
-        <div style={metaRowStyle}>
-          <span style={{ color: "var(--colour-text-secondary)" }}>
-            Signed in as
-          </span>
-          <span className="mono">{user?.email ?? "\u2014"}</span>
-        </div>
-        <div style={{ ...metaRowStyle, borderBottom: "none" }}>
-          <span style={{ color: "var(--colour-text-secondary)" }}>Role</span>
-          <span className="badge">{ctx.role}</span>
-        </div>
       </div>
 
-      <p className="eyebrow" style={{ marginBottom: "var(--space-sm)" }}>
-        Your profile
-      </p>
-      <SettingsProfileForm values={values} />
+      <div className="stack" style={{ gap: "var(--space-lg)" }}>
+        {/* --- Tenant profile (wired identity) --------------------------- */}
+        <SectionCard label="Tenant" title="Workspace">
+          <div className="meta-row">
+            <span className="meta-row__key">Subdomain</span>
+            <span className="meta-row__value mono">
+              {ctx.tenantSlug}.paylo.one
+            </span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">Signed in as</span>
+            <span className="meta-row__value mono">{user?.email ?? "—"}</span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">Role</span>
+            <span className="meta-row__value">
+              <span className="badge">{ctx.role}</span>
+            </span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">Onboarding</span>
+            <span className="meta-row__value">
+              <span className="status status--ok">Invite-only · active</span>
+            </span>
+          </div>
+        </SectionCard>
+
+        {/* --- Profile (wired) ------------------------------------------- */}
+        <div>
+          <p className="eyebrow" style={{ marginBottom: "var(--space-sm)" }}>
+            Your profile
+          </p>
+          <SettingsProfileForm values={values} />
+        </div>
+
+        {/* --- Storage & retention --------------------------------------- */}
+        <SectionCard label="Privacy" title="Storage &amp; retention" scaffolded>
+          <p className="action-card__rationale" style={{ marginBottom: "var(--space-md)" }}>
+            Each source carries its own storage policy. We store the least we can
+            to deliver value; the conservative default is summaries only.
+          </p>
+          <div className="meta-row">
+            <span className="meta-row__key">Default storage policy</span>
+            <span className="meta-row__value">
+              <span className="badge badge--plain">summaries only</span>
+            </span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">Raw retention window</span>
+            <span className="meta-row__value mono">discard after processing</span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">Voice-note audio</span>
+            <span className="meta-row__value mono">keep transcript · purge audio</span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">Export &amp; delete</span>
+            <span className="meta-row__value">
+              <button type="button" className="btn btn--ghost" disabled title="Designed — not wired in this scaffold">
+                Request export
+              </button>
+            </span>
+          </div>
+        </SectionCard>
+
+        {/* --- Passkey authentication ------------------------------------ */}
+        <SectionCard label="Security" title="Passkey authentication" scaffolded>
+          <p className="action-card__rationale" style={{ marginBottom: "var(--space-md)" }}>
+            Passkeys are the target primary credential (RP ID = paylo.one, so one
+            passkey works across every &lt;slug&gt;.paylo.one). The MVP ships a
+            passkey-ready interim sign-in.
+          </p>
+          <div className="meta-row">
+            <span className="meta-row__key">Current method</span>
+            <span className="meta-row__value">
+              <span className="badge badge--plain">magic link · passkey-ready</span>
+            </span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">Enrolled passkeys</span>
+            <span className="meta-row__value mono">0</span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">Recovery</span>
+            <span className="meta-row__value mono">
+              ≥2 passkeys · recovery codes · verified email
+            </span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">Active sessions</span>
+            <span className="meta-row__value">
+              <button type="button" className="btn btn--ghost" disabled title="Designed — not wired in this scaffold">
+                Review
+              </button>
+            </span>
+          </div>
+        </SectionCard>
+
+        {/* --- Model routing --------------------------------------------- */}
+        <SectionCard label="Intelligence" title="Model routing" scaffolded>
+          <p className="action-card__rationale" style={{ marginBottom: "var(--space-md)" }}>
+            Tasks declare a policy, not a model. Sensitive content gates which
+            providers may receive it. Entitlement is deny-by-default by plan tier.
+          </p>
+          <div className="meta-row">
+            <span className="meta-row__key">Plan tier</span>
+            <span className="meta-row__value">
+              <span className="badge badge--plain">founding</span>
+            </span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">Routing policy</span>
+            <span className="meta-row__value mono">quality-first · fallback</span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">Sensitive content</span>
+            <span className="meta-row__value mono">prefer private runtime</span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">Monthly token budget</span>
+            <span className="meta-row__value mono">— / —</span>
+          </div>
+        </SectionCard>
+
+        {/* --- MCP permissions ------------------------------------------- */}
+        <SectionCard label="Tenant Tool Layer" title="MCP permissions" scaffolded>
+          <div className="meta-row">
+            <span className="meta-row__key">Read-only tools</span>
+            <span className="meta-row__value">
+              <span className="status status--ok">Allowed · audited</span>
+            </span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">Write / dangerous tools</span>
+            <span className="meta-row__value">
+              <span className="status status--warn">Approval required</span>
+            </span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">Tenant isolation</span>
+            <span className="meta-row__value mono">enforced</span>
+          </div>
+        </SectionCard>
+
+        {/* --- Audit ----------------------------------------------------- */}
+        <SectionCard label="Trust" title="Audit &amp; source traceability" scaffolded>
+          <p className="action-card__rationale" style={{ marginBottom: "var(--space-md)" }}>
+            Every AI claim carries a source reference; every state change is
+            written to an append-only, tenant-scoped audit log.
+          </p>
+          <div className="meta-row">
+            <span className="meta-row__key">Audit log</span>
+            <span className="meta-row__value mono">append-only · tenant-scoped</span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">Source references</span>
+            <span className="meta-row__value mono">required on every insight</span>
+          </div>
+        </SectionCard>
+      </div>
 
       <p className="scaffold-note" style={{ marginTop: "var(--space-lg)" }}>
-        To sign out, use the control in the navigation panel.
+        Workspace identity and your profile are wired (your row only, via RLS).
+        The privacy, security, routing, MCP, and audit sections above present the
+        designed controls; they are not yet persisted in this build. Sign out
+        from the navigation panel.
       </p>
     </main>
   );

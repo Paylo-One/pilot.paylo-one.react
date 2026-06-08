@@ -24,9 +24,16 @@ export default async function SignInPage() {
   return (
     <>
       <p className="eyebrow">Sign in</p>
-      <h1 style={{ fontSize: "var(--text-h2)", margin: "8px 0 16px" }}>
-        Welcome back
+      <h1 style={{ fontSize: "var(--text-h1)", margin: "var(--space-xs) 0 var(--space-sm)" }}>
+        Return to your management layer
       </h1>
+      <p
+        className="text-secondary"
+        style={{ marginBottom: "var(--space-lg)", fontSize: "var(--text-small)" }}
+      >
+        Access is invite-only. Sign in to open your workspace at
+        &lt;slug&gt;.paylo.one.
+      </p>
 
       <SignInForm />
 

@@ -16,26 +16,6 @@ export interface ProfileFormValues {
   briefingTime: string;
 }
 
-const fieldStyle: React.CSSProperties = {
-  width: "100%",
-  background: "var(--colour-surface)",
-  color: "var(--colour-text-primary)",
-  border: "1px solid var(--colour-border-strong)",
-  borderRadius: "var(--radius-md)",
-  padding: "var(--space-sm) var(--space-md)",
-  font: "inherit",
-};
-
-const labelStyle: React.CSSProperties = {
-  display: "block",
-  marginBottom: "var(--space-xs)",
-};
-
-const fieldGroupStyle: React.CSSProperties = {
-  marginBottom: "var(--space-lg)",
-  maxWidth: "420px",
-};
-
 export function SettingsProfileForm({ values }: { values: ProfileFormValues }) {
   const [state, action, pending] = useActionState(
     saveProfileAction,
@@ -43,9 +23,9 @@ export function SettingsProfileForm({ values }: { values: ProfileFormValues }) {
   );
 
   return (
-    <form action={action} className="panel">
-      <div style={fieldGroupStyle}>
-        <label htmlFor="display_name" className="eyebrow" style={labelStyle}>
+    <form action={action} className="card" style={{ maxWidth: "520px" }}>
+      <div className="field">
+        <label htmlFor="display_name" className="field__label">
           Display name
         </label>
         <input
@@ -54,12 +34,12 @@ export function SettingsProfileForm({ values }: { values: ProfileFormValues }) {
           type="text"
           defaultValue={values.displayName}
           placeholder="How you appear in the workspace"
-          style={fieldStyle}
+          className="input"
         />
       </div>
 
-      <div style={fieldGroupStyle}>
-        <label htmlFor="timezone" className="eyebrow" style={labelStyle}>
+      <div className="field">
+        <label htmlFor="timezone" className="field__label">
           Timezone
         </label>
         <input
@@ -68,21 +48,15 @@ export function SettingsProfileForm({ values }: { values: ProfileFormValues }) {
           type="text"
           defaultValue={values.timezone}
           placeholder="e.g. Europe/London"
-          style={fieldStyle}
+          className="input"
         />
-        <p
-          style={{
-            fontSize: "var(--text-small)",
-            color: "var(--colour-text-tertiary)",
-            marginTop: "var(--space-xs)",
-          }}
-        >
+        <span className="field__hint">
           Drives when your Daily Memo is prepared.
-        </p>
+        </span>
       </div>
 
-      <div style={fieldGroupStyle}>
-        <label htmlFor="briefing_time" className="eyebrow" style={labelStyle}>
+      <div className="field">
+        <label htmlFor="briefing_time" className="field__label">
           Briefing time
         </label>
         <input
@@ -90,46 +64,18 @@ export function SettingsProfileForm({ values }: { values: ProfileFormValues }) {
           name="briefing_time"
           type="time"
           defaultValue={values.briefingTime}
-          style={fieldStyle}
+          className="input"
         />
       </div>
 
       {state.error ? (
-        <p
-          style={{
-            color: "#b4423a",
-            fontSize: "var(--text-small)",
-            marginBottom: "var(--space-md)",
-          }}
-        >
-          {state.error}
-        </p>
+        <p className="form-message form-message--error">{state.error}</p>
       ) : null}
       {state.ok ? (
-        <p
-          style={{
-            color: "var(--colour-accent)",
-            fontSize: "var(--text-small)",
-            marginBottom: "var(--space-md)",
-          }}
-        >
-          Profile saved.
-        </p>
+        <p className="form-message form-message--ok">Profile saved.</p>
       ) : null}
 
-      <button
-        type="submit"
-        disabled={pending}
-        style={{
-          background: "var(--colour-accent)",
-          color: "var(--colour-accent-on)",
-          border: "none",
-          borderRadius: "var(--radius-md)",
-          padding: "var(--space-sm) var(--space-lg)",
-          font: "inherit",
-          cursor: "pointer",
-        }}
-      >
+      <button type="submit" disabled={pending} className="btn btn--primary">
         {pending ? "Saving…" : "Save profile"}
       </button>
     </form>

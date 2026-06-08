@@ -29,12 +29,16 @@ export default async function OnboardingPage() {
   return (
     <>
       <p className="eyebrow">Welcome</p>
-      <h1 style={{ fontSize: "var(--text-h2)", margin: "8px 0 16px" }}>
+      <h1 style={{ fontSize: "var(--text-h1)", margin: "var(--space-xs) 0 var(--space-sm)" }}>
         Create your private workspace
       </h1>
-      <p style={{ color: "var(--colour-text-secondary)", marginBottom: "var(--space-lg)" }}>
+      <p
+        className="text-secondary"
+        style={{ marginBottom: "var(--space-lg)", fontSize: "var(--text-small)" }}
+      >
         Choose a subdomain for your isolated operating layer. You will work at{" "}
-        <span className="mono">&lt;subdomain&gt;.{activeApex()}</span>.
+        <span className="mono">&lt;subdomain&gt;.{activeApex()}</span>. Every row,
+        file, and reference stays scoped to this workspace.
       </p>
 
       <OnboardingForm apexSuffix={activeApex()} />

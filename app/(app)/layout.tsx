@@ -1,26 +1,33 @@
 /**
  * app/(app)/layout.tsx
  *
- * The tenant application shell, served on <slug>.paylo.one. The first three
- * surfaces are Briefing, Actions, Diary (the wedge), with Sources and Settings
- * alongside (technical-design.md recommended structure; product/screen-map.md).
+ * The tenant workspace shell, served on <slug>.paylo.one. It is built to feel
+ * like an operating system, not a dashboard: a permanent dark command layer
+ * (sidebar) carrying brand, tenant context, and navigation, beside a calm main
+ * column with a context-bearing topbar.
  *
- * This layout resolves the tenant context server-side (verified session +
- * validated host slug -> { userId, tenantId, role }, with tenant_users
- * membership enforced) and fails closed via redirect when the visitor is not a
- * member. Governance: multi-tenancy-design.md, authentication-architecture.md §8.
+ * Surfaces follow product/screen-map.md: Briefing, Actions, Diary (the wedge),
+ * with Sources and the Tenant Tool Layer (MCP) as system surfaces and Settings
+ * under Account.
+ *
+ * Tenant context is resolved server-side (verified session + validated host
+ * slug -> { userId, tenantId, role }, with tenant_users membership enforced)
+ * and fails closed via redirect when the visitor is not a member. Governance:
+ * multi-tenancy-design.md, authentication-architecture.md §8.
  */
 
-import Link from "next/link";
-import { requireTenantContext } from "@/modules/identity-tenant/server";
+import {
+  requireTenantContext,
+  getSignedInUser,
+} from "@/modules/identity-tenant/server";
+import { BrandMark } from "@/components/brand-mark";
+import { WorkspaceNav } from "@/components/workspace-nav";
 
-const NAV = [
-  { href: "/briefing", label: "Briefing" },
-  { href: "/actions", label: "Actions" },
-  { href: "/diary", label: "Diary" },
-  { href: "/sources", label: "Sources" },
-  { href: "/settings", label: "Settings" },
-];
+function greeting(hour: number): string {
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
 
 export default async function AppLayout({
   children,
@@ -29,48 +36,88 @@ export default async function AppLayout({
 }) {
   // Fails closed (redirects) when not signed in / not a member of this tenant.
   const ctx = await requireTenantContext();
+  const user = await getSignedInUser();
+
+  const now = new Date();
+  const dateLabel = now.toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
 
   return (
-    <div className="app-shell">
-      <nav className="app-nav" aria-label="Primary">
-        <div className="app-nav__brand">
-          Paylo.one
-          <span
-            className="mono"
-            style={{
-              display: "block",
-              fontSize: "var(--text-label)",
-              color: "var(--colour-text-tertiary)",
-            }}
-          >
-            {ctx.tenantSlug.toUpperCase()}
+    <div className="workspace">
+      {/* --- Command layer ------------------------------------------------- */}
+      <aside className="workspace__sidebar">
+        <div className="brand">
+          <BrandMark size={26} className="brand__mark" />
+          <div className="brand__wordmark">
+            <span className="brand__product">
+              Management<span className="brand__os">OS</span>
+            </span>
+            <span className="brand__inst">Paylo.one</span>
+          </div>
+        </div>
+
+        <div className="tenant-chip" title="Your isolated workspace">
+          <span className="tenant-chip__dot" aria-hidden="true" />
+          <div className="tenant-chip__body">
+            <div className="tenant-chip__label">Workspace</div>
+            <div className="tenant-chip__value">
+              {ctx.tenantSlug}.paylo.one
+            </div>
+          </div>
+        </div>
+
+        <WorkspaceNav />
+
+        <div className="nav__footer">
+          <span className="nav__operator" title={user?.email ?? undefined}>
+            {user?.email ?? "Operator"}
           </span>
+          <form action="/auth/signout" method="post">
+            <button type="submit" className="nav__signout">
+              <svg
+                className="nav__icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <path d="M16 17l5-5-5-5M21 12H9" />
+              </svg>
+              <span>Sign out</span>
+            </button>
+          </form>
         </div>
-        <div className="app-nav__links">
-          {NAV.map((item) => (
-            <Link key={item.href} href={item.href} className="app-nav__link">
-              {item.label}
-            </Link>
-          ))}
-        </div>
-        <form action="/auth/signout" method="post" style={{ marginTop: "auto" }}>
-          <button
-            type="submit"
-            className="app-nav__link"
-            style={{
-              width: "100%",
-              textAlign: "left",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              font: "inherit",
-            }}
-          >
-            Sign out
-          </button>
-        </form>
-      </nav>
-      {children}
+      </aside>
+
+      {/* --- Main column --------------------------------------------------- */}
+      <div className="workspace__main">
+        <header className="topbar">
+          <div className="topbar__context">
+            <span className="topbar__date">{dateLabel}</span>
+            <span className="topbar__greeting">{greeting(now.getHours())}</span>
+          </div>
+          <div className="topbar__indicators">
+            {/* System indicators are scaffold-level: they reflect designed
+                status surfaces, not a live sync/generation pipeline. */}
+            <span className="status-pill" title="Source synchronisation status">
+              <span className="status-pill__dot status-pill__dot--ok" />
+              Sources · idle
+            </span>
+            <span className="status-pill" title="Daily Memo status">
+              <span className="status-pill__dot status-pill__dot--accent" />
+              Memo · ready
+            </span>
+          </div>
+        </header>
+        {children}
+      </div>
     </div>
   );
 }

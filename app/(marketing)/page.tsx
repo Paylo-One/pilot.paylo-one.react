@@ -13,6 +13,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSignedInUser } from "@/modules/identity-tenant/server";
+import { BrandMark } from "@/components/brand-mark";
 
 const TENANT_SLUG_HEADER = "x-paylo-tenant-slug";
 
@@ -27,35 +28,55 @@ export default async function AppApexLanding() {
   if (user) redirect("/onboarding");
 
   return (
-    <main className="app-main">
-      <p className="eyebrow">Paylo.one · Management OS</p>
-      <h1 style={{ fontSize: "var(--text-h1)", margin: "8px 0 16px" }}>
-        A private management operating system for high-context leaders.
+    <main className="landing">
+      <div
+        className="auth__brand"
+        style={{ color: "var(--colour-text-primary)", marginBottom: "var(--space-xl)" }}
+      >
+        <BrandMark size={28} />
+        <div className="brand__wordmark">
+          <span className="brand__product" style={{ color: "var(--colour-text-primary)" }}>
+            Management<span className="brand__os" style={{ color: "var(--colour-text-primary)" }}>OS</span>
+          </span>
+          <span className="brand__inst" style={{ color: "var(--colour-text-tertiary)" }}>
+            Paylo.one
+          </span>
+        </div>
+      </div>
+
+      <p className="eyebrow">A private management operating system</p>
+      <h1 style={{ fontSize: "var(--text-h1)", margin: "var(--space-sm) 0 var(--space-md)" }}>
+        Run your operating context from one calm management layer.
       </h1>
-      <p style={{ color: "var(--colour-text-secondary)", maxWidth: "60ch" }}>
-        Consolidate the channels you already run on into a high-signal Daily
-        Memo, suggested actions held for your approval, and a private diary. Each
-        operator works inside their own isolated workspace at{" "}
+      <p className="text-secondary measure" style={{ fontSize: "var(--text-body)" }}>
+        Every morning, know what matters, what changed, what needs approval, and
+        what cannot slip. Source-referenced briefings for leaders managing
+        decisions, actions, signals, and context across fragmented channels.
+      </p>
+
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "var(--space-sm)",
+          margin: "var(--space-lg) 0",
+        }}
+      >
+        <span className="badge badge--plain">Daily Memo</span>
+        <span className="badge badge--plain">Suggested actions · your approval</span>
+        <span className="badge badge--plain">Private diary</span>
+        <span className="badge badge--plain">Source-referenced</span>
+      </div>
+
+      <p className="text-tertiary" style={{ fontSize: "var(--text-small)", marginBottom: "var(--space-lg)" }}>
+        Each operator works inside their own isolated workspace at{" "}
         <span className="mono">&lt;slug&gt;.paylo.one</span>. Access is
         invite-only.
       </p>
 
-      <div style={{ marginTop: "var(--space-lg)", display: "flex", gap: "var(--space-md)" }}>
-        <Link
-          href="/sign-in"
-          className="btn"
-          style={{
-            display: "inline-block",
-            padding: "10px 18px",
-            borderRadius: "var(--radius-md)",
-            background: "var(--colour-accent)",
-            color: "var(--colour-accent-on)",
-            fontWeight: 600,
-          }}
-        >
-          Sign in
-        </Link>
-      </div>
+      <Link href="/sign-in" className="btn btn--primary">
+        Sign in
+      </Link>
     </main>
   );
 }

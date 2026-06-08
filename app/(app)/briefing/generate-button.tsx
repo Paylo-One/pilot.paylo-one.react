@@ -24,32 +24,21 @@ export function GenerateMemoButton({ hasBriefing }: { hasBriefing: boolean }) {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)", alignItems: "flex-end" }}>
       <button
         type="button"
         onClick={onGenerate}
         disabled={isPending}
-        style={{
-          alignSelf: "flex-start",
-          fontFamily: "var(--font-body)",
-          fontSize: "var(--text-small)",
-          padding: "var(--space-sm) var(--space-md)",
-          borderRadius: "var(--radius-md)",
-          border: "1px solid var(--colour-accent)",
-          background: isPending ? "var(--colour-surface-sunken)" : "var(--colour-accent)",
-          color: isPending ? "var(--colour-text-secondary)" : "var(--colour-accent-on)",
-          cursor: isPending ? "default" : "pointer",
-          transition: "background var(--speed) var(--ease-standard)",
-        }}
+        className="btn btn--primary"
       >
         {isPending
           ? "Generating…"
           : hasBriefing
-            ? "Regenerate Daily Memo"
+            ? "Regenerate memo"
             : "Generate Daily Memo"}
       </button>
       {error ? (
-        <p style={{ color: "#b4452f", fontSize: "var(--text-small)" }} role="alert">
+        <p className="form-message form-message--error" role="alert">
           {error}
         </p>
       ) : null}

@@ -1,24 +1,28 @@
 /**
  * Sources — connect/manage integrations + bring real context into the
  * workspace. Two working ingestion paths: file/paste upload (no credentials)
- * and GitHub OAuth (when configured). Governance: integration-architecture.md,
- * services/source-connection.md, ingestion.md, normalisation.md.
+ * and GitHub OAuth (when configured). Every other integration is designed and
+ * scaffolded, presented as a card with its connection contract. Governance:
+ * integration-architecture.md, services/source-connection.md, ingestion.md.
  *
- * Server Component: reads connections + recent items with the RLS user client.
+ * Server Component: reads connections + recent items with the RLS user client,
+ * then merges real connection state into the designed source catalogue.
  */
 
 import { requireTenantContext } from "@/modules/identity-tenant/server";
 import { listSourceConnections } from "@/modules/source-connection/server";
-import { SOURCE_SYSTEM_LABELS } from "@/modules/source-connection";
+import type { SourceConnection } from "@/modules/source-connection";
 import { isGithubOAuthConfigured } from "@/modules/source-connection/github";
 import { listRecentSourceItems } from "@/modules/knowledge-store/server";
+import { SOURCE_SYSTEM_LABELS } from "@/modules/source-connection";
+import {
+  SOURCE_CATALOGUE,
+  STORAGE_POLICY_LABELS,
+  TIER_LABELS,
+  type SourceCatalogueEntry,
+} from "./catalogue";
 import { UploadForm } from "./upload-form";
 import { DisconnectButton } from "./disconnect-button";
-
-const sectionTitle: React.CSSProperties = {
-  fontSize: "var(--text-h2)",
-  margin: "0 0 var(--space-md)",
-};
 
 function formatTimestamp(value: string | null): string {
   if (!value) return "";
@@ -32,7 +36,9 @@ function formatTimestamp(value: string | null): string {
   });
 }
 
-function githubNotice(github: string | undefined): { message: string; ok: boolean } | null {
+function githubNotice(
+  github: string | undefined,
+): { message: string; ok: boolean } | null {
   switch (github) {
     case "connected":
       return { message: "GitHub connected — recent activity imported.", ok: true };
@@ -45,6 +51,117 @@ function githubNotice(github: string | undefined): { message: string; ok: boolea
     default:
       return null;
   }
+}
+
+/** A single integration card, merging real connection state into the design. */
+function IntegrationCard({
+  entry,
+  connection,
+  githubConfigured,
+}: {
+  entry: SourceCatalogueEntry;
+  connection: SourceConnection | undefined;
+  githubConfigured: boolean;
+}) {
+  const connected = connection?.status === "connected";
+  const policy = connection?.storagePolicy ?? entry.defaultPolicy;
+  const lastSync = formatTimestamp(connection?.updatedAt ?? null);
+
+  let statusNode: React.ReactNode;
+  if (connected) {
+    statusNode = <span className="status status--ok">Connected</span>;
+  } else if (connection?.status === "error") {
+    statusNode = <span className="status status--risk">Needs reconnect</span>;
+  } else {
+    statusNode = (
+      <span className="status status--neutral">
+        {entry.tier === "phased" ? "Phased" : "Not connected"}
+      </span>
+    );
+  }
+
+  return (
+    <article className="integration">
+      <div className="integration__head">
+        <div className="integration__id">
+          <span className="integration__glyph" aria-hidden="true">
+            {entry.glyph}
+          </span>
+          <div>
+            <p className="integration__name">
+              {SOURCE_SYSTEM_LABELS[entry.system]}
+            </p>
+            <p className="integration__kind">{entry.provider}</p>
+          </div>
+        </div>
+        {statusNode}
+      </div>
+
+      <p className="action-card__rationale" style={{ marginTop: 0 }}>
+        {entry.description}
+      </p>
+
+      <div className="integration__meta">
+        <div className="meta-row">
+          <span className="meta-row__key">Storage policy</span>
+          <span className="badge badge--plain">{STORAGE_POLICY_LABELS[policy]}</span>
+        </div>
+        <div className="meta-row">
+          <span className="meta-row__key">Last sync</span>
+          <span className="meta-row__value mono">
+            {connected && lastSync ? lastSync : "—"}
+          </span>
+        </div>
+        <div className="meta-row">
+          <span className="meta-row__key">Source references</span>
+          <span className="meta-row__value">
+            {entry.referenceReady ? "Ready" : "—"}
+          </span>
+        </div>
+        <div className="meta-row">
+          <span className="meta-row__key">Tenant scope</span>
+          <span className="meta-row__value mono">isolated</span>
+        </div>
+      </div>
+
+      <div className="integration__footer">
+        <span className="badge">{TIER_LABELS[entry.tier]}</span>
+        {/* Connect affordance: real for GitHub (when configured) + file upload;
+            scaffolded for the rest. */}
+        {entry.system === "github" ? (
+          connected ? (
+            <DisconnectButton connectionId={connection!.id} />
+          ) : githubConfigured ? (
+            <a className="btn btn--secondary" href="/api/oauth/github/start">
+              Connect
+            </a>
+          ) : (
+            <button
+              type="button"
+              className="btn btn--ghost"
+              disabled
+              title="Add GITHUB_OAUTH_CLIENT_ID / SECRET to enable"
+            >
+              Needs credentials
+            </button>
+          )
+        ) : entry.system === "file_upload" ? (
+          <a className="btn btn--secondary" href="#upload">
+            Add a note
+          </a>
+        ) : (
+          <button
+            type="button"
+            className="btn btn--ghost"
+            disabled
+            title="Direct integration designed — connection not wired in this scaffold"
+          >
+            Connect
+          </button>
+        )}
+      </div>
+    </article>
+  );
 }
 
 export default async function SourcesPage({
@@ -63,149 +180,81 @@ export default async function SourcesPage({
   const notice = githubNotice(params.github);
   const importedCount = params.count ? Number(params.count) : null;
 
+  const connectionBySystem = new Map(connections.map((c) => [c.system, c]));
+
   return (
-    <main className="app-main">
-      <p className="eyebrow">Sources</p>
-      <h1 style={{ fontSize: "var(--text-h2)", margin: "8px 0 16px" }}>
-        Connected sources
-      </h1>
+    <main className="workspace__content">
+      <div className="page-head">
+        <p className="eyebrow">Sources</p>
+        <h1 className="page-head__title">Connected sources</h1>
+        <p className="page-head__lead">
+          The channels your briefings draw on. Each source is tenant-scoped,
+          carries its own storage policy, and produces traceable references.
+          Direct integrations are designed and scaffolded; file upload and GitHub
+          are wired today.
+        </p>
+      </div>
 
       {notice ? (
         <div
-          className="panel"
-          style={{
-            marginBottom: "var(--space-lg)",
-            borderColor: notice.ok ? "var(--colour-accent)" : "var(--colour-border-strong)",
-          }}
+          className={`alert ${notice.ok ? "alert--ok" : "alert--warn"}`}
+          style={{ marginBottom: "var(--space-lg)" }}
         >
-          <p style={{ fontSize: "var(--text-small)" }}>
-            {notice.message}
-            {notice.ok && importedCount !== null && !Number.isNaN(importedCount)
-              ? ` (${importedCount} item${importedCount === 1 ? "" : "s"})`
-              : ""}
-          </p>
+          <div>
+            <p className="alert__body">
+              {notice.message}
+              {notice.ok && importedCount !== null && !Number.isNaN(importedCount)
+                ? ` (${importedCount} item${importedCount === 1 ? "" : "s"})`
+                : ""}
+            </p>
+          </div>
         </div>
       ) : null}
 
-      {/* --- Connections ---------------------------------------------------- */}
-      <section style={{ marginBottom: "var(--space-xl)" }}>
-        <div className="panel">
-          <h2 style={sectionTitle}>Your sources</h2>
-          {connections.length === 0 ? (
-            <p style={{ color: "var(--colour-text-secondary)", fontSize: "var(--text-small)" }}>
-              No sources yet. Add a note below, or connect GitHub to bring in
-              real activity.
-            </p>
-          ) : (
-            <ul style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
-              {connections.map((connection) => (
-                <li
-                  key={connection.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "var(--space-md)",
-                    padding: "var(--space-sm) 0",
-                    borderBottom: "1px solid var(--colour-border)",
-                  }}
-                >
-                  <span style={{ fontWeight: 600 }}>
-                    {connection.displayName}
-                    <span
-                      className="mono"
-                      style={{
-                        marginLeft: "var(--space-sm)",
-                        fontSize: "var(--text-label)",
-                        color: "var(--colour-text-tertiary)",
-                      }}
-                    >
-                      {SOURCE_SYSTEM_LABELS[connection.system] ?? connection.system}
-                    </span>
-                  </span>
-                  <span style={{ display: "flex", gap: "var(--space-sm)", alignItems: "center" }}>
-                    <span className="badge">{connection.storagePolicy.replace(/_/g, " ")}</span>
-                    <span className="badge">{connection.status}</span>
-                    {connection.status === "connected" && connection.system !== "file_upload" ? (
-                      <DisconnectButton connectionId={connection.id} />
-                    ) : null}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </section>
+      <div className="integration-grid">
+        {SOURCE_CATALOGUE.map((entry) => (
+          <IntegrationCard
+            key={entry.system}
+            entry={entry}
+            connection={connectionBySystem.get(entry.system)}
+            githubConfigured={githubConfigured}
+          />
+        ))}
+      </div>
 
-      {/* --- File / paste upload ------------------------------------------- */}
-      <section style={{ marginBottom: "var(--space-xl)" }}>
-        <div className="panel">
-          <h2 style={sectionTitle}>Add a note or document</h2>
-          <p
-            style={{
-              color: "var(--colour-text-secondary)",
-              fontSize: "var(--text-small)",
-              marginBottom: "var(--space-lg)",
-            }}
-          >
-            Paste text or upload a .txt/.md file. It is normalised and stored as
-            a source item your briefings can draw on.
+      {/* --- File / paste upload (wired) ----------------------------------- */}
+      <section id="upload" style={{ marginTop: "var(--space-xl)" }}>
+        <div className="card">
+          <div className="card-head">
+            <div>
+              <p className="eyebrow">File &amp; paste upload</p>
+              <h2 className="card__title">Add a note or document</h2>
+            </div>
+            <span className="badge">no credentials</span>
+          </div>
+          <p className="action-card__rationale" style={{ marginBottom: "var(--space-lg)" }}>
+            Paste text or upload a .txt/.md file. It is normalised and stored as a
+            source item your briefings can draw on and cite.
           </p>
           <UploadForm />
         </div>
       </section>
 
-      {/* --- GitHub --------------------------------------------------------- */}
-      <section style={{ marginBottom: "var(--space-xl)" }}>
-        <div className="panel">
-          <h2 style={sectionTitle}>GitHub</h2>
-          {githubConfigured ? (
-            <>
-              <p
-                style={{
-                  color: "var(--colour-text-secondary)",
-                  fontSize: "var(--text-small)",
-                  marginBottom: "var(--space-md)",
-                }}
-              >
-                Authorise read-only access to import a recent slice of your
-                GitHub activity.
-              </p>
-              <a
-                href="/api/oauth/github/start"
-                style={{
-                  display: "inline-block",
-                  padding: "8px 20px",
-                  fontSize: "var(--text-small)",
-                  fontWeight: 600,
-                  color: "var(--colour-text-inverse)",
-                  background: "var(--colour-surface-command)",
-                  borderRadius: "var(--radius-md)",
-                }}
-              >
-                Connect GitHub
-              </a>
-            </>
-          ) : (
-            <p className="scaffold-note">
-              Add GitHub OAuth credentials (GITHUB_OAUTH_CLIENT_ID /
-              GITHUB_OAUTH_CLIENT_SECRET) to enable. File &amp; paste upload above
-              works without any credentials.
-            </p>
-          )}
-        </div>
-      </section>
-
-      {/* --- Recent items --------------------------------------------------- */}
-      <section>
-        <div className="panel">
-          <h2 style={sectionTitle}>Recently ingested</h2>
+      {/* --- Recently ingested --------------------------------------------- */}
+      <section style={{ marginTop: "var(--space-xl)" }}>
+        <div className="card">
+          <p className="eyebrow" style={{ marginBottom: "var(--space-md)" }}>
+            Recently ingested
+          </p>
           {recentItems.length === 0 ? (
-            <p style={{ color: "var(--colour-text-secondary)", fontSize: "var(--text-small)" }}>
-              Nothing ingested yet.
-            </p>
+            <div className="empty">
+              <p className="empty__title">Nothing ingested yet</p>
+              <p className="empty__body">
+                Add a note above, or connect a source to bring in real context.
+              </p>
+            </div>
           ) : (
-            <ul style={{ display: "flex", flexDirection: "column", gap: "var(--space-md)" }}>
+            <ul className="stack" style={{ gap: "var(--space-md)" }}>
               {recentItems.map((item) => (
                 <li
                   key={item.id}
@@ -222,11 +271,10 @@ export default async function SourcesPage({
                       gap: "var(--space-md)",
                     }}
                   >
-                    <span style={{ fontWeight: 600 }}>{item.title ?? "Untitled"}</span>
-                    <span
-                      className="mono"
-                      style={{ fontSize: "var(--text-label)", color: "var(--colour-text-tertiary)" }}
-                    >
+                    <span style={{ fontWeight: 600 }}>
+                      {item.title ?? "Untitled"}
+                    </span>
+                    <span className="mono" style={{ fontSize: "var(--text-label)", color: "var(--colour-text-tertiary)" }}>
                       {SOURCE_SYSTEM_LABELS[item.system as keyof typeof SOURCE_SYSTEM_LABELS] ??
                         item.system}
                       {item.occurredAt ? ` · ${formatTimestamp(item.occurredAt)}` : ""}

@@ -39,7 +39,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`}>
-      <body>{children}</body>
+      {/* suppressHydrationWarning: browser extensions (e.g. Grammarly) inject
+          data-* attributes onto <body> before React hydrates. This suppresses
+          the warning for <body>'s own attributes only — one level deep — so it
+          does not mask real hydration mismatches in the app. */}
+      <body suppressHydrationWarning>{children}</body>
     </html>
   );
 }

@@ -1,16 +1,14 @@
 /**
  * app/(auth)/layout.tsx
  *
- * Layout for the authentication surfaces (sign-in, invite acceptance), served on
- * the apex / neutral host. Authentication establishes WHO the user is; the
- * tenant is resolved separately, server-side, from the request host
- * (authentication-architecture.md §8). Governance:
- *   - governance/docs/architecture/authentication-architecture.md
- *   - governance/docs/services/identity-and-tenant.md
- *
- * Scaffold note: a static, centered shell. No session is established here and no
- * passkey/WebAuthn or Supabase Auth call is made.
+ * Layout for the authentication surfaces (sign-in, invite acceptance,
+ * onboarding), served on the apex / neutral host. Authentication establishes
+ * WHO the user is; the tenant is resolved separately, server-side, from the
+ * request host (authentication-architecture.md §8). A calm, centred shell with
+ * the product lockup — no session is established here.
  */
+
+import { BrandMark } from "@/components/brand-mark";
 
 export default function AuthLayout({
   children,
@@ -18,30 +16,21 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "grid",
-        placeItems: "center",
-        padding: "var(--space-xl)",
-      }}
-    >
-      <main className="app-main" style={{ maxWidth: "460px" }}>
-        <div
-          className="app-nav__brand"
-          style={{ marginBottom: "var(--space-lg)" }}
-        >
-          Paylo.one
-          <span
-            className="mono"
-            style={{
-              display: "block",
-              fontSize: "var(--text-label)",
-              color: "var(--colour-text-tertiary)",
-            }}
-          >
-            MANAGEMENT OS
-          </span>
+    <div className="auth" style={{ color: "var(--colour-text-primary)" }}>
+      <main className="auth__panel">
+        <div className="auth__brand" style={{ color: "var(--colour-text-primary)" }}>
+          <BrandMark size={28} />
+          <div className="brand__wordmark">
+            <span className="brand__product" style={{ color: "var(--colour-text-primary)" }}>
+              Management
+              <span className="brand__os" style={{ color: "var(--colour-text-primary)" }}>
+                OS
+              </span>
+            </span>
+            <span className="brand__inst" style={{ color: "var(--colour-text-tertiary)" }}>
+              Paylo.one
+            </span>
+          </div>
         </div>
         {children}
       </main>

@@ -40,8 +40,8 @@ export function SignInForm() {
 
   if (status === "sent") {
     return (
-      <div className="panel">
-        <p style={{ color: "var(--colour-text-secondary)" }}>
+      <div className="card">
+        <p className="text-secondary">
           Check your inbox for a sign-in link. Locally, open{" "}
           <a className="mono" href="http://127.0.0.1:54324" target="_blank" rel="noreferrer">
             Mailpit
@@ -53,54 +53,31 @@ export function SignInForm() {
   }
 
   return (
-    <form className="panel" onSubmit={onSubmit}>
-      <label
-        htmlFor="email"
-        className="eyebrow"
-        style={{ display: "block", marginBottom: "var(--space-sm)" }}
-      >
-        Email
-      </label>
-      <input
-        id="email"
-        type="email"
-        required
-        autoComplete="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="you@company.com"
-        style={{
-          width: "100%",
-          padding: "10px 12px",
-          borderRadius: "var(--radius-md)",
-          border: "1px solid var(--colour-border-strong)",
-          background: "var(--colour-surface)",
-          color: "var(--colour-text-primary)",
-          fontSize: "var(--text-body)",
-        }}
-      />
+    <form className="card" onSubmit={onSubmit}>
+      <div className="field" style={{ marginBottom: 0 }}>
+        <label htmlFor="email" className="field__label">
+          Email
+        </label>
+        <input
+          id="email"
+          type="email"
+          required
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@company.com"
+          className="input"
+        />
+      </div>
       <button
         type="submit"
         disabled={status === "sending"}
-        style={{
-          marginTop: "var(--space-md)",
-          width: "100%",
-          padding: "10px 12px",
-          borderRadius: "var(--radius-md)",
-          border: "none",
-          background: "var(--colour-accent)",
-          color: "var(--colour-accent-on)",
-          fontWeight: 600,
-          cursor: "pointer",
-        }}
+        className="btn btn--primary btn--block"
+        style={{ marginTop: "var(--space-md)" }}
       >
         {status === "sending" ? "Sending…" : "Email me a sign-in link"}
       </button>
-      {error && (
-        <p style={{ color: "var(--colour-danger, #9e3c34)", marginTop: "var(--space-sm)" }}>
-          {error}
-        </p>
-      )}
+      {error && <p className="form-message form-message--error">{error}</p>}
     </form>
   );
 }
