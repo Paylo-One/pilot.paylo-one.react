@@ -14,6 +14,8 @@ import {
   type SuggestedActionView,
 } from "@/modules/action-extraction/server";
 import { ActionControls } from "./action-controls";
+import { RefinementActions } from "@/components/refinement/refinement-actions";
+import { PersonLinkControl } from "@/components/refinement/person-link-control";
 
 /** Representative confidence for an action, from its source references. */
 function actionConfidence(action: SuggestedActionView): number | null {
@@ -73,6 +75,14 @@ function ActionCard({ action }: { action: SuggestedActionView }) {
             {Math.round(confidence * 100)}%
           </span>
         ) : null}
+      </div>
+      <div className="action-card__footer">
+        <PersonLinkControl targetId={action.id} />
+        <RefinementActions
+          targetType="action"
+          targetId={action.id}
+          feedback={["not_relevant", "lower_priority", "do_not_show_again"]}
+        />
       </div>
     </article>
   );
@@ -139,6 +149,7 @@ export default async function ActionsPage() {
             </div>
             <div className="action-card__footer">
               <div className="source-ref-row">
+                <span className="chip chip--accent">Linked: Jacques Becker</span>
                 <span className="source-ref">
                   <span className="source-ref__system">Email</span>
                   <span aria-hidden="true">·</span>

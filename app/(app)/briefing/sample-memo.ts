@@ -20,11 +20,18 @@ export interface SampleReference {
 
 export type SampleSectionLayout = "summary" | "items";
 
+export interface SamplePerson {
+  readonly id: string;
+  readonly name: string;
+}
+
 export interface SampleItem {
   readonly title: string;
   readonly detail?: string;
   readonly status?: { label: string; tone: "info" | "ok" | "warn" | "risk" | "neutral" };
   readonly references: SampleReference[];
+  /** People this item is correlated with (People Context). */
+  readonly people?: SamplePerson[];
 }
 
 export interface SampleSection {
@@ -60,6 +67,10 @@ export const SAMPLE_MEMO: { readonly sections: SampleSection[] } = {
             { system: "Email", pointer: "Thunes · incident notice", timestamp: "06:12", confidence: 0.91 },
             { system: "GitHub", pointer: "infra#482 · failover", timestamp: "05:40", confidence: 0.84 },
           ],
+          people: [
+            { id: "person_jacques", name: "Jacques Becker" },
+            { id: "person_randy", name: "Randy Coburn" },
+          ],
         },
       ],
     },
@@ -75,6 +86,7 @@ export const SAMPLE_MEMO: { readonly sections: SampleSection[] } = {
           references: [
             { system: "Notion", pointer: "Payments resilience brief", timestamp: "Yesterday", confidence: 0.88 },
           ],
+          people: [{ id: "person_jacques", name: "Jacques Becker" }],
         },
         {
           title: "Confirm Q3 hiring freeze exception for the platform team",
@@ -111,6 +123,7 @@ export const SAMPLE_MEMO: { readonly sections: SampleSection[] } = {
           references: [
             { system: "Email", pointer: "Compliance thread", timestamp: "2d ago", confidence: 0.86 },
           ],
+          people: [{ id: "person_priya", name: "Priya Nair" }],
         },
       ],
     },

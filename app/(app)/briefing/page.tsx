@@ -17,10 +17,12 @@ import {
   type BriefingSectionView,
 } from "@/modules/briefing/server";
 import { GenerateMemoButton } from "./generate-button";
+import { RefinementActions } from "@/components/refinement/refinement-actions";
 import {
   SAMPLE_MEMO,
   type SampleSection,
   type SampleReference,
+  type SamplePerson,
 } from "./sample-memo";
 
 function formatTimestamp(value: string | null): string {
@@ -60,6 +62,20 @@ function RealReferences({ section }: { section: BriefingSectionView }) {
 }
 
 /* --- Sample memo rendering ----------------------------------------------- */
+
+function PeopleRow({ people }: { people: SamplePerson[] }) {
+  if (people.length === 0) return null;
+  return (
+    <div className="source-ref-row" aria-label="Linked people">
+      {people.map((person) => (
+        <span key={person.id} className="chip chip--accent">
+          {people.length > 1 ? "Related: " : "Linked: "}
+          {person.name}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 function SampleReferenceRow({ refs }: { refs: SampleReference[] }) {
   return (
@@ -113,7 +129,14 @@ function SampleSectionBlock({
                 {item.detail ? (
                   <p className="memo-item__detail">{item.detail}</p>
                 ) : null}
+                {item.people && item.people.length > 0 ? (
+                  <PeopleRow people={item.people} />
+                ) : null}
                 <SampleReferenceRow refs={item.references} />
+                <RefinementActions
+                  targetType="memo_section"
+                  targetId={`${section.kind}-${i}`}
+                />
               </div>
               {item.status ? (
                 <div className="memo-item__aside">

@@ -17,6 +17,12 @@ import { listSourceConnections } from "@/modules/source-connection/server";
 import { isGithubOAuthConfigured } from "@/modules/source-connection/github";
 import { listRepositoryMonitors } from "@/modules/source-connection/github-repos";
 import { listNotionResources } from "@/modules/source-connection/notion";
+import { isGoogleOAuthConfigured } from "@/modules/source-connection/google";
+import { listScopeItems } from "@/modules/source-connection/source-scope";
+import {
+  getWhatsAppSession,
+  listWhatsAppMonitors,
+} from "@/modules/source-connection/whatsapp-server";
 import { listRecentSourceItems } from "@/modules/knowledge-store/server";
 import { SOURCE_SYSTEM_LABELS } from "@/modules/source-connection";
 import {
@@ -38,6 +44,27 @@ function formatTimestamp(value: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function googleNotice(
+  google: string | undefined,
+): { message: string; ok: boolean } | null {
+  switch (google) {
+    case "connected":
+      return {
+        message:
+          "Google connected (Gmail + Calendar). Open Configure on the Email or Calendar card to choose which labels/calendars to sync — nothing is ingested until you activate one.",
+        ok: true,
+      };
+    case "unconfigured":
+      return { message: "Google OAuth is not configured.", ok: false };
+    case "error":
+      return { message: "Google connection failed. Please try again.", ok: false };
+    case "denied":
+      return { message: "Google authorisation was cancelled.", ok: false };
+    default:
+      return null;
+  }
 }
 
 function githubNotice(
@@ -64,7 +91,7 @@ function githubNotice(
 export default async function SourcesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ github?: string; repos?: string }>;
+  searchParams: Promise<{ github?: string; repos?: string; google?: string }>;
 }) {
   const ctx = await requireTenantContext();
   const [connections, recentItems, params] = await Promise.all([
@@ -74,7 +101,7 @@ export default async function SourcesPage({
   ]);
 
   const githubConfigured = isGithubOAuthConfigured();
-  const notice = githubNotice(params.github);
+  const notice = githubNotice(params.github) ?? googleNotice(params.google);
   const discoveredRepos = params.repos ? Number(params.repos) : null;
 
   const connectionBySystem = new Map(connections.map((c) => [c.system, c]));
@@ -92,6 +119,25 @@ export default async function SourcesPage({
     notionConnection && notionConnection.status === "connected"
       ? await listNotionResources(notionConnection.id)
       : [];
+
+  // Google family: scope items for connected email (Gmail labels) + calendar.
+  const googleConfigured = isGoogleOAuthConfigured();
+  const emailConnection = connectionBySystem.get("email");
+  const calendarConnection = connectionBySystem.get("calendar");
+  const [emailScopeItems, calendarScopeItems] = await Promise.all([
+    emailConnection && emailConnection.status === "connected"
+      ? listScopeItems(emailConnection.id)
+      : Promise.resolve([]),
+    calendarConnection && calendarConnection.status === "connected"
+      ? listScopeItems(calendarConnection.id)
+      : Promise.resolve([]),
+  ]);
+
+  // WhatsApp: tenant session + approved monitors (scaffold session lifecycle).
+  const whatsappSession = await getWhatsAppSession();
+  const whatsappMonitors = whatsappSession
+    ? await listWhatsAppMonitors(whatsappSession.id)
+    : [];
 
   // Merge each designed source with its live connection into a serialisable
   // view for the client browser. Scope/policy stay conservative by default.
@@ -125,6 +171,15 @@ export default async function SourcesPage({
       githubConfigured,
       githubRepositories: d.system === "github" ? githubRepositories : [],
       notionResources: d.system === "notion" ? notionResources : [],
+      googleConfigured,
+      scopeItems:
+        d.system === "email"
+          ? emailScopeItems
+          : d.system === "calendar"
+            ? calendarScopeItems
+            : [],
+      whatsappSession: d.system === "whatsapp" ? whatsappSession : null,
+      whatsappMonitors: d.system === "whatsapp" ? whatsappMonitors : [],
     };
   });
 

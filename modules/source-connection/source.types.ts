@@ -15,6 +15,7 @@
  */
 
 import type { SourceSystem, StoragePolicy } from "@/modules/shared";
+import type { WhatsAppMonitor, WhatsAppSession } from "./whatsapp.types";
 
 /**
  * The catalogue identifier for a connectable source. Aligned 1:1 with the
@@ -140,12 +141,25 @@ export interface SourceView {
    * Real, persisted data — drives the resource selector.
    */
   readonly notionResources: readonly NotionResource[];
+  /**
+   * Google (email/calendar): selectable scope items — Gmail labels or Google
+   * calendars (empty unless connected). Drives the scope selector.
+   */
+  readonly scopeItems: readonly SourceScopeItem[];
+  /** Whether Google OAuth credentials are configured in this build. */
+  readonly googleConfigured: boolean;
+  /** WhatsApp only: the tenant's session (null until started). */
+  readonly whatsappSession: WhatsAppSession | null;
+  /** WhatsApp only: the operator's approved monitors (empty unless any). */
+  readonly whatsappMonitors: readonly WhatsAppMonitor[];
 }
 
 /** How (and whether) a source can actually be connected in this build. */
 export type SourceConnectAffordance =
   | "github_oauth" // real GitHub OAuth (when configured)
+  | "google_oauth" // real Google OAuth — Gmail + Calendar (when configured)
   | "notion_token" // real Notion internal-integration token (paste → store)
+  | "whatsapp_session" // tenant-scoped WhatsApp session (QR onboarding, scaffold)
   | "file_upload" // real in-app upload
   | "obsidian_upload" // real Markdown vault upload (Configure → upload form)
   | "scaffold" // designed, connection not wired
@@ -205,6 +219,25 @@ export interface GitHubAccount {
   readonly login: string;
   readonly displayName: string;
   readonly kind: "user" | "organization";
+}
+
+// --- Generic per-source scope items (Gmail labels, Google calendars) --------
+
+export type ScopeItemType = "gmail_label" | "google_calendar";
+
+/**
+ * A selectable scope item for a source — a Gmail label/folder or a Google
+ * calendar. `isActive` is the approval gate; only active items are synced.
+ * Mirrors the `source_scope_items` table.
+ */
+export interface SourceScopeItem {
+  readonly id: string;
+  readonly system: SourceType;
+  readonly itemType: ScopeItemType;
+  readonly externalId: string;
+  readonly name: string | null;
+  readonly isActive: boolean;
+  readonly lastSyncAt: string | null;
 }
 
 // --- Notion resource selection ----------------------------------------------

@@ -25,7 +25,9 @@ import { DisconnectButton } from "@/app/(app)/sources/disconnect-button";
 import { StoragePolicySelector } from "./storage-policy-selector";
 import { GithubRepositorySelector } from "./github-repository-selector";
 import { NotionResourceSelector } from "./notion-resource-selector";
+import { ScopeItemSelector } from "./scope-item-selector";
 import { ObsidianUploadForm } from "./obsidian-upload-form";
+import { WhatsAppSessionCard } from "./whatsapp-session-card";
 import { Toggle } from "./toggle";
 
 export interface SourceCardState {
@@ -208,6 +210,26 @@ export function SourceCard({
             </div>
           ) : null}
 
+          {view.system === "email" || view.system === "calendar" ? (
+            <div className="integration__detail-block">
+              <ScopeItemSelector
+                items={view.scopeItems}
+                connectionId={view.connectionId}
+                system={view.system}
+                googleConfigured={view.googleConfigured}
+              />
+            </div>
+          ) : null}
+
+          {view.system === "whatsapp" ? (
+            <div className="integration__detail-block">
+              <WhatsAppSessionCard
+                session={view.whatsappSession}
+                monitors={view.whatsappMonitors}
+              />
+            </div>
+          ) : null}
+
           <p className="scaffold-note">{view.riskNote}</p>
         </div>
       ) : null}
@@ -234,6 +256,24 @@ function renderConnectAffordance(view: SourceView): React.ReactNode {
           className="btn btn--ghost btn--sm"
           disabled
           title="Add GITHUB_OAUTH_CLIENT_ID / SECRET to enable"
+        >
+          Needs credentials
+        </button>
+      );
+    case "google_oauth":
+      if (connected && view.connectionId) {
+        return <DisconnectButton connectionId={view.connectionId} />;
+      }
+      return view.googleConfigured ? (
+        <a className="btn btn--secondary btn--sm" href="/api/oauth/google/start">
+          Connect
+        </a>
+      ) : (
+        <button
+          type="button"
+          className="btn btn--ghost btn--sm"
+          disabled
+          title="Add GOOGLE_OAUTH_CLIENT_ID / SECRET to enable"
         >
           Needs credentials
         </button>

@@ -30,7 +30,25 @@ import {
   updateNotionResource,
   syncActiveResources as syncActiveNotionResources,
 } from "@/modules/source-connection/notion";
-import type { GitHubMonitorSettings } from "@/modules/source-connection/source.types";
+import { updateScopeItem } from "@/modules/source-connection/source-scope";
+import {
+  getWhatsAppSession,
+  setSessionStatus,
+  deleteSession,
+  createMonitor as createWhatsAppMonitor,
+  updateMonitor as updateWhatsAppMonitor,
+  removeMonitor as removeWhatsAppMonitor,
+} from "@/modules/source-connection/whatsapp-server";
+import type { WhatsAppStoragePolicy } from "@/modules/source-connection/whatsapp.types";
+import {
+  getValidGoogleToken,
+  syncGmail,
+  syncCalendar,
+} from "@/modules/source-connection/google";
+import type {
+  GitHubMonitorSettings,
+  SourceType,
+} from "@/modules/source-connection/source.types";
 import { auditService } from "@/modules/audit";
 
 /** Disconnect a source connection and clear its OAuth credentials. */
@@ -221,6 +239,193 @@ export async function syncNotionAction(): Promise<{
     };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Sync failed." };
+  }
+}
+
+// --- Google (Gmail + Calendar) ----------------------------------------------
+
+/** Activate/deactivate a Gmail label or Google calendar (scope item). */
+export async function updateScopeItemAction(input: {
+  scopeItemId: string;
+  isActive: boolean;
+}): Promise<{ ok: boolean; error: string | null }> {
+  const ctx = await requireTenantContext();
+  if (!input?.scopeItemId) return { ok: false, error: "Missing scope item." };
+  try {
+    const changed = await updateScopeItem(input.scopeItemId, input.isActive);
+    if (changed) {
+      await auditService.record(ctx, {
+        action: "source.scope_item.updated",
+        target: input.scopeItemId,
+        metadata: { isActive: input.isActive },
+      });
+    }
+    revalidatePath("/sources");
+    return { ok: changed, error: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Update failed." };
+  }
+}
+
+/**
+ * Sync the Google family for one system (`email` = Gmail, `calendar` = Google
+ * Calendar) from its *active* scope items only. Reads the connection + token
+ * server-side (refreshing if expired) — never from the client.
+ */
+export async function syncGoogleAction(input: {
+  system: SourceType;
+}): Promise<{ ok: boolean; itemCount?: number; scopeCount?: number; error: string | null }> {
+  const ctx = await requireTenantContext();
+  const system = input?.system;
+  if (system !== "email" && system !== "calendar") {
+    return { ok: false, error: "Unsupported Google source." };
+  }
+  try {
+    const connectionId = await findConnectionIdBySystem(system);
+    if (!connectionId) return { ok: false, error: "Google is not connected." };
+    const token = await getValidGoogleToken(ctx.tenantId, connectionId);
+    if (!token) return { ok: false, error: "No Google credentials stored." };
+
+    const result =
+      system === "email"
+        ? await syncGmail(ctx.tenantId, connectionId, token)
+        : await syncCalendar(ctx.tenantId, connectionId, token);
+
+    await auditService.record(ctx, {
+      action: "google.synced",
+      target: connectionId,
+      metadata: { system, itemCount: result.itemCount, scopeCount: result.scopeCount },
+    });
+    revalidatePath("/sources");
+    return { ok: true, itemCount: result.itemCount, scopeCount: result.scopeCount, error: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Sync failed." };
+  }
+}
+
+// --- WhatsApp (tenant-scoped session + monitors; scaffold, no real session) -
+
+type WaResult = { ok: boolean; error: string | null };
+
+/** Start the tenant's WhatsApp session (→ awaiting QR). Scaffold: no real session. */
+export async function startWhatsAppSessionAction(): Promise<WaResult> {
+  const ctx = await requireTenantContext();
+  try {
+    await setSessionStatus(ctx.tenantId, "awaiting_qr", { qrCodeStatus: "pending" });
+    await auditService.record(ctx, { action: "whatsapp.session.started" });
+    revalidatePath("/sources");
+    return { ok: true, error: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to start session." };
+  }
+}
+
+/**
+ * Scaffold-only: simulate a successful QR scan so the connected UX can be
+ * explored. NO real WhatsApp session or credentials are established.
+ */
+export async function simulateWhatsAppScanAction(): Promise<WaResult> {
+  const ctx = await requireTenantContext();
+  try {
+    await setSessionStatus(ctx.tenantId, "connected", {
+      qrCodeStatus: "scanned",
+      deviceLabel: "this workspace (scaffold)",
+      lastConnectedAt: new Date().toISOString(),
+    });
+    await auditService.record(ctx, { action: "whatsapp.session.simulated_scan" });
+    revalidatePath("/sources");
+    return { ok: true, error: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed." };
+  }
+}
+
+/** Pause the session (stop ingestion, keep selections). */
+export async function pauseWhatsAppAction(): Promise<WaResult> {
+  const ctx = await requireTenantContext();
+  try {
+    await setSessionStatus(ctx.tenantId, "needs_reconnect");
+    await auditService.record(ctx, { action: "whatsapp.session.paused" });
+    revalidatePath("/sources");
+    return { ok: true, error: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed." };
+  }
+}
+
+/** Disconnect & delete the session (cascades monitors). */
+export async function disconnectWhatsAppAction(): Promise<WaResult> {
+  const ctx = await requireTenantContext();
+  try {
+    await deleteSession(ctx.tenantId);
+    await auditService.record(ctx, { action: "whatsapp.session.disconnected" });
+    revalidatePath("/sources");
+    return { ok: true, error: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed." };
+  }
+}
+
+/** Approve a chat for monitoring (active by default). */
+export async function approveWhatsAppChatAction(input: {
+  chatId: string;
+  chatName: string;
+  chatKind: "direct" | "group";
+}): Promise<WaResult> {
+  const ctx = await requireTenantContext();
+  try {
+    const session = await getWhatsAppSession();
+    if (!session) return { ok: false, error: "Start a WhatsApp session first." };
+    await createWhatsAppMonitor(ctx.tenantId, session.id, input);
+    await auditService.record(ctx, {
+      action: "whatsapp.monitor.approved",
+      metadata: { chatId: input.chatId },
+    });
+    revalidatePath("/sources");
+    return { ok: true, error: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to approve chat." };
+  }
+}
+
+/** Toggle a monitor's activation / Daily Memo inclusion / storage policy. */
+export async function updateWhatsAppMonitorAction(input: {
+  monitorId: string;
+  isActive?: boolean;
+  includeInDailyMemo?: boolean;
+  storagePolicy?: WhatsAppStoragePolicy;
+}): Promise<WaResult> {
+  const ctx = await requireTenantContext();
+  if (!input?.monitorId) return { ok: false, error: "Missing monitor." };
+  try {
+    await updateWhatsAppMonitor(input.monitorId, {
+      isActive: input.isActive,
+      includeInDailyMemo: input.includeInDailyMemo,
+      storagePolicy: input.storagePolicy,
+    });
+    await auditService.record(ctx, {
+      action: "whatsapp.monitor.updated",
+      target: input.monitorId,
+      metadata: { isActive: input.isActive, includeInDailyMemo: input.includeInDailyMemo },
+    });
+    revalidatePath("/sources");
+    return { ok: true, error: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Update failed." };
+  }
+}
+
+/** Stop monitoring a chat. */
+export async function removeWhatsAppMonitorAction(input: { monitorId: string }): Promise<WaResult> {
+  const ctx = await requireTenantContext();
+  if (!input?.monitorId) return { ok: false, error: "Missing monitor." };
+  try {
+    await removeWhatsAppMonitor(input.monitorId);
+    await auditService.record(ctx, { action: "whatsapp.monitor.removed", target: input.monitorId });
+    revalidatePath("/sources");
+    return { ok: true, error: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Remove failed." };
   }
 }
 

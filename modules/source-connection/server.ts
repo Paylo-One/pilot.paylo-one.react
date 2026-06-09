@@ -203,6 +203,42 @@ export async function getIntegrationAccessToken(
   return (data?.access_token as string | undefined) ?? null;
 }
 
+/** Stored credential fields (server-only). */
+export interface StoredCredentials {
+  accessToken: string;
+  refreshToken: string | null;
+  scope: string | null;
+  expiresAt: string | null;
+}
+
+/**
+ * Read the full stored credentials for a connection (SECRET client;
+ * tenant-scoped). Used by adapters that must refresh expiring tokens (e.g.
+ * Google). Returns null when none are stored.
+ */
+export async function getIntegrationCredentials(
+  tenantId: string,
+  sourceConnectionId: string,
+): Promise<StoredCredentials | null> {
+  const secret = createSupabaseSecretClient();
+  const { data, error } = await secret
+    .from("integration_credentials")
+    .select("access_token, refresh_token, scope, expires_at")
+    .eq("tenant_id", tenantId)
+    .eq("source_connection_id", sourceConnectionId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return {
+    accessToken: (data.access_token as string | null) ?? "",
+    refreshToken: (data.refresh_token as string | null) ?? null,
+    scope: (data.scope as string | null) ?? null,
+    expiresAt: (data.expires_at as string | null) ?? null,
+  };
+}
+
 /**
  * Resolve the current tenant's connection id for a system using the USER (RLS)
  * client. Returns null when none exists. Used by UI server actions that need to

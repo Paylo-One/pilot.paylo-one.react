@@ -1605,6 +1605,249 @@ button {
 }
 
 /* ============================================================================
+   PEOPLE — directory, cards, detail, identities, signals, suggestions
+   ========================================================================== */
+.people__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: var(--space-lg);
+  align-items: start;
+}
+.people__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.people__detail {
+  position: sticky;
+  top: var(--space-md);
+}
+
+.person-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  text-align: left;
+  width: 100%;
+  background: var(--colour-surface);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  cursor: pointer;
+  transition: border-color var(--speed) var(--ease-standard),
+    background var(--speed) var(--ease-standard);
+}
+.person-card:hover {
+  border-color: var(--colour-text-tertiary);
+}
+.person-card--selected {
+  border-left: 2px solid var(--colour-accent);
+  background: var(--colour-surface-elevated);
+}
+.person-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.person-card__avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-pill);
+  background: var(--colour-surface-sunken);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  font-weight: 600;
+  color: var(--colour-text-secondary);
+  flex-shrink: 0;
+}
+.person-card__id {
+  min-width: 0;
+  flex: 1;
+}
+.person-card__name {
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+.person-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+.person-card__meta {
+  font-size: var(--text-label);
+  color: var(--colour-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.person-identity__values {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  align-items: flex-end;
+}
+.person-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  font-size: var(--text-small);
+}
+.person-identity__type {
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  color: var(--colour-text-tertiary);
+}
+
+.signal-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--colour-border);
+}
+.signal-row:last-child {
+  border-bottom: none;
+}
+.signal-row__main {
+  min-width: 0;
+}
+
+.link-suggestion {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  border: 1px solid var(--colour-border);
+  border-left: 2px solid var(--colour-warning);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  background: var(--colour-surface);
+}
+.link-suggestion__main {
+  min-width: 0;
+  flex: 1 1 60%;
+}
+.link-suggestion__controls {
+  display: flex;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+/* ============================================================================
+   REFINEMENT — feedback chips, refine rows, person-link controls
+   ========================================================================== */
+.refinement-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+}
+.refinement-actions__label {
+  font-size: var(--text-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--colour-text-tertiary);
+  margin-right: var(--space-xs);
+}
+.feedback-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 3px var(--space-sm);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-pill);
+  background: var(--colour-surface);
+  color: var(--colour-text-secondary);
+  font-size: var(--text-label);
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--speed) var(--ease-standard),
+    background var(--speed) var(--ease-standard),
+    color var(--speed) var(--ease-standard);
+}
+.feedback-chip:hover {
+  border-color: var(--colour-text-tertiary);
+  color: var(--colour-text-primary);
+}
+.feedback-chip--applied {
+  border-color: var(--colour-accent);
+  background: var(--colour-accent-soft);
+  color: var(--colour-accent);
+}
+.person-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+}
+.person-link__select {
+  width: auto;
+  padding: 3px var(--space-sm);
+  font-size: var(--text-small);
+}
+
+/* ============================================================================
+   WHATSAPP SESSION — QR onboarding, session card, monitor list
+   ========================================================================== */
+.wa-session {
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-md);
+  background: var(--colour-surface-sunken);
+  padding: var(--space-md);
+}
+.wa-session__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-md);
+}
+.wa-qr {
+  display: flex;
+  gap: var(--space-md);
+  align-items: center;
+  padding: var(--space-md);
+  border: 1px dashed var(--colour-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--colour-surface);
+}
+.wa-qr__code {
+  width: 116px;
+  height: 116px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background:
+    repeating-linear-gradient(45deg, var(--colour-surface-sunken) 0 6px, var(--colour-border) 6px 12px);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  color: var(--colour-text-tertiary);
+  text-align: center;
+}
+.wa-qr__body {
+  min-width: 0;
+}
+
+@media (max-width: 960px) {
+  .people__layout {
+    grid-template-columns: 1fr;
+  }
+  .people__detail {
+    position: static;
+  }
+}
+
+/* ============================================================================
    TENANT TOOL LAYER (MCP)
    ========================================================================== */
 .tool-row {
