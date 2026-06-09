@@ -16,15 +16,21 @@ import "server-only";
  */
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { SourceSystem } from "@/modules/shared";
 import type {
   IdentityType,
   Person,
   PersonIdentity,
   PersonImportanceLevel,
+  PersonLinkSuggestion,
   PersonStatus,
   RelationshipType,
   SourceMappingSourceType,
 } from "./people.types";
+import {
+  correlateSourceItems,
+  type CorrelationItem,
+} from "./correlation";
 
 // --- Row shapes + mapping ---------------------------------------------------
 
@@ -103,8 +109,8 @@ function assemble(
 
 // --- Reads ------------------------------------------------------------------
 
-/** List the tenant's people with their identities + tags (RLS-scoped). */
-export async function listPeople(): Promise<Person[]> {
+/** Build the tenant's people with identities + tags (signals empty). */
+async function loadBasePeople(): Promise<Person[]> {
   const supabase = await createSupabaseServerClient();
 
   const { data: peopleData, error: peopleErr } = await supabase
@@ -139,6 +145,243 @@ export async function listPeople(): Promise<Person[]> {
   return peopleRows.map((row) =>
     assemble(row, identitiesByPerson.get(row.id) ?? [], tagsByPerson.get(row.id) ?? []),
   );
+}
+
+// --- Correlation reads ------------------------------------------------------
+
+interface SourceItemRow {
+  id: string;
+  system: string;
+  title: string | null;
+  body: string | null;
+  author: string | null;
+  occurred_at: string | null;
+  created_at: string;
+}
+const SOURCE_ITEM_COLS = "id, system, title, body, author, occurred_at, created_at";
+
+/** Recent ingested items for correlation (RLS user client; bounded). */
+async function listRecentItemsForCorrelation(limit = 200): Promise<CorrelationItem[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("source_items")
+    .select(SOURCE_ITEM_COLS)
+    .order("occurred_at", { ascending: false, nullsFirst: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as SourceItemRow[]).map((r) => ({
+    id: r.id,
+    system: r.system as SourceSystem,
+    title: r.title,
+    body: r.body,
+    author: r.author,
+    occurredAt: r.occurred_at ?? r.created_at,
+  }));
+}
+
+/**
+ * List people with **correlated signals** attached — recent ingested items
+ * confidently attributed to each person (deterministic, verified-exact match).
+ * Uncertain matches become suggestions (see `listLinkSuggestions`), not signals.
+ */
+export async function listPeople(): Promise<Person[]> {
+  const [people, items] = await Promise.all([
+    loadBasePeople(),
+    listRecentItemsForCorrelation(),
+  ]);
+  const { signalsByPerson } = correlateSourceItems(items, people);
+  return people.map((p) => ({ ...p, signals: signalsByPerson[p.id] ?? [] }));
+}
+
+// --- Link suggestions (persisted, confirmable) ------------------------------
+
+interface SuggestionRow {
+  id: string;
+  source_item_id: string | null;
+  source_system: string | null;
+  observed_identity: string;
+  candidate_person_id: string | null;
+  confidence: number;
+  reason: string | null;
+  signal_preview: string | null;
+}
+const SUGGESTION_COLS =
+  "id, source_item_id, source_system, observed_identity, candidate_person_id, confidence, reason, signal_preview";
+
+/** List pending "is this the same person?" suggestions (RLS user client). */
+export async function listLinkSuggestions(): Promise<PersonLinkSuggestion[]> {
+  const supabase = await createSupabaseServerClient();
+  const [{ data, error }, { data: pData, error: pErr }] = await Promise.all([
+    supabase.from("person_link_suggestions").select(SUGGESTION_COLS).eq("status", "pending"),
+    supabase.from("people").select("id, display_name"),
+  ]);
+  if (error) throw new Error(error.message);
+  if (pErr) throw new Error(pErr.message);
+  const names = new Map<string, string>();
+  for (const p of (pData ?? []) as { id: string; display_name: string }[]) {
+    names.set(p.id, p.display_name);
+  }
+  return ((data ?? []) as SuggestionRow[]).map((r) => ({
+    id: r.id,
+    signalPreview: r.signal_preview ?? r.observed_identity,
+    sourceSystem: (r.source_system as SourceSystem) ?? "email",
+    observedIdentity: r.observed_identity,
+    candidatePersonId: r.candidate_person_id,
+    candidateName: r.candidate_person_id ? names.get(r.candidate_person_id) ?? null : null,
+    confidence: Number(r.confidence),
+    reason: r.reason ?? "",
+  }));
+}
+
+/**
+ * Run correlation over recent items and persist NEW pending suggestions for
+ * uncertain/unknown senders. Skips observed identities that already have a
+ * suggestion in any status (so resolved ones aren't re-proposed). RLS user
+ * client; inserts carry tenant_id. Returns how many were added.
+ */
+export async function generateLinkSuggestions(tenantId: string): Promise<number> {
+  const supabase = await createSupabaseServerClient();
+  const [people, items] = await Promise.all([
+    loadBasePeople(),
+    listRecentItemsForCorrelation(),
+  ]);
+  const { suggestions } = correlateSourceItems(items, people);
+  if (suggestions.length === 0) return 0;
+
+  const { data: existing, error: exErr } = await supabase
+    .from("person_link_suggestions")
+    .select("observed_identity");
+  if (exErr) throw new Error(exErr.message);
+  const seen = new Set(
+    ((existing ?? []) as { observed_identity: string }[]).map((e) =>
+      e.observed_identity.toLowerCase(),
+    ),
+  );
+
+  const rows = suggestions
+    .filter((s) => !seen.has(s.observedIdentity.toLowerCase()))
+    .map((s) => ({
+      tenant_id: tenantId,
+      source_item_id: s.sourceItemId,
+      source_system: s.sourceSystem,
+      observed_identity: s.observedIdentity,
+      candidate_person_id: s.candidatePersonId,
+      confidence: s.confidence,
+      reason: s.reason,
+      signal_preview: s.signalPreview,
+      status: "pending",
+    }));
+  if (rows.length === 0) return 0;
+
+  const { data, error } = await supabase
+    .from("person_link_suggestions")
+    .insert(rows)
+    .select("id");
+  if (error) throw new Error(error.message);
+  return data?.length ?? 0;
+}
+
+/** Map a source system to the identity (source_type, identity_type) it implies. */
+function identityForSystem(system: string): { sourceType: SourceMappingSourceType; identityType: IdentityType } {
+  switch (system) {
+    case "github": return { sourceType: "github", identityType: "github" };
+    case "whatsapp": return { sourceType: "whatsapp", identityType: "whatsapp" };
+    case "teams": return { sourceType: "teams", identityType: "teams" };
+    case "notion": return { sourceType: "notion", identityType: "notion" };
+    default: return { sourceType: "generic", identityType: "email" };
+  }
+}
+
+async function readSuggestion(supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>, id: string) {
+  const { data, error } = await supabase
+    .from("person_link_suggestions")
+    .select(SUGGESTION_COLS)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as SuggestionRow | null;
+}
+
+/**
+ * Confirm a suggestion: lock the observed identity onto the candidate person as
+ * a **verified** identity (so the item resolves as a signal next time), mark the
+ * suggestion confirmed, and record correlation feedback.
+ */
+export async function confirmSuggestion(tenantId: string, suggestionId: string): Promise<boolean> {
+  const supabase = await createSupabaseServerClient();
+  const s = await readSuggestion(supabase, suggestionId);
+  if (!s || !s.candidate_person_id) return false;
+  const { sourceType, identityType } = identityForSystem(s.source_system ?? "email");
+
+  await supabase.from("person_identities").upsert(
+    {
+      tenant_id: tenantId,
+      person_id: s.candidate_person_id,
+      source_type: sourceType,
+      identity_type: identityType,
+      identity_value: s.observed_identity,
+      confidence: 1,
+      verified_by_user: true,
+    },
+    { onConflict: "tenant_id,source_type,identity_value", ignoreDuplicates: false },
+  );
+  await supabase.from("person_link_suggestions").update({ status: "confirmed" }).eq("id", suggestionId);
+  await supabase.from("correlation_feedback").insert({
+    tenant_id: tenantId,
+    source_item_id: s.source_item_id,
+    proposed_person_id: s.candidate_person_id,
+    corrected_person_id: s.candidate_person_id,
+    verdict: "correct",
+  });
+  return true;
+}
+
+/** Reject a suggestion (not a match) + record feedback. */
+export async function rejectSuggestion(tenantId: string, suggestionId: string): Promise<boolean> {
+  const supabase = await createSupabaseServerClient();
+  const s = await readSuggestion(supabase, suggestionId);
+  if (!s) return false;
+  await supabase.from("person_link_suggestions").update({ status: "rejected" }).eq("id", suggestionId);
+  await supabase.from("correlation_feedback").insert({
+    tenant_id: tenantId,
+    source_item_id: s.source_item_id,
+    proposed_person_id: s.candidate_person_id,
+    corrected_person_id: null,
+    verdict: "wrong",
+  });
+  return true;
+}
+
+/**
+ * Create a new person from a suggestion (named after the observed identity),
+ * attach the observed identity as verified, mark the suggestion resolved, and
+ * record feedback.
+ */
+export async function newPersonFromSuggestion(tenantId: string, suggestionId: string): Promise<string | null> {
+  const supabase = await createSupabaseServerClient();
+  const s = await readSuggestion(supabase, suggestionId);
+  if (!s) return null;
+  const { sourceType, identityType } = identityForSystem(s.source_system ?? "email");
+
+  const personId = await createPerson(tenantId, { displayName: s.observed_identity });
+  await supabase.from("person_identities").insert({
+    tenant_id: tenantId,
+    person_id: personId,
+    source_type: sourceType,
+    identity_type: identityType,
+    identity_value: s.observed_identity,
+    confidence: 1,
+    verified_by_user: true,
+  });
+  await supabase.from("person_link_suggestions").update({ status: "new_person" }).eq("id", suggestionId);
+  await supabase.from("correlation_feedback").insert({
+    tenant_id: tenantId,
+    source_item_id: s.source_item_id,
+    proposed_person_id: s.candidate_person_id,
+    corrected_person_id: personId,
+    verdict: "new_person",
+  });
+  return personId;
 }
 
 // --- Writes -----------------------------------------------------------------

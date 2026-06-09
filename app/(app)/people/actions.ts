@@ -18,6 +18,10 @@ import {
   removeIdentity,
   addTag,
   removeTag,
+  generateLinkSuggestions,
+  confirmSuggestion,
+  rejectSuggestion,
+  newPersonFromSuggestion,
   type CreatePersonInput,
   type UpdatePersonPatch,
 } from "@/modules/people/people-server";
@@ -150,5 +154,62 @@ export async function removeTagAction(input: { personId: string; tag: string }):
     return { ok: true, error: null };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Remove tag failed." };
+  }
+}
+
+// --- Information Correlation -------------------------------------------------
+
+/** Run correlation over recent items; persist new confirmable suggestions. */
+export async function runCorrelationAction(): Promise<{ ok: boolean; added?: number; error: string | null }> {
+  const ctx = await requireTenantContext();
+  try {
+    const added = await generateLinkSuggestions(ctx.tenantId);
+    await auditService.record(ctx, { action: "correlation.run", metadata: { suggestionsAdded: added } });
+    revalidatePath("/people");
+    return { ok: true, added, error: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Correlation failed." };
+  }
+}
+
+/** Confirm a "same person?" suggestion → verified identity + feedback. */
+export async function confirmSuggestionAction(input: { suggestionId: string }): Promise<Result> {
+  const ctx = await requireTenantContext();
+  if (!input?.suggestionId) return { ok: false, error: "Missing suggestion." };
+  try {
+    const ok = await confirmSuggestion(ctx.tenantId, input.suggestionId);
+    if (ok) await auditService.record(ctx, { action: "correlation.suggestion.confirmed", target: input.suggestionId });
+    revalidatePath("/people");
+    return { ok, error: ok ? null : "Nothing to confirm (no candidate person)." };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Confirm failed." };
+  }
+}
+
+/** Reject a suggestion (not a match) → feedback. */
+export async function rejectSuggestionAction(input: { suggestionId: string }): Promise<Result> {
+  const ctx = await requireTenantContext();
+  if (!input?.suggestionId) return { ok: false, error: "Missing suggestion." };
+  try {
+    await rejectSuggestion(ctx.tenantId, input.suggestionId);
+    await auditService.record(ctx, { action: "correlation.suggestion.rejected", target: input.suggestionId });
+    revalidatePath("/people");
+    return { ok: true, error: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Reject failed." };
+  }
+}
+
+/** Create a new person from a suggestion → verified identity + feedback. */
+export async function newPersonFromSuggestionAction(input: { suggestionId: string }): Promise<Result> {
+  const ctx = await requireTenantContext();
+  if (!input?.suggestionId) return { ok: false, error: "Missing suggestion." };
+  try {
+    const id = await newPersonFromSuggestion(ctx.tenantId, input.suggestionId);
+    if (id) await auditService.record(ctx, { action: "correlation.suggestion.new_person", target: id });
+    revalidatePath("/people");
+    return { ok: Boolean(id), error: id ? null : "Could not create person." };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed." };
   }
 }

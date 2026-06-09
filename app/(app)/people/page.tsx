@@ -9,12 +9,12 @@
  */
 
 import { requireTenantContext } from "@/modules/identity-tenant/server";
-import { listPeople } from "@/modules/people/people-server";
+import { listPeople, listLinkSuggestions } from "@/modules/people/people-server";
 import { PeopleBrowser } from "./people-browser";
 
 export default async function PeoplePage() {
   await requireTenantContext();
-  const people = await listPeople();
+  const [people, suggestions] = await Promise.all([listPeople(), listLinkSuggestions()]);
 
   return (
     <main className="workspace__content">
@@ -29,15 +29,15 @@ export default async function PeoplePage() {
         </p>
       </div>
 
-      <PeopleBrowser people={people} suggestions={[]} />
+      <PeopleBrowser people={people} suggestions={suggestions} />
 
       <p className="scaffold-note" style={{ marginTop: "var(--space-xl)" }}>
-        People and their cross-source identities are persisted and tenant-scoped.
-        Correlated signals, linked actions, and “same person?” suggestions are
-        produced by the correlation pipeline (not yet wired), so they appear once
-        sources feed it. People Context turns fragmented information into
-        relationship-aware operating intelligence; matches are always confirmable
-        — the system never silently merges people.
+        People, their cross-source identities, and correlation are persisted and
+        tenant-scoped. “Run correlation” resolves recent ingested items to people
+        by their verified identities: confident matches become signals; uncertain
+        ones become confirmable “same person?” suggestions. The system never
+        silently merges people — every link is confirmable, and confirming locks
+        a verified identity so future items resolve automatically.
       </p>
     </main>
   );

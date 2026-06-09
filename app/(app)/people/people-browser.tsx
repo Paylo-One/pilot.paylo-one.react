@@ -18,7 +18,7 @@ import {
   type PersonImportanceLevel,
   type PersonLinkSuggestion,
 } from "@/modules/people/people.types";
-import { updatePersonAction, deletePersonAction } from "./actions";
+import { updatePersonAction, deletePersonAction, runCorrelationAction } from "./actions";
 import { PersonSearch } from "@/components/people/person-search";
 import { PersonCard } from "@/components/people/person-card";
 import { PersonForm } from "@/components/people/person-form";
@@ -75,19 +75,40 @@ export function PeopleBrowser({
         </div>
       ) : null}
 
-      {suggestions.length > 0 ? (
-        <section style={{ marginBottom: "var(--space-xl)" }}>
-          <div className="card-head">
-            <p className="eyebrow">Is this the same person?</p>
-            <span className="badge">{suggestions.length}</span>
+      <section style={{ marginBottom: "var(--space-xl)" }}>
+        <div className="card-head">
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+            <p className="eyebrow" style={{ margin: 0 }}>Is this the same person?</p>
+            {suggestions.length > 0 ? <span className="badge">{suggestions.length}</span> : null}
           </div>
+          <button
+            type="button"
+            className="btn btn--secondary btn--sm"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                const res = await runCorrelationAction();
+                if (res.ok) router.refresh();
+              })
+            }
+          >
+            {pending ? "Correlating…" : "Run correlation"}
+          </button>
+        </div>
+        {suggestions.length === 0 ? (
+          <p className="scaffold-note">
+            No pending suggestions. Run correlation to resolve recent ingested
+            items to your people — confident matches attach as signals; uncertain
+            ones appear here to confirm.
+          </p>
+        ) : (
           <div className="stack" style={{ gap: "var(--space-sm)" }}>
             {suggestions.map((s) => (
               <PersonLinkSuggestionCard key={s.id} suggestion={s} />
             ))}
           </div>
-        </section>
-      ) : null}
+        )}
+      </section>
 
       <div className="people__layout">
         <div className="people__list">
