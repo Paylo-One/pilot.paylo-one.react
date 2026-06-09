@@ -11,13 +11,19 @@
  * full eleven-section structure is visible — clearly labelled as a preview.
  */
 
+import Link from "next/link";
 import { requireTenantContext } from "@/modules/identity-tenant/server";
 import {
   getLatestBriefing,
+  getPeopleInFocus,
   type BriefingSectionView,
+  type PersonInFocus,
 } from "@/modules/briefing/server";
+import { SOURCE_SYSTEM_LABELS } from "@/modules/source-connection";
+import { IMPORTANCE_LABELS, IMPORTANCE_TONE } from "@/modules/people/people.types";
 import { GenerateMemoButton } from "./generate-button";
 import { RefinementActions } from "@/components/refinement/refinement-actions";
+import { FeedbackChip } from "@/components/refinement/feedback-chip";
 import {
   SAMPLE_MEMO,
   type SampleSection,
@@ -41,22 +47,106 @@ function titleCase(kind: string): string {
 
 function RealReferences({ section }: { section: BriefingSectionView }) {
   if (section.references.length === 0) return null;
+  const people = [
+    ...new Map(
+      section.references
+        .filter((r) => r.personId && r.personName)
+        .map((r) => [r.personId, r.personName as string]),
+    ).entries(),
+  ];
   return (
-    <div className="source-ref-row">
-      {section.references.map((ref) => (
-        <span
-          key={ref.id}
-          className="source-ref"
-          title={ref.excerptOrPointer ?? undefined}
-        >
-          <span className="source-ref__system">{ref.sourceSystem}</span>
-          {typeof ref.confidence === "number" ? (
-            <span className="source-ref__confidence">
-              {Math.round(ref.confidence * 100)}%
+    <>
+      {people.length > 0 ? (
+        <div className="source-ref-row" aria-label="Linked people">
+          {people.map(([personId, name]) => (
+            <span key={personId} className="chip chip--accent">
+              {people.length > 1 ? "Related: " : "Linked: "}
+              {name}
             </span>
-          ) : null}
-        </span>
-      ))}
+          ))}
+        </div>
+      ) : null}
+      <div className="source-ref-row">
+        {section.references.map((ref) => (
+          <span
+            key={ref.id}
+            className="source-ref"
+            title={ref.excerptOrPointer ?? undefined}
+          >
+            <span className="source-ref__system">{ref.sourceSystem}</span>
+            {typeof ref.confidence === "number" ? (
+              <span className="source-ref__confidence">
+                {Math.round(ref.confidence * 100)}%
+              </span>
+            ) : null}
+          </span>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/**
+ * Real, correlation-derived section: the people behind recent activity, ranked
+ * by importance. Built from People Context + Information Correlation (not an LLM
+ * memo) — so the memo is relationship-aware even before an agent briefing exists.
+ */
+function PeopleInFocusSection({ people }: { people: PersonInFocus[] }) {
+  if (people.length === 0) return null;
+  return (
+    <div className="card" style={{ marginBottom: "var(--space-lg)" }}>
+      <div className="card-head">
+        <div>
+          <p className="eyebrow">People in focus</p>
+          <h2 className="card__title">Who is behind today&apos;s activity</h2>
+        </div>
+        <Link href="/people" className="btn btn--ghost btn--sm">
+          Open People
+        </Link>
+      </div>
+      <p className="action-card__rationale" style={{ marginTop: 0, marginBottom: "var(--space-md)" }}>
+        Correlated from your connected sources by each person&apos;s verified
+        identities, ranked by the importance you set.
+      </p>
+      <div className="stack" style={{ gap: "var(--space-md)" }}>
+        {people.map((p) => (
+          <div className="memo-item" key={p.personId}>
+            <div className="memo-item__main">
+              <p className="memo-item__title">
+                <Link href="/people" className="source-ref__system">{p.name}</Link>
+                {p.roleTitle ? <span className="memo-item__detail"> · {p.roleTitle}</span> : null}
+                {p.organisation ? <span className="memo-item__detail"> · {p.organisation}</span> : null}
+              </p>
+              <p className="memo-item__detail">
+                {p.signalCount} recent signal{p.signalCount === 1 ? "" : "s"}
+              </p>
+              <div className="source-ref-row">
+                {p.signals.map((s) => (
+                  <span key={s.id} className="source-ref" title={s.title}>
+                    <span className="source-ref__system">
+                      {SOURCE_SYSTEM_LABELS[s.system] ?? s.system}
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <span>{s.title.length > 40 ? `${s.title.slice(0, 39)}…` : s.title}</span>
+                    <span className="source-ref__confidence">{Math.round(s.confidence * 100)}%</span>
+                  </span>
+                ))}
+              </div>
+              <div className="refinement-actions">
+                <span className="refinement-actions__label mono">Refine</span>
+                <FeedbackChip feedback="raise_priority" targetType="person" targetId={p.personId} label="Always high priority" />
+                <FeedbackChip feedback="lower_priority" targetType="person" targetId={p.personId} />
+                <FeedbackChip feedback="do_not_show_again" targetType="person" targetId={p.personId} label="Mute" />
+              </div>
+            </div>
+            <div className="memo-item__aside">
+              <span className={`status status--${IMPORTANCE_TONE[p.importance]}`}>
+                {IMPORTANCE_LABELS[p.importance]}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -155,7 +245,10 @@ function SampleSectionBlock({
 
 export default async function BriefingPage() {
   const ctx = await requireTenantContext();
-  const briefing = await getLatestBriefing(ctx.tenantId);
+  const [briefing, peopleInFocus] = await Promise.all([
+    getLatestBriefing(ctx.tenantId),
+    getPeopleInFocus(),
+  ]);
 
   return (
     <main className="workspace__content">
@@ -173,6 +266,8 @@ export default async function BriefingPage() {
           <GenerateMemoButton hasBriefing={Boolean(briefing)} />
         </div>
       </div>
+
+      <PeopleInFocusSection people={peopleInFocus} />
 
       {briefing ? (
         /* --- Real briefing ------------------------------------------------ */
