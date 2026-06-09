@@ -1230,6 +1230,379 @@ button {
   justify-content: space-between;
   gap: var(--space-md);
 }
+/* Active source: a quiet teal hairline on the leading edge (≤10% accent). */
+.integration--active {
+  border-left: 2px solid var(--colour-accent);
+}
+.integration__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.integration__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.integration__toggle-label {
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+}
+/* Expanded per-source configuration drawer. */
+.integration__detail {
+  border-top: 1px solid var(--colour-border);
+  padding-top: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.integration__detail-block {
+  margin-top: var(--space-sm);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--colour-border);
+}
+
+/* ============================================================================
+   CONNECTED SOURCES — toolbar, search, filters, switch, policy, repos
+   ========================================================================== */
+
+/* Small button variant for dense source controls. */
+.btn--sm {
+  padding: 5px var(--space-sm);
+  font-size: var(--text-label);
+}
+
+.sources-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+/* Search field with a leading icon + trailing result count. */
+.source-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.source-search--inset {
+  margin-top: var(--space-sm);
+}
+.source-search__icon {
+  position: absolute;
+  left: var(--space-md);
+  display: inline-flex;
+  color: var(--colour-text-tertiary);
+  pointer-events: none;
+}
+.source-search__input {
+  padding-left: calc(var(--space-md) + 22px);
+  padding-right: 92px;
+}
+.source-search__count {
+  position: absolute;
+  right: var(--space-md);
+  font-size: var(--text-label);
+  color: var(--colour-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+/* Filter chip rows (category + status). */
+.source-filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 5px var(--space-sm);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+  background: var(--colour-surface);
+  color: var(--colour-text-secondary);
+  font-size: var(--text-small);
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--speed) var(--ease-standard),
+    background var(--speed) var(--ease-standard),
+    color var(--speed) var(--ease-standard);
+}
+.filter-chip:hover {
+  border-color: var(--colour-text-tertiary);
+  color: var(--colour-text-primary);
+}
+.filter-chip--active {
+  border-color: var(--colour-accent);
+  background: var(--colour-accent-soft);
+  color: var(--colour-accent);
+}
+.filter-chip--status {
+  font-size: var(--text-label);
+}
+.filter-chip__count {
+  font-size: var(--text-label);
+  color: var(--colour-text-tertiary);
+}
+.filter-chip--active .filter-chip__count {
+  color: var(--colour-accent);
+}
+
+/* Status dot used in status filter chips (muted vocabulary, never teal). */
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--colour-text-tertiary);
+  flex-shrink: 0;
+}
+.status-dot--ok {
+  background: var(--colour-success);
+}
+.status-dot--info {
+  background: var(--colour-info);
+}
+.status-dot--warn {
+  background: var(--colour-warning);
+}
+.status-dot--risk {
+  background: var(--colour-danger);
+}
+.status-dot--neutral {
+  background: var(--colour-text-tertiary);
+}
+
+/* Switch (activate / Daily Memo inclusion). */
+.switch {
+  position: relative;
+  width: 34px;
+  height: 18px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--colour-border-strong);
+  background: var(--colour-surface-sunken);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background var(--speed) var(--ease-standard),
+    border-color var(--speed) var(--ease-standard);
+}
+.switch__thumb {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--colour-surface-elevated);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--speed) var(--ease-standard);
+}
+.switch--on {
+  background: var(--colour-accent);
+  border-color: var(--colour-accent);
+}
+.switch--on .switch__thumb {
+  transform: translateX(16px);
+}
+.switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Segmented control (storage policy). */
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--colour-border-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.segmented__option {
+  padding: 5px var(--space-md);
+  background: var(--colour-surface);
+  border: none;
+  border-right: 1px solid var(--colour-border);
+  color: var(--colour-text-secondary);
+  font-size: var(--text-small);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--speed) var(--ease-standard),
+    color var(--speed) var(--ease-standard);
+}
+.segmented__option:last-child {
+  border-right: none;
+}
+.segmented__option:hover {
+  background: var(--colour-surface-sunken);
+  color: var(--colour-text-primary);
+}
+.segmented__option--active {
+  background: var(--colour-accent-soft);
+  color: var(--colour-accent);
+}
+.segmented__option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.segmented__hint {
+  font-size: var(--text-small);
+  color: var(--colour-text-tertiary);
+  margin-top: var(--space-sm);
+  max-width: 60ch;
+}
+
+/* GitHub repository selector. */
+.repo-selector {
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-md);
+  background: var(--colour-surface-sunken);
+  padding: var(--space-md);
+}
+.repo-selector__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+.repo-selector__account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.repo-selector__org {
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+.repo-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+.repo-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  padding: var(--space-md);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+  background: var(--colour-surface);
+}
+.repo-row--active {
+  border-left: 2px solid var(--colour-accent);
+}
+.repo-row__main {
+  min-width: 0;
+  flex: 1 1 60%;
+}
+.repo-row__id {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.repo-row__name {
+  font-size: var(--text-small);
+  font-weight: 600;
+  color: var(--colour-text-primary);
+}
+.repo-row__desc {
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+  margin-top: 2px;
+}
+.repo-row__meta {
+  font-size: var(--text-label);
+  color: var(--colour-text-tertiary);
+  margin-top: var(--space-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.repo-row__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-shrink: 0;
+}
+.repo-monitors {
+  flex: 1 1 100%;
+  margin-top: var(--space-sm);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--colour-border);
+}
+.repo-monitors__grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-xs);
+}
+.monitor-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+  background: var(--colour-surface);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--speed) var(--ease-standard),
+    background var(--speed) var(--ease-standard);
+}
+.monitor-toggle:hover {
+  border-color: var(--colour-text-tertiary);
+}
+.monitor-toggle--on {
+  border-color: var(--colour-accent);
+  background: var(--colour-accent-soft);
+}
+.monitor-toggle__check {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--colour-border-strong);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  color: var(--colour-accent-on);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.monitor-toggle--on .monitor-toggle__check {
+  background: var(--colour-accent);
+  border-color: var(--colour-accent);
+}
+.monitor-toggle__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.monitor-toggle__label {
+  font-size: var(--text-small);
+  font-weight: 500;
+  color: var(--colour-text-primary);
+}
+.monitor-toggle__cond {
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  color: var(--colour-text-tertiary);
+  font-weight: 400;
+}
+.monitor-toggle__hint {
+  font-size: var(--text-label);
+  color: var(--colour-text-tertiary);
+}
 
 /* ============================================================================
    TENANT TOOL LAYER (MCP)
@@ -1379,7 +1752,8 @@ button {
   }
   .integration-grid,
   .grid--2,
-  .grid--3 {
+  .grid--3,
+  .repo-monitors__grid {
     grid-template-columns: 1fr;
   }
   .workspace__content {

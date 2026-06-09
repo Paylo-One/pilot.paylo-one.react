@@ -32,12 +32,14 @@ export interface SourceConnectionService {
 /** Human-facing label for each connectable source system. */
 export const SOURCE_SYSTEM_LABELS: Record<SourceSystem, string> = {
   email: "Email",
+  ms365_mail: "MS 365 — Mail",
   calendar: "Calendar",
   teams: "Microsoft Teams",
   whatsapp: "WhatsApp",
   github: "GitHub",
   notion: "Notion",
   file_upload: "File & paste upload",
+  obsidian: "Obsidian",
 };
 
 /** Default `display_name` for a freshly created connection of `system`. */

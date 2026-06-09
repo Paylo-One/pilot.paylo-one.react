@@ -18,14 +18,17 @@ import {
   upsertProviderConnection,
   storeIntegrationCredentials,
 } from "@/modules/source-connection/server";
-import { ingestProviderItems } from "@/modules/ingestion/server";
 import {
   exchangeCodeForToken,
-  fetchGithubSlice,
+  githubGet,
   verifySignedState,
   oauthCookieDomain,
   GITHUB_STATE_COOKIE,
 } from "@/modules/source-connection/github";
+import {
+  fetchAccessibleRepositories,
+  upsertAvailableRepositories,
+} from "@/modules/source-connection/github-repos";
 
 function clearStateCookie(response: NextResponse): void {
   response.cookies.set(GITHUB_STATE_COOKIE, "", {
@@ -67,9 +70,12 @@ export async function GET(request: Request) {
 
   try {
     const token = await exchangeCodeForToken(code);
-    const slice = await fetchGithubSlice(token.accessToken);
 
-    const displayName = slice.username ? `GitHub (@${slice.username})` : "GitHub";
+    // Identify the account for the connection's display name.
+    const user = await githubGet<{ login?: string }>(token.accessToken, "/user");
+    const username = user?.login ?? null;
+    const displayName = username ? `GitHub (@${username})` : "GitHub";
+
     const connectionId = await upsertProviderConnection(payload.tenantId, "github", {
       displayName,
       status: "connected",
@@ -80,11 +86,14 @@ export async function GET(request: Request) {
       scope: token.scope,
     });
 
-    const result = await ingestProviderItems(
+    // Discover accessible repositories and persist them as *available* monitors.
+    // Nothing is ingested here — the operator must explicitly select and activate
+    // repositories before any activity reaches the Daily Memo (ADR-024/025).
+    const repos = await fetchAccessibleRepositories(token.accessToken);
+    const added = await upsertAvailableRepositories(
       payload.tenantId,
       connectionId,
-      "github",
-      slice.items,
+      repos,
     );
 
     const ctx: TenantContext = {
@@ -96,11 +105,11 @@ export async function GET(request: Request) {
     await auditService.record(ctx, {
       action: "source_connection.github.connected",
       target: connectionId,
-      metadata: { itemCount: result.itemCount, username: slice.username },
+      metadata: { repositoriesDiscovered: repos.length, repositoriesAdded: added, username },
     });
 
     const response = NextResponse.redirect(
-      `${sourcesUrl}?github=connected&count=${result.itemCount}`,
+      `${sourcesUrl}?github=connected&repos=${repos.length}`,
     );
     clearStateCookie(response);
     return response;

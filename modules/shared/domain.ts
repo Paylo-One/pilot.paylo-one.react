@@ -8,15 +8,24 @@
  * Scaffold note: shapes only; no persistence.
  */
 
-/** Connected source systems (data-architecture.md `source_system` enum). */
+/**
+ * Connected source systems (data-architecture.md `source_system` enum).
+ *
+ * `email` is the GENERIC email category (Gmail/Outlook); `ms365_mail` is the
+ * SPECIFIC Microsoft 365 mail connector (Entra/Graph) — they overlap by design
+ * and are kept distinct so the operator can reason about the connector they
+ * actually authorise. See source-integration-strategy.md §3 "Source catalogue".
+ */
 export type SourceSystem =
   | "email"
+  | "ms365_mail"
   | "calendar"
   | "teams"
   | "whatsapp"
   | "github"
   | "notion"
-  | "file_upload";
+  | "file_upload"
+  | "obsidian";
 
 /** Per-source retention choice (data-architecture.md `storage_policy` enum). */
 export type StoragePolicy =

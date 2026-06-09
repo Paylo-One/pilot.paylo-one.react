@@ -182,6 +182,48 @@ export async function disconnectSourceConnection(
 }
 
 /**
+ * Read the stored access token for a connection (SECRET client; tenant-scoped).
+ * Used by server-side sync that runs without a user session. Returns null if no
+ * credentials are stored. Never expose this to the browser/RLS path.
+ */
+export async function getIntegrationAccessToken(
+  tenantId: string,
+  sourceConnectionId: string,
+): Promise<string | null> {
+  const secret = createSupabaseSecretClient();
+  const { data, error } = await secret
+    .from("integration_credentials")
+    .select("access_token")
+    .eq("tenant_id", tenantId)
+    .eq("source_connection_id", sourceConnectionId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data?.access_token as string | undefined) ?? null;
+}
+
+/**
+ * Resolve the current tenant's connection id for a system using the USER (RLS)
+ * client. Returns null when none exists. Used by UI server actions that need to
+ * target a connection without trusting a client-supplied id.
+ */
+export async function findConnectionIdBySystem(
+  system: SourceSystem,
+): Promise<string | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("source_connections")
+    .select("id")
+    .eq("system", system)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data?.id as string | undefined) ?? null;
+}
+
+/**
  * Persist OAuth credentials for a connection (SECRET client; tenant-scoped).
  * Replaces any prior credentials for the same connection so re-auth is clean.
  */

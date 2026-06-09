@@ -11,6 +11,7 @@ import "server-only";
 
 import type { SourceSystem, TenantContext } from "@/modules/shared";
 import { normaliseContent } from "@/modules/normalisation";
+import { parseObsidianMarkdown } from "@/modules/normalisation/obsidian";
 import { insertSourceItem } from "@/modules/knowledge-store/server";
 import { auditService } from "@/modules/audit";
 import { ensureSourceConnection } from "@/modules/source-connection/server";
@@ -56,6 +57,67 @@ export async function ingestPastedText(
   });
 
   return { itemId };
+}
+
+/** A single uploaded Obsidian note (filename + raw markdown). */
+export interface ObsidianUpload {
+  readonly filename: string;
+  readonly content: string;
+}
+
+/**
+ * Ingest uploaded Obsidian vault notes as `obsidian` source items. Runs with a
+ * real user session (RLS client) — the operator explicitly uploaded these, so
+ * nothing is read from disk. Each note is parsed (frontmatter, tags, internal
+ * wikilinks) and stored with that structure in `raw` for traceability. Returns
+ * the number of notes ingested. Governance: source-integration-strategy.md §13.
+ */
+export async function ingestObsidianNotes(
+  ctx: TenantContext,
+  notes: readonly ObsidianUpload[],
+): Promise<{ itemCount: number }> {
+  if (notes.length === 0) return { itemCount: 0 };
+  const connectionId = await ensureSourceConnection(ctx, "obsidian");
+
+  let itemCount = 0;
+  for (const note of notes) {
+    const parsed = parseObsidianMarkdown(note.filename, note.content.slice(0, MAX_UPLOAD_BODY));
+    if (parsed.body.trim().length === 0 && parsed.title.length === 0) continue;
+
+    const normalised = normaliseContent({
+      system: "obsidian",
+      title: parsed.title,
+      body: parsed.body,
+      kind: "note",
+    });
+
+    await insertSourceItem(ctx.tenantId, {
+      sourceConnectionId: connectionId,
+      system: "obsidian",
+      externalId: `obsidian:${note.filename}`,
+      kind: normalised.kind,
+      title: normalised.title,
+      body: normalised.body,
+      author: ctx.userId,
+      occurredAt: parsed.occurredAt ?? new Date().toISOString(),
+      raw: {
+        source: "obsidian_upload",
+        filename: note.filename,
+        tags: parsed.tags,
+        links: parsed.links,
+        frontmatter: parsed.frontmatter,
+      },
+    });
+    itemCount += 1;
+  }
+
+  await auditService.record(ctx, {
+    action: "source_item.ingested",
+    target: connectionId,
+    metadata: { system: "obsidian", noteCount: itemCount },
+  });
+
+  return { itemCount };
 }
 
 /**

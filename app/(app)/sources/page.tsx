@@ -2,27 +2,31 @@
  * Sources — connect/manage integrations + bring real context into the
  * workspace. Two working ingestion paths: file/paste upload (no credentials)
  * and GitHub OAuth (when configured). Every other integration is designed and
- * scaffolded, presented as a card with its connection contract. Governance:
- * integration-architecture.md, services/source-connection.md, ingestion.md.
+ * scaffolded, presented as a searchable, filterable card with its connection
+ * contract and per-source control surface (activate, scope, storage policy,
+ * Daily Memo inclusion). Governance: integration-architecture.md,
+ * source-integration-strategy.md, services/source-connection.md, ingestion.md.
  *
  * Server Component: reads connections + recent items with the RLS user client,
- * then merges real connection state into the designed source catalogue.
+ * derives an operator-facing SourceView per designed source, then hands the
+ * list to the client browser for search / filter / configuration.
  */
 
 import { requireTenantContext } from "@/modules/identity-tenant/server";
 import { listSourceConnections } from "@/modules/source-connection/server";
-import type { SourceConnection } from "@/modules/source-connection";
 import { isGithubOAuthConfigured } from "@/modules/source-connection/github";
+import { listRepositoryMonitors } from "@/modules/source-connection/github-repos";
+import { listNotionResources } from "@/modules/source-connection/notion";
 import { listRecentSourceItems } from "@/modules/knowledge-store/server";
 import { SOURCE_SYSTEM_LABELS } from "@/modules/source-connection";
 import {
-  SOURCE_CATALOGUE,
-  STORAGE_POLICY_LABELS,
-  TIER_LABELS,
-  type SourceCatalogueEntry,
-} from "./catalogue";
+  SOURCE_DESCRIPTORS,
+  deriveSourceStatus,
+  isInDailyMemo,
+} from "@/modules/source-connection/source-service";
+import type { SourceView } from "@/modules/source-connection/source.types";
+import { SourcesBrowser } from "./sources-browser";
 import { UploadForm } from "./upload-form";
-import { DisconnectButton } from "./disconnect-button";
 
 function formatTimestamp(value: string | null): string {
   if (!value) return "";
@@ -41,7 +45,11 @@ function githubNotice(
 ): { message: string; ok: boolean } | null {
   switch (github) {
     case "connected":
-      return { message: "GitHub connected — recent activity imported.", ok: true };
+      return {
+        message:
+          "GitHub connected. Open Configure on the GitHub card to choose which repositories to monitor — nothing is ingested until you activate a repository.",
+        ok: true,
+      };
     case "unconfigured":
       return { message: "GitHub OAuth is not configured.", ok: false };
     case "error":
@@ -53,121 +61,10 @@ function githubNotice(
   }
 }
 
-/** A single integration card, merging real connection state into the design. */
-function IntegrationCard({
-  entry,
-  connection,
-  githubConfigured,
-}: {
-  entry: SourceCatalogueEntry;
-  connection: SourceConnection | undefined;
-  githubConfigured: boolean;
-}) {
-  const connected = connection?.status === "connected";
-  const policy = connection?.storagePolicy ?? entry.defaultPolicy;
-  const lastSync = formatTimestamp(connection?.updatedAt ?? null);
-
-  let statusNode: React.ReactNode;
-  if (connected) {
-    statusNode = <span className="status status--ok">Connected</span>;
-  } else if (connection?.status === "error") {
-    statusNode = <span className="status status--risk">Needs reconnect</span>;
-  } else {
-    statusNode = (
-      <span className="status status--neutral">
-        {entry.tier === "phased" ? "Phased" : "Not connected"}
-      </span>
-    );
-  }
-
-  return (
-    <article className="integration">
-      <div className="integration__head">
-        <div className="integration__id">
-          <span className="integration__glyph" aria-hidden="true">
-            {entry.glyph}
-          </span>
-          <div>
-            <p className="integration__name">
-              {SOURCE_SYSTEM_LABELS[entry.system]}
-            </p>
-            <p className="integration__kind">{entry.provider}</p>
-          </div>
-        </div>
-        {statusNode}
-      </div>
-
-      <p className="action-card__rationale" style={{ marginTop: 0 }}>
-        {entry.description}
-      </p>
-
-      <div className="integration__meta">
-        <div className="meta-row">
-          <span className="meta-row__key">Storage policy</span>
-          <span className="badge badge--plain">{STORAGE_POLICY_LABELS[policy]}</span>
-        </div>
-        <div className="meta-row">
-          <span className="meta-row__key">Last sync</span>
-          <span className="meta-row__value mono">
-            {connected && lastSync ? lastSync : "—"}
-          </span>
-        </div>
-        <div className="meta-row">
-          <span className="meta-row__key">Source references</span>
-          <span className="meta-row__value">
-            {entry.referenceReady ? "Ready" : "—"}
-          </span>
-        </div>
-        <div className="meta-row">
-          <span className="meta-row__key">Tenant scope</span>
-          <span className="meta-row__value mono">isolated</span>
-        </div>
-      </div>
-
-      <div className="integration__footer">
-        <span className="badge">{TIER_LABELS[entry.tier]}</span>
-        {/* Connect affordance: real for GitHub (when configured) + file upload;
-            scaffolded for the rest. */}
-        {entry.system === "github" ? (
-          connected ? (
-            <DisconnectButton connectionId={connection!.id} />
-          ) : githubConfigured ? (
-            <a className="btn btn--secondary" href="/api/oauth/github/start">
-              Connect
-            </a>
-          ) : (
-            <button
-              type="button"
-              className="btn btn--ghost"
-              disabled
-              title="Add GITHUB_OAUTH_CLIENT_ID / SECRET to enable"
-            >
-              Needs credentials
-            </button>
-          )
-        ) : entry.system === "file_upload" ? (
-          <a className="btn btn--secondary" href="#upload">
-            Add a note
-          </a>
-        ) : (
-          <button
-            type="button"
-            className="btn btn--ghost"
-            disabled
-            title="Direct integration designed — connection not wired in this scaffold"
-          >
-            Connect
-          </button>
-        )}
-      </div>
-    </article>
-  );
-}
-
 export default async function SourcesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ github?: string; count?: string }>;
+  searchParams: Promise<{ github?: string; repos?: string }>;
 }) {
   const ctx = await requireTenantContext();
   const [connections, recentItems, params] = await Promise.all([
@@ -178,9 +75,58 @@ export default async function SourcesPage({
 
   const githubConfigured = isGithubOAuthConfigured();
   const notice = githubNotice(params.github);
-  const importedCount = params.count ? Number(params.count) : null;
+  const discoveredRepos = params.repos ? Number(params.repos) : null;
 
   const connectionBySystem = new Map(connections.map((c) => [c.system, c]));
+
+  // Real, persisted repository monitors for a *connected* GitHub (if any).
+  const githubConnection = connectionBySystem.get("github");
+  const githubRepositories =
+    githubConnection && githubConnection.status === "connected"
+      ? await listRepositoryMonitors(githubConnection.id)
+      : [];
+
+  // Real, persisted Notion resources for a *connected* Notion (if any).
+  const notionConnection = connectionBySystem.get("notion");
+  const notionResources =
+    notionConnection && notionConnection.status === "connected"
+      ? await listNotionResources(notionConnection.id)
+      : [];
+
+  // Merge each designed source with its live connection into a serialisable
+  // view for the client browser. Scope/policy stay conservative by default.
+  const views: SourceView[] = SOURCE_DESCRIPTORS.map((d) => {
+    const connection = connectionBySystem.get(d.system);
+    const status = deriveSourceStatus(d, connection);
+    const lastSync = connection ? formatTimestamp(connection.updatedAt) : "";
+    return {
+      system: d.system,
+      name: SOURCE_SYSTEM_LABELS[d.system],
+      provider: d.provider,
+      glyph: d.glyph,
+      description: d.description,
+      category: d.category,
+      status,
+      mvpStatus: d.mvpStatus,
+      storagePolicy: connection?.storagePolicy ?? d.defaultPolicy,
+      authModel: d.authModel,
+      dataPulled: d.dataPulled,
+      scopeControl: d.scopeControl,
+      dailyMemoUse: d.dailyMemoUse,
+      riskNote: d.riskNote,
+      lastSync: status === "active" && lastSync ? lastSync : null,
+      referenceReady: d.referenceReady,
+      inDailyMemo: isInDailyMemo(d, status),
+      connect: d.connect,
+      // Only a *connected* connection counts as connected in the UI. A stale
+      // `disconnected`/`error` row must still surface the Connect affordance
+      // (and the selector's connect prompt), not a phantom connected state.
+      connectionId: connection?.status === "connected" ? connection.id : null,
+      githubConfigured,
+      githubRepositories: d.system === "github" ? githubRepositories : [],
+      notionResources: d.system === "notion" ? notionResources : [],
+    };
+  });
 
   return (
     <main className="workspace__content">
@@ -188,10 +134,10 @@ export default async function SourcesPage({
         <p className="eyebrow">Sources</p>
         <h1 className="page-head__title">Connected sources</h1>
         <p className="page-head__lead">
-          The channels your briefings draw on. Each source is tenant-scoped,
-          carries its own storage policy, and produces traceable references.
-          Direct integrations are designed and scaffolded; file upload and GitHub
-          are wired today.
+          Choose the sources that should inform your Daily Memo. Each source is
+          tenant-scoped, carries its own storage policy, and produces traceable
+          references. Paylo.one only monitors what you activate and scope —
+          never everything by default.
         </p>
       </div>
 
@@ -203,24 +149,15 @@ export default async function SourcesPage({
           <div>
             <p className="alert__body">
               {notice.message}
-              {notice.ok && importedCount !== null && !Number.isNaN(importedCount)
-                ? ` (${importedCount} item${importedCount === 1 ? "" : "s"})`
+              {notice.ok && discoveredRepos !== null && !Number.isNaN(discoveredRepos)
+                ? ` (${discoveredRepos} repositor${discoveredRepos === 1 ? "y" : "ies"} found)`
                 : ""}
             </p>
           </div>
         </div>
       ) : null}
 
-      <div className="integration-grid">
-        {SOURCE_CATALOGUE.map((entry) => (
-          <IntegrationCard
-            key={entry.system}
-            entry={entry}
-            connection={connectionBySystem.get(entry.system)}
-            githubConfigured={githubConfigured}
-          />
-        ))}
-      </div>
+      <SourcesBrowser views={views} />
 
       {/* --- File / paste upload (wired) ----------------------------------- */}
       <section id="upload" style={{ marginTop: "var(--space-xl)" }}>

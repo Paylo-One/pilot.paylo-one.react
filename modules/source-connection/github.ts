@@ -14,14 +14,25 @@ import "server-only";
 
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { activeApex, isDev, devApex, devPort, appApex, supabaseSecretKey } from "@/lib/config";
-import type { ProviderRawItem } from "@/modules/ingestion";
 
 const AUTHORIZE_URL = "https://github.com/login/oauth/authorize";
 const TOKEN_URL = "https://github.com/login/oauth/access_token";
 const API_BASE = "https://api.github.com";
 
-/** Least-privilege, read-only scope (no repo write, no send). */
-const GITHUB_SCOPE = "read:user read:org";
+/**
+ * OAuth scopes. `read:user`/`read:org` identify the user and list org repos.
+ * `repo` is required to read activity (PRs, issues, commits, releases) on the
+ * operator's selected repositories — including private ones.
+ *
+ * Tradeoff (ADR-024, security-risks.md SR-28): classic OAuth has no read-only
+ * all-repos scope, so `repo` also *grants* write. We never write — every GitHub
+ * call in this codebase is read-only — but the *least-privilege* path is the
+ * GitHub **App** installation (fine-grained, per-repo, read-only), which is the
+ * documented follow-up. The scope is overridable via GITHUB_OAUTH_SCOPE for
+ * environments that prefer `public_repo` only.
+ */
+const GITHUB_SCOPE =
+  process.env.GITHUB_OAUTH_SCOPE?.trim() || "read:user read:org repo";
 
 /** Lifetime of the OAuth state nonce (seconds). */
 export const OAUTH_STATE_TTL_SECONDS = 600;
@@ -193,7 +204,11 @@ export async function exchangeCodeForToken(code: string): Promise<GithubToken> {
   };
 }
 
-async function githubGet<T>(token: string, path: string): Promise<T | null> {
+/**
+ * Read-only GET against the GitHub REST API with the standard headers. Returns
+ * null on any non-2xx (callers degrade gracefully). Shared with github-repos.ts.
+ */
+export async function githubGet<T>(token: string, path: string): Promise<T | null> {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: {
       Authorization: `Bearer ${token}`,
@@ -207,77 +222,7 @@ async function githubGet<T>(token: string, path: string): Promise<T | null> {
   return (await response.json()) as T;
 }
 
-interface GithubUser {
-  login: string;
-  name: string | null;
-}
-
-interface GithubEvent {
-  id: string;
-  type: string | null;
-  created_at: string | null;
-  repo?: { name?: string } | null;
-  payload?: { action?: string } | null;
-}
-
-interface GithubRepo {
-  full_name: string;
-  description: string | null;
-  html_url: string;
-  updated_at: string | null;
-}
-
-/**
- * Fetch a small slice of real, read-only GitHub activity for the authenticated
- * user: recent public events, falling back to recently updated repositories.
- * Bounded to keep cost/exposure low (integration-architecture.md).
- */
-export async function fetchGithubSlice(token: string): Promise<{
-  username: string | null;
-  items: ProviderRawItem[];
-}> {
-  const user = await githubGet<GithubUser>(token, "/user");
-  const username = user?.login ?? null;
-  const items: ProviderRawItem[] = [];
-
-  if (username) {
-    const events = await githubGet<GithubEvent[]>(
-      token,
-      `/users/${encodeURIComponent(username)}/events/public?per_page=15`,
-    );
-    for (const event of events ?? []) {
-      const repo = event.repo?.name ?? "github";
-      const action = event.payload?.action ? ` (${event.payload.action})` : "";
-      const type = event.type ?? "Activity";
-      items.push({
-        externalId: `event:${event.id}`,
-        title: `${type}${action} \u00b7 ${repo}`,
-        body: `${type}${action} on ${repo}.`,
-        author: username,
-        occurredAt: event.created_at ?? null,
-        kind: "event",
-        raw: event as unknown as Record<string, unknown>,
-      });
-    }
-  }
-
-  if (items.length === 0) {
-    const repos = await githubGet<GithubRepo[]>(
-      token,
-      "/user/repos?sort=updated&per_page=10",
-    );
-    for (const repo of repos ?? []) {
-      items.push({
-        externalId: `repo:${repo.full_name}`,
-        title: repo.full_name,
-        body: repo.description?.trim() || `${repo.full_name} \u2014 ${repo.html_url}`,
-        author: username,
-        occurredAt: repo.updated_at ?? null,
-        kind: "repository",
-        raw: repo as unknown as Record<string, unknown>,
-      });
-    }
-  }
-
-  return { username, items };
-}
+// Note: account-wide activity fetching (the former `fetchGithubSlice`) was
+// removed when GitHub moved to repository-level monitoring (ADR-024). Activity
+// is now fetched per selected repository in `github-repos.ts` (`fetchRepoActivity`,
+// `syncActiveRepositories`), so the Daily Memo only sees approved repositories.
