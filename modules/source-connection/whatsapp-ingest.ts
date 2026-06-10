@@ -83,7 +83,12 @@ export async function ingestWhatsAppMessage(msg: BridgeInboundMessage): Promise<
       : { chatId: msg.chatId, chatName: msg.chatName, storagePolicy: monitor.storagePolicy },
   });
 
-  await touchMonitorSync(monitor.id, msg.occurredAt);
+  // Heal the monitor's display name as a side effect: the bridge resolves
+  // names progressively, so a monitor approved as "+27…" picks up the real
+  // contact/group name with its first ingested message.
+  const resolvedName =
+    msg.chatName && msg.chatName !== msg.chatId.split("@")[0] ? msg.chatName : null;
+  await touchMonitorSync(monitor.id, msg.occurredAt, resolvedName);
 
   // System audit (no operator): append directly with a null user.
   const secret = createSupabaseSecretClient();

@@ -9,7 +9,11 @@
  */
 
 import { useMemo, useState } from "react";
-import type { WhatsAppChat } from "@/modules/source-connection/whatsapp.types";
+import {
+  formatWhatsAppChatLabel,
+  isWhatsAppChatNamed,
+  type WhatsAppChat,
+} from "@/modules/source-connection/whatsapp.types";
 
 export function WhatsAppContactSelector({
   chats,
@@ -24,9 +28,21 @@ export function WhatsAppContactSelector({
 
   const available = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return chats.filter(
-      (c) => !monitoredChatIds.has(c.id) && (q === "" || c.name.toLowerCase().includes(q)),
-    );
+    return chats
+      .filter(
+        (c) =>
+          !monitoredChatIds.has(c.id) &&
+          (q === "" ||
+            c.name.toLowerCase().includes(q) ||
+            formatWhatsAppChatLabel(c.name, c.id, c.kind).toLowerCase().includes(q)),
+      )
+      // Resolved names first; bare numbers are the hardest rows to recognise.
+      .sort((a, b) => {
+        const an = isWhatsAppChatNamed(a.name, a.id);
+        const bn = isWhatsAppChatNamed(b.name, b.id);
+        if (an !== bn) return an ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
   }, [chats, monitoredChatIds, query]);
 
   return (
@@ -55,16 +71,24 @@ export function WhatsAppContactSelector({
         </p>
       ) : (
         <ul className="repo-list">
-          {available.map((chat) => (
+          {available.map((chat) => {
+            const named = isWhatsAppChatNamed(chat.name, chat.id);
+            return (
             <li key={chat.id} className="repo-row">
               <div className="repo-row__main">
                 <div className="repo-row__id">
-                  <p className="repo-row__name">{chat.name}</p>
+                  <p className="repo-row__name">
+                    {formatWhatsAppChatLabel(chat.name, chat.id, chat.kind)}
+                  </p>
                   <span className="badge">{chat.kind}</span>
-                  {chat.kind === "group" ? (
+                  {chat.kind === "group" && chat.participantCount > 0 ? (
                     <span className="repo-row__meta mono">{chat.participantCount} people</span>
                   ) : null}
                 </div>
+                {/* Unnamed groups keep their id visible so they stay tellable-apart. */}
+                {!named && chat.kind === "group" ? (
+                  <p className="repo-row__meta mono">{chat.id.split("@")[0]}</p>
+                ) : null}
               </div>
               <div className="repo-row__controls">
                 <button type="button" className="btn btn--secondary btn--sm" onClick={() => onApprove(chat)}>
@@ -72,7 +96,8 @@ export function WhatsAppContactSelector({
                 </button>
               </div>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </div>

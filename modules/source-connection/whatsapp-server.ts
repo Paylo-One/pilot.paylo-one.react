@@ -180,11 +180,20 @@ export async function findActiveMonitorByChatId(
 }
 
 /** Stamp last_sync_at after a successful ingest. SECRET client (job context). */
-export async function touchMonitorSync(monitorId: string, at: string): Promise<void> {
+export async function touchMonitorSync(
+  monitorId: string,
+  at: string,
+  /** Refresh the stored chat name when the bridge has since resolved a real one
+      (monitors approved before name resolution keep their bare-number label
+      otherwise). */
+  chatName?: string | null,
+): Promise<void> {
   const secret = createSupabaseSecretClient();
+  const patch: Record<string, string> = { last_sync_at: at };
+  if (chatName?.trim()) patch.chat_name = chatName.trim();
   const { error } = await secret
     .from("whatsapp_monitors")
-    .update({ last_sync_at: at })
+    .update(patch)
     .eq("id", monitorId);
   if (error) throw new Error(error.message);
 }

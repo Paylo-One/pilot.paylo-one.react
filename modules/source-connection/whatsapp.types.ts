@@ -169,3 +169,28 @@ export const MOCK_WHATSAPP_MONITORS: readonly WhatsAppMonitor[] = [
     lastSyncAt: null,
   },
 ];
+
+/**
+ * Whether the bridge resolved a human name for this chat, or fell back to the
+ * bare jid/phone number (the prefix of the chat id before "@").
+ */
+export function isWhatsAppChatNamed(name: string, chatId: string): boolean {
+  const bare = chatId.split("@")[0] ?? chatId;
+  return name.trim() !== "" && name !== bare && name !== chatId;
+}
+
+/**
+ * Operator-facing label for a chat. Real names pass through; unnamed direct
+ * chats render as an international-format number ("+27764858621"); unnamed
+ * groups render as "Unnamed group" (the id stays available as secondary text).
+ */
+export function formatWhatsAppChatLabel(
+  name: string,
+  chatId: string,
+  kind: "direct" | "group",
+): string {
+  if (isWhatsAppChatNamed(name, chatId)) return name;
+  if (kind === "group") return "Unnamed group";
+  const bare = chatId.split("@")[0] ?? chatId;
+  return /^\d+$/.test(bare) ? `+${bare}` : bare;
+}

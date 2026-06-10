@@ -8,7 +8,10 @@
  * the Daily Memo. Scaffold: toggles are local (no persistence).
  */
 
-import type { WhatsAppMonitor } from "@/modules/source-connection/whatsapp.types";
+import {
+  formatWhatsAppChatLabel,
+  type WhatsAppMonitor,
+} from "@/modules/source-connection/whatsapp.types";
 import { Toggle } from "./toggle";
 
 function formatSync(value: string | null): string {
@@ -45,11 +48,13 @@ export function WhatsAppMonitorList({
   }
   return (
     <ul className="repo-list">
-      {monitors.map((m) => (
+      {monitors.map((m) => {
+        const label = formatWhatsAppChatLabel(m.chatName, m.chatId, m.chatKind);
+        return (
         <li key={m.id} className={`repo-row${m.isActive ? " repo-row--active" : ""}`}>
           <div className="repo-row__main">
             <div className="repo-row__id">
-              <p className="repo-row__name">{m.chatName}</p>
+              <p className="repo-row__name">{label}</p>
               <span className="badge">{m.chatKind}</span>
               {m.personName ? <span className="chip chip--accent">{m.personName}</span> : null}
             </div>
@@ -62,16 +67,17 @@ export function WhatsAppMonitorList({
           </div>
           <div className="repo-row__controls" style={{ flexDirection: "column", alignItems: "flex-end", gap: "var(--space-xs)" }}>
             <span className="integration__toggle">
-              <Toggle pressed={m.isActive} onChange={() => onToggleActive(m.id)} label={`Monitor ${m.chatName}`} />
+              <Toggle pressed={m.isActive} onChange={() => onToggleActive(m.id)} label={`Monitor ${label}`} />
               <span className="integration__toggle-label">Monitor</span>
             </span>
             <span className="integration__toggle">
-              <Toggle pressed={m.includeInDailyMemo} onChange={() => onToggleMemo(m.id)} label={`Include ${m.chatName} in Daily Memo`} disabled={!m.isActive} />
+              <Toggle pressed={m.includeInDailyMemo} onChange={() => onToggleMemo(m.id)} label={`Include ${label} in Daily Memo`} disabled={!m.isActive} />
               <span className="integration__toggle-label">Daily Memo</span>
             </span>
           </div>
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }
