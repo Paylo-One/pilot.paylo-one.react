@@ -53,6 +53,32 @@ export function OnboardingForm({ apexSuffix }: { apexSuffix: string }) {
         </div>
       </div>
 
+      {/* Legal acceptance: both boxes are required — the server action
+          re-validates and records the accepted versions, so the client
+          `required` is a convenience, not the gate. */}
+      <div className="consent">
+        <label className="consent__item">
+          <input type="checkbox" name="acceptTerms" required />
+          <span>
+            I agree to the{" "}
+            <a href="/terms" target="_blank" rel="noopener noreferrer">
+              Terms and Conditions
+            </a>
+            .
+          </span>
+        </label>
+        <label className="consent__item">
+          <input type="checkbox" name="acceptPrivacy" required />
+          <span>
+            I acknowledge the{" "}
+            <a href="/privacy" target="_blank" rel="noopener noreferrer">
+              Privacy Policy
+            </a>
+            .
+          </span>
+        </label>
+      </div>
+
       <button
         type="submit"
         disabled={pending}

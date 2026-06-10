@@ -9,6 +9,7 @@
  */
 
 import { BrandMark } from "@/components/brand-mark";
+import { PayloWordmark } from "@/components/paylo-wordmark";
 
 export default function AuthLayout({
   children,
@@ -21,14 +22,9 @@ export default function AuthLayout({
         <div className="auth__brand" style={{ color: "var(--colour-text-primary)" }}>
           <BrandMark size={28} />
           <div className="brand__wordmark">
-            <span className="brand__product" style={{ color: "var(--colour-text-primary)" }}>
-              Management
-              <span className="brand__os" style={{ color: "var(--colour-text-primary)" }}>
-                OS
-              </span>
-            </span>
+            <PayloWordmark size={18} />
             <span className="brand__inst" style={{ color: "var(--colour-text-tertiary)" }}>
-              Paylo.one
+              Management OS
             </span>
           </div>
         </div>

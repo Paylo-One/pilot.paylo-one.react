@@ -128,7 +128,12 @@ const GROUPS: NavGroup[] = [
   },
 ];
 
-export function WorkspaceNav() {
+export function WorkspaceNav({
+  onNavigate,
+}: {
+  /** Called when a nav link is chosen — lets the mobile drawer close itself. */
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
 
   return (
@@ -145,6 +150,7 @@ export function WorkspaceNav() {
                 href={item.href}
                 className={`nav__item${active ? " nav__item--active" : ""}`}
                 aria-current={active ? "page" : undefined}
+                onClick={onNavigate}
               >
                 {item.icon}
                 <span>{item.label}</span>

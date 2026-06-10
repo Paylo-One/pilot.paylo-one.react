@@ -11,13 +11,20 @@
  *  - Bridge OFF: renders the scaffold placeholder QR and the linked-device steps;
  *    no real QR is generated and no session is established.
  *
- * The QR is only ever shown inside the authenticated workspace (SR-36).
+ * The code box renders one of four explicit states — loading (waiting for the
+ * bridge to mint a QR), ready (live QR on a white quiet zone), expired
+ * (session lapsed before the scan), error (bridge unreachable) — so the
+ * operator always knows what is happening. The QR is only ever shown inside
+ * the authenticated workspace (SR-36).
  */
 
 import { useEffect, useRef, useState } from "react";
 import { getWhatsAppSessionStatusAction } from "@/app/(app)/sources/actions";
+import type { WhatsAppSessionStatus } from "@/modules/source-connection/whatsapp.types";
 
 const POLL_MS = 2500;
+
+type QrPhase = "loading" | "ready" | "expired" | "error" | "scaffold";
 
 export function WhatsAppQrOnboarding({
   bridgeEnabled,
@@ -29,6 +36,7 @@ export function WhatsAppQrOnboarding({
   onConnected: () => void;
 }) {
   const [qr, setQr] = useState<string | null>(null);
+  const [status, setStatus] = useState<WhatsAppSessionStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const connectedRef = useRef(false);
 
@@ -45,6 +53,7 @@ export function WhatsAppQrOnboarding({
       }
       setError(null);
       setQr(res.qr);
+      setStatus(res.status);
       if (res.status === "connected" && !connectedRef.current) {
         connectedRef.current = true;
         onConnected();
@@ -59,17 +68,42 @@ export function WhatsAppQrOnboarding({
     };
   }, [bridgeEnabled, onConnected]);
 
+  const phase: QrPhase = !bridgeEnabled
+    ? "scaffold"
+    : error
+      ? "error"
+      : status === "expired" || status === "needs_reconnect"
+        ? "expired"
+        : qr
+          ? "ready"
+          : "loading";
+
   return (
     <div className="wa-qr">
-      <div className="wa-qr__code" aria-hidden={!qr}>
-        {bridgeEnabled && qr ? (
+      <div
+        className={`wa-qr__code${phase === "ready" ? " wa-qr__code--live" : ""}`}
+        aria-hidden={phase !== "ready"}
+      >
+        {phase === "ready" && qr ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={qr} alt="WhatsApp linking QR code" width={160} height={160} />
-        ) : bridgeEnabled ? (
+          <img src={qr} alt="WhatsApp linking QR code" />
+        ) : phase === "loading" ? (
           <>
-            waiting
+            generating
             <br />
-            for QR…
+            QR code…
+          </>
+        ) : phase === "expired" ? (
+          <>
+            code
+            <br />
+            expired
+          </>
+        ) : phase === "error" ? (
+          <>
+            bridge
+            <br />
+            unavailable
           </>
         ) : (
           <>
@@ -97,19 +131,33 @@ export function WhatsAppQrOnboarding({
             </span>
           </li>
         </ol>
-        {bridgeEnabled ? (
+        {phase === "expired" ? (
           <p className="scaffold-note" style={{ marginTop: "var(--space-sm)" }}>
-            Live QR — short-lived and bound to this workspace. The session is
-            tenant-scoped and only monitors approved people or chats.
-            {error ? ` Bridge: ${error}` : ""}
+            This code expired before it was scanned. Cancel, then start the
+            session again to generate a fresh one.
           </p>
-        ) : (
+        ) : phase === "error" ? (
+          <p className="scaffold-note" style={{ marginTop: "var(--space-sm)" }}>
+            The Web-session bridge is not responding{error ? ` (${error})` : ""}.
+            It keeps retrying automatically — or cancel and try again later.
+          </p>
+        ) : phase === "scaffold" ? (
           <p className="scaffold-note" style={{ marginTop: "var(--space-sm)" }}>
             Scaffold — no real QR or session. The session is tenant-scoped and only
             monitors approved people or chats. Bridge disabled.
           </p>
+        ) : (
+          <p className="scaffold-note" style={{ marginTop: "var(--space-sm)" }}>
+            Live QR — short-lived and bound to this workspace. The session is
+            tenant-scoped and only monitors approved people or chats.
+          </p>
         )}
-        <button type="button" className="btn btn--ghost btn--sm" style={{ marginTop: "var(--space-sm)" }} onClick={onCancel}>
+        <button
+          type="button"
+          className="btn btn--ghost btn--sm"
+          style={{ marginTop: "var(--space-md)" }}
+          onClick={onCancel}
+        >
           Cancel
         </button>
       </div>

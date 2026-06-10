@@ -205,7 +205,10 @@
   --radius-pill: 999px;
 
   --measure: 68ch;
-  --content-max: 1120px;
+  /* Management/admin surfaces use the full viewport; prose stays at --measure.
+     1440px keeps large desktops productive without stretching line lengths —
+     reading-width elements (leads, memo prose) opt back in via --measure. */
+  --content-max: 1440px;
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --speed: 150ms;
 }
@@ -404,8 +407,10 @@ button {
   align-items: center;
   gap: 10px;
   padding: 0 var(--space-sm);
-  /* On the dark command layer the focal dot uses the lighter command accent. */
+  /* On the dark command layer the focal dot and the ".one" accent both use the
+     lighter command accent for contrast. */
   --brand-accent: var(--colour-command-accent);
+  --wordmark-accent: var(--colour-command-accent);
 }
 .brand__mark {
   height: 26px;
@@ -577,6 +582,119 @@ button {
   color: var(--colour-command-text);
 }
 
+/* --- Mobile navigation (burger + slide-out drawer) ------------------------ */
+/* Below 960px the sidebar is hidden and the topbar carries a burger trigger.
+   The drawer reuses the command-layer vocabulary (dark surface, same .nav)
+   so mobile keeps the exact same design language as desktop. */
+.mobile-nav__trigger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+  background: var(--colour-surface);
+  color: var(--colour-text-primary);
+  cursor: pointer;
+  transition: background var(--speed) var(--ease-standard);
+}
+.mobile-nav__trigger:hover {
+  background: var(--colour-surface-sunken);
+}
+.mobile-nav__trigger svg {
+  width: 19px;
+  height: 19px;
+}
+
+/* Wordmark shown in the topbar only when the sidebar (which carries the brand
+   on desktop) is hidden. */
+.topbar__brand {
+  display: none;
+  color: var(--colour-text-primary);
+  min-width: 0;
+}
+
+.drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+.drawer__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 12, 16, 0.45);
+  opacity: 0;
+  transition: opacity 200ms var(--ease-standard);
+}
+.drawer__panel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: min(300px, 84vw);
+  background: var(--colour-surface-command);
+  color: var(--colour-command-text);
+  border-right: 1px solid var(--colour-command-border);
+  box-shadow: var(--shadow-pop);
+  padding: var(--space-lg) var(--space-md);
+  padding-top: max(var(--space-lg), env(safe-area-inset-top));
+  padding-bottom: max(var(--space-lg), env(safe-area-inset-bottom));
+  padding-left: max(var(--space-md), env(safe-area-inset-left));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  overflow-y: auto;
+  transform: translateX(-100%);
+  transition: transform 200ms var(--ease-standard);
+}
+.drawer--open {
+  pointer-events: auto;
+}
+.drawer--open .drawer__backdrop {
+  opacity: 1;
+}
+.drawer--open .drawer__panel {
+  transform: translateX(0);
+}
+.drawer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+.drawer__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--colour-command-text-muted);
+  cursor: pointer;
+  transition: background var(--speed) var(--ease-standard),
+    color var(--speed) var(--ease-standard);
+}
+.drawer__close:hover {
+  background: var(--colour-command-hover);
+  color: var(--colour-command-text);
+}
+.drawer__close svg {
+  width: 18px;
+  height: 18px;
+}
+/* The drawer is a mobile-only construct. */
+@media (min-width: 961px) {
+  .drawer {
+    display: none;
+  }
+}
+
 /* --- Main column --------------------------------------------------------- */
 .workspace__main {
   display: flex;
@@ -587,7 +705,6 @@ button {
 .topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-md);
   padding: var(--space-md) var(--space-xl);
   padding-right: max(var(--space-xl), env(safe-area-inset-right));
@@ -619,6 +736,7 @@ button {
   display: flex;
   align-items: center;
   gap: var(--space-md);
+  margin-left: auto;
 }
 
 /* System status indicators (sync state, memo state) */
@@ -1380,6 +1498,117 @@ button {
 }
 
 /* ============================================================================
+   SOURCES CATALOGUE + SOURCE DETAIL
+   ========================================================================== */
+/* Catalogue: responsive card grid — fills wide desktops with more columns
+   instead of stretching two cards across the viewport. */
+.catalogue-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: var(--space-md);
+}
+.catalogue-card {
+  background: var(--colour-surface);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  color: inherit;
+  transition: border-color var(--speed) var(--ease-standard),
+    background var(--speed) var(--ease-standard);
+}
+.catalogue-card:hover {
+  border-color: var(--colour-border-strong);
+  background: var(--colour-surface-elevated);
+}
+.catalogue-card:hover .catalogue-card__action {
+  color: var(--colour-accent);
+}
+.catalogue-card__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+}
+.catalogue-card__head .status {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.catalogue-card__id {
+  min-width: 0;
+}
+.catalogue-card__desc {
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+  flex: 1;
+}
+.catalogue-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+.catalogue-card__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-small);
+  font-weight: 500;
+  color: var(--colour-text-secondary);
+  transition: color var(--speed) var(--ease-standard);
+}
+.catalogue-card__action svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Detail view: focused single column. */
+.workspace__content--narrow {
+  max-width: 880px;
+}
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-small);
+  font-weight: 500;
+  color: var(--colour-text-secondary);
+  margin-bottom: var(--space-lg);
+  transition: color var(--speed) var(--ease-standard);
+}
+.back-link:hover {
+  color: var(--colour-text-primary);
+}
+.back-link svg {
+  width: 15px;
+  height: 15px;
+}
+.source-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+.source-head__glyph {
+  width: 44px;
+  height: 44px;
+  font-size: var(--text-body);
+}
+.source-head__id {
+  min-width: 0;
+}
+.source-head .status {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.source-head__badges {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  margin-top: var(--space-md);
+}
+
+/* ============================================================================
    CONNECTED SOURCES — toolbar, search, filters, switch, policy, repos
    ========================================================================== */
 
@@ -1928,29 +2157,56 @@ button {
 }
 .wa-qr {
   display: flex;
-  gap: var(--space-md);
-  align-items: center;
-  padding: var(--space-md);
-  border: 1px dashed var(--colour-border-strong);
+  gap: var(--space-lg);
+  align-items: flex-start;
+  padding: var(--space-lg);
+  border: 1px solid var(--colour-border);
   border-radius: var(--radius-md);
-  background: var(--colour-surface);
+  background: var(--colour-surface-elevated);
 }
 .wa-qr__code {
-  width: 116px;
-  height: 116px;
+  width: 184px;
+  height: 184px;
   flex-shrink: 0;
+  border: 1px solid var(--colour-border);
   border-radius: var(--radius-sm);
   background:
     repeating-linear-gradient(45deg, var(--colour-surface-sunken) 0 6px, var(--colour-border) 6px 12px);
   display: grid;
   place-items: center;
+  padding: var(--space-sm);
   font-family: var(--font-mono);
   font-size: var(--text-label);
-  color: var(--colour-text-tertiary);
+  color: var(--colour-text-secondary);
   text-align: center;
+  overflow: hidden;
+}
+/* A live QR sits on a true-white quiet zone (scannability in both themes); the
+   image is constrained to the box and keeps its 1:1 ratio. */
+.wa-qr__code--live {
+  background: #ffffff;
+}
+.wa-qr__code img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
 }
 .wa-qr__body {
   min-width: 0;
+  flex: 1;
+}
+
+@media (max-width: 680px) {
+  .wa-qr {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-md);
+  }
+  .wa-qr__code {
+    margin: 0 auto;
+  }
 }
 
 @media (max-width: 960px) {
@@ -2061,6 +2317,128 @@ button {
   margin: 0 auto;
   padding: var(--space-2xl) var(--space-xl);
 }
+.landing__footer {
+  margin-top: var(--space-2xl);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--colour-border);
+  display: flex;
+  gap: var(--space-lg);
+  font-size: var(--text-small);
+}
+.landing__footer a {
+  color: var(--colour-text-tertiary);
+  transition: color var(--speed) var(--ease-standard);
+}
+.landing__footer a:hover {
+  color: var(--colour-text-primary);
+}
+
+/* ============================================================================
+   LEGAL DOCUMENTS (terms, privacy)
+   ========================================================================== */
+.legal {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: var(--space-2xl) var(--space-xl);
+}
+.legal__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--colour-text-primary);
+  margin-bottom: var(--space-2xl);
+}
+.legal__head {
+  margin-bottom: var(--space-xl);
+}
+.legal__title {
+  font-size: var(--text-h1);
+  margin-top: var(--space-xs);
+}
+.legal__meta {
+  margin-top: var(--space-sm);
+  font-size: var(--text-label);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--colour-text-tertiary);
+}
+.legal__section {
+  margin-top: var(--space-xl);
+  max-width: var(--measure);
+}
+.legal__heading {
+  font-size: var(--text-h3);
+  font-weight: 600;
+  margin-bottom: var(--space-sm);
+}
+.legal__para {
+  font-size: var(--text-body);
+  line-height: var(--leading-normal);
+  color: var(--colour-text-secondary);
+  margin-top: var(--space-sm);
+}
+.legal__list {
+  margin-top: var(--space-sm);
+  padding-left: 1.25em;
+  list-style: disc;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  font-size: var(--text-body);
+  line-height: var(--leading-normal);
+  color: var(--colour-text-secondary);
+}
+.legal__footer {
+  margin-top: var(--space-2xl);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--colour-border);
+  display: flex;
+  gap: var(--space-lg);
+  font-size: var(--text-small);
+}
+.legal__footer a {
+  color: var(--colour-accent);
+}
+@media (max-width: 480px) {
+  .legal {
+    padding: var(--space-xl) var(--space-md);
+  }
+}
+
+/* ============================================================================
+   CONSENT CHECKBOXES (onboarding legal acceptance)
+   ========================================================================== */
+.consent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+  background: var(--colour-surface-sunken);
+}
+.consent__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+  cursor: pointer;
+}
+.consent__item input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--colour-accent);
+  cursor: pointer;
+}
+.consent__item a {
+  color: var(--colour-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 
 /* Generic centred content container (auth/marketing reuse) */
 .app-main {
@@ -2074,39 +2452,18 @@ button {
   .workspace {
     grid-template-columns: minmax(0, 1fr);
   }
+  /* The command sidebar gives way to the burger trigger + drawer; the topbar
+     carries the brand so the screen itself stays uncluttered. */
   .workspace__sidebar {
-    position: static;
-    height: auto;
-    flex-direction: row;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--space-md);
-    border-right: none;
-    border-bottom: 1px solid var(--colour-command-border);
-  }
-  .nav {
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: var(--space-sm);
-    flex: 1 1 100%;
-  }
-  .nav__group {
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: var(--space-xs);
-  }
-  .nav__group-label {
     display: none;
   }
-  .nav__footer {
-    flex: 1 1 100%;
-    border-top: none;
-    padding-top: 0;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
+  .mobile-nav__trigger {
+    display: inline-flex;
   }
-  .nav__item-tag {
+  .topbar__brand {
+    display: block;
+  }
+  .topbar__context {
     display: none;
   }
   .integration-grid,
@@ -2132,34 +2489,12 @@ button {
     padding-left: var(--space-lg);
     padding-right: var(--space-lg);
   }
-  /* Nav becomes a single horizontally scrollable row instead of wrapping
-     into several cramped rows — the standard mobile tab-strip pattern. */
-  .nav {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    gap: var(--space-xs);
-  }
-  .nav::-webkit-scrollbar {
-    display: none;
-  }
-  .nav__group {
-    flex-wrap: nowrap;
-  }
-  .nav__item {
-    white-space: nowrap;
-  }
 }
 
 /* Small phones: tighten shell padding so content keeps breathing room. */
 @media (max-width: 480px) {
   .workspace__content {
     padding: var(--space-md);
-  }
-  .workspace__sidebar {
-    padding-left: max(var(--space-sm), env(safe-area-inset-left));
-    padding-right: var(--space-sm);
   }
   .topbar {
     padding-left: var(--space-md);

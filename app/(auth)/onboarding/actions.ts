@@ -4,14 +4,22 @@
  * Onboarding server action: claim a subdomain and provision the tenant
  * workspace for the signed-in user, then redirect to <slug>.<apex>.
  * multi-tenancy-design.md §"Tenant Provisioning".
+ *
+ * Account creation is gated on legal acceptance: the operator must accept the
+ * Terms and Conditions and acknowledge the Privacy Policy. The acceptance is
+ * recorded server-side (versions, timestamp, IP, user agent) BEFORE the tenant
+ * is provisioned — consent is evidence, and a provisioning retry simply
+ * appends another acceptance row to the immutable log.
  */
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
   getSignedInUser,
   provisionTenantForUser,
 } from "@/modules/identity-tenant/server";
+import { recordLegalAcceptances } from "@/modules/legal/server";
 import { isSelectableSubdomain } from "@/lib/tenant/host";
 
 export interface OnboardingState {
@@ -27,6 +35,12 @@ const schema = z.object({
   workspaceName: z.string().trim().max(80).optional(),
 });
 
+/** First hop of x-forwarded-for (set by the proxy), if parseable. */
+function clientIp(forwardedFor: string | null): string | null {
+  const first = forwardedFor?.split(",")[0]?.trim();
+  return first && first.length > 0 ? first : null;
+}
+
 export async function createWorkspace(
   _prev: OnboardingState,
   formData: FormData,
@@ -40,6 +54,29 @@ export async function createWorkspace(
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  // Legal acceptance is mandatory — the checkbox `required` attribute is only
+  // a convenience; this is the gate.
+  const acceptedTerms = formData.get("acceptTerms") === "on";
+  const acceptedPrivacy = formData.get("acceptPrivacy") === "on";
+  if (!acceptedTerms || !acceptedPrivacy) {
+    return {
+      error:
+        "Please accept the Terms and Conditions and acknowledge the Privacy Policy to continue.",
+    };
+  }
+
+  const requestHeaders = await headers();
+  try {
+    await recordLegalAcceptances({
+      userId: user.userId,
+      documents: ["terms", "privacy"],
+      ipAddress: clientIp(requestHeaders.get("x-forwarded-for")),
+      userAgent: requestHeaders.get("user-agent"),
+    });
+  } catch {
+    return { error: "Could not record your acceptance. Please try again." };
   }
 
   let redirectTo: string;

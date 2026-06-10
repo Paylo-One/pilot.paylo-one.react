@@ -14,6 +14,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSignedInUser } from "@/modules/identity-tenant/server";
 import { BrandMark } from "@/components/brand-mark";
+import { PayloWordmark } from "@/components/paylo-wordmark";
 
 const TENANT_SLUG_HEADER = "x-paylo-tenant-slug";
 
@@ -35,11 +36,9 @@ export default async function AppApexLanding() {
       >
         <BrandMark size={28} />
         <div className="brand__wordmark">
-          <span className="brand__product" style={{ color: "var(--colour-text-primary)" }}>
-            Management<span className="brand__os" style={{ color: "var(--colour-text-primary)" }}>OS</span>
-          </span>
+          <PayloWordmark size={18} />
           <span className="brand__inst" style={{ color: "var(--colour-text-tertiary)" }}>
-            Paylo.one
+            Management OS
           </span>
         </div>
       </div>
@@ -77,6 +76,11 @@ export default async function AppApexLanding() {
       <Link href="/sign-in" className="btn btn--primary">
         Sign in
       </Link>
+
+      <footer className="landing__footer">
+        <Link href="/terms">Terms and Conditions</Link>
+        <Link href="/privacy">Privacy Policy</Link>
+      </footer>
     </main>
   );
 }

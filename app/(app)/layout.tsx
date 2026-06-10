@@ -21,7 +21,9 @@ import {
   getSignedInUser,
 } from "@/modules/identity-tenant/server";
 import { BrandMark } from "@/components/brand-mark";
+import { PayloWordmark } from "@/components/paylo-wordmark";
 import { WorkspaceNav } from "@/components/workspace-nav";
+import { MobileNav } from "@/components/mobile-nav";
 
 function greeting(hour: number): string {
   if (hour < 12) return "Good morning";
@@ -52,10 +54,8 @@ export default async function AppLayout({
         <div className="brand">
           <BrandMark size={26} className="brand__mark" />
           <div className="brand__wordmark">
-            <span className="brand__product">
-              Management<span className="brand__os">OS</span>
-            </span>
-            <span className="brand__inst">Paylo.one</span>
+            <PayloWordmark size={17} />
+            <span className="brand__inst">Management OS</span>
           </div>
         </div>
 
@@ -99,6 +99,10 @@ export default async function AppLayout({
       {/* --- Main column --------------------------------------------------- */}
       <div className="workspace__main">
         <header className="topbar">
+          <MobileNav tenantSlug={ctx.tenantSlug} email={user?.email ?? null} />
+          <div className="topbar__brand" aria-hidden="true">
+            <PayloWordmark size={15} />
+          </div>
           <div className="topbar__context">
             <span className="topbar__date">{dateLabel}</span>
             <span className="topbar__greeting">{greeting(now.getHours())}</span>
