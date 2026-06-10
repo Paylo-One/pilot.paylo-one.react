@@ -1,9 +1,11 @@
-// No PostCSS plugins required. The app scaffold uses hand-authored global CSS
-// with the same design tokens as the marketing site. This file exists so the
-// build pipeline stays predictable if plugins are added later. Intentionally
-// empty for now.
+// Tailwind CSS v4 via PostCSS. The app keeps its hand-authored global CSS
+// (design tokens + component layer shared with the marketing site); Tailwind
+// is imported without preflight so utilities coexist with that layer rather
+// than replacing it. Token bridging lives in app/globals.css (@theme inline).
 const config = {
-  plugins: {},
+  plugins: {
+    "@tailwindcss/postcss": {},
+  },
 };
 
 export default config;

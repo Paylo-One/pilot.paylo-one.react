@@ -21,7 +21,102 @@
    This file carries the design tokens plus a reusable component layer so the
    product screens stay clean and consistent. It is mock/scaffold-driven: no
    styling here implies a live integration.
+
+   Tailwind CSS v4 is layered on top for utility classes (responsive layout,
+   spacing, one-off tweaks). Preflight is intentionally NOT imported — the
+   hand-authored reset below stays authoritative, and the component classes
+   keep working untouched. Utilities resolve to the same design tokens via the
+   @theme bridge, so `bg-surface`, `p-md`, `text-small`, `rounded-md` etc. all
+   reference the governance tokens — never parallel values.
    ========================================================================== */
+
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/* --- Tailwind theme bridge: map governance tokens into utility namespaces -- */
+@theme inline {
+  /* Disable Tailwind's stock palette so only governance colours exist. */
+  --color-*: initial;
+
+  --color-bg: var(--colour-bg);
+  --color-surface: var(--colour-surface);
+  --color-surface-elevated: var(--colour-surface-elevated);
+  --color-surface-sunken: var(--colour-surface-sunken);
+  --color-surface-command: var(--colour-surface-command);
+
+  --color-text-primary: var(--colour-text-primary);
+  --color-text-secondary: var(--colour-text-secondary);
+  --color-text-tertiary: var(--colour-text-tertiary);
+  --color-text-muted: var(--colour-text-muted);
+  --color-text-inverse: var(--colour-text-inverse);
+
+  --color-border: var(--colour-border);
+  --color-border-strong: var(--colour-border-strong);
+
+  --color-accent: var(--colour-accent);
+  --color-accent-hover: var(--colour-accent-hover);
+  --color-accent-pressed: var(--colour-accent-pressed);
+  --color-accent-strong: var(--colour-accent-strong);
+  --color-accent-tint: var(--colour-accent-tint);
+  --color-accent-soft: var(--colour-accent-soft);
+  --color-accent-on: var(--colour-accent-on);
+
+  --color-info: var(--colour-info);
+  --color-info-tint: var(--colour-info-tint);
+  --color-success: var(--colour-success);
+  --color-success-tint: var(--colour-success-tint);
+  --color-warning: var(--colour-warning);
+  --color-warning-tint: var(--colour-warning-tint);
+  --color-danger: var(--colour-danger);
+  --color-danger-tint: var(--colour-danger-tint);
+
+  --color-command-text: var(--colour-command-text);
+  --color-command-text-muted: var(--colour-command-text-muted);
+  --color-command-border: var(--colour-command-border);
+  --color-command-hover: var(--colour-command-hover);
+  --color-command-accent: var(--colour-command-accent);
+  --color-command-accent-soft: var(--colour-command-accent-soft);
+
+  /* Named spacing steps (4px base grid). The default numeric scale
+     (p-1 = 0.25rem …) also remains available via --spacing below. */
+  --spacing: 0.25rem;
+  --spacing-2xs: 2px;
+  --spacing-xs: var(--space-xs);
+  --spacing-sm: var(--space-sm);
+  --spacing-md: var(--space-md);
+  --spacing-lg: var(--space-lg);
+  --spacing-xl: var(--space-xl);
+  --spacing-2xl: var(--space-2xl);
+
+  --font-body: var(--font-body);
+  --font-heading: var(--font-heading);
+  --font-mono: var(--font-mono);
+
+  --text-h1: var(--text-h1);
+  --text-h2: var(--text-h2);
+  --text-h3: var(--text-h3);
+  --text-body: var(--text-body);
+  --text-small: var(--text-small);
+  --text-label: var(--text-label);
+
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-pill: var(--radius-pill);
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-card: var(--shadow-card);
+  --shadow-pop: var(--shadow-pop);
+
+  /* Breakpoints aligned with the hand-authored media queries. */
+  --breakpoint-xs: 480px;
+  --breakpoint-sm: 620px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 960px;
+  --breakpoint-xl: 1200px;
+}
 
 /* --- Tokens: light (default) ---------------------------------------------- */
 :root {
@@ -159,7 +254,11 @@
   }
 }
 
-/* --- Reset + base --------------------------------------------------------- */
+/* --- Reset + base ----------------------------------------------------------
+   Layered as `base` so Tailwind utilities (the `utilities` layer, last in the
+   order) can override these rules. Order/specificity within the file is
+   unchanged. */
+@layer base {
 *,
 *::before,
 *::after {
@@ -222,10 +321,16 @@ button {
     animation-duration: 0.01ms !important;
   }
 }
+} /* end @layer base */
 
 /* ============================================================================
    PRIMITIVES — labels, mono, prose helpers
+
+   Everything from here down is the hand-authored component layer, wrapped in
+   `@layer components` so one-off Tailwind utilities can override component
+   classes without `!important`.
    ========================================================================== */
+@layer components {
 
 /* Section label / eyebrow — the system's quiet classifier (mono signature). */
 .eyebrow,
@@ -266,8 +371,13 @@ button {
 
 .workspace {
   display: grid;
-  grid-template-columns: 252px 1fr;
+  /* minmax(0, …) lets the content track shrink below its min-content width —
+     without it, long unbroken content blows the grid out past the viewport. */
+  grid-template-columns: 252px minmax(0, 1fr);
+  /* dvh tracks the real visible height on mobile (URL bar, keyboard);
+     the vh line is the fallback for older engines. */
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* --- Command layer (sidebar): always dark -------------------------------- */
@@ -276,9 +386,12 @@ button {
   top: 0;
   align-self: start;
   height: 100vh;
+  height: 100dvh;
   background: var(--colour-surface-command);
   border-right: 1px solid var(--colour-command-border);
   padding: var(--space-lg) var(--space-md);
+  padding-top: max(var(--space-lg), env(safe-area-inset-top));
+  padding-left: max(var(--space-md), env(safe-area-inset-left));
   display: flex;
   flex-direction: column;
   gap: var(--space-lg);
@@ -477,6 +590,7 @@ button {
   justify-content: space-between;
   gap: var(--space-md);
   padding: var(--space-md) var(--space-xl);
+  padding-right: max(var(--space-xl), env(safe-area-inset-right));
   border-bottom: 1px solid var(--colour-border);
   background: var(--colour-bg);
   position: sticky;
@@ -603,10 +717,10 @@ button {
   gap: var(--space-md);
 }
 .grid--2 {
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .grid--3 {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 /* ============================================================================
@@ -816,6 +930,7 @@ button {
 
 /* Source-reference chip — the trust primitive. Mono, quiet, traceable. */
 .source-ref {
+  overflow-wrap: anywhere;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1174,7 +1289,7 @@ button {
    ========================================================================== */
 .integration-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-md);
 }
 .integration {
@@ -1544,7 +1659,7 @@ button {
 }
 .repo-monitors__grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-xs);
 }
 .monitor-toggle {
@@ -1840,7 +1955,7 @@ button {
 
 @media (max-width: 960px) {
   .people__layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .people__detail {
     position: static;
@@ -1890,6 +2005,7 @@ button {
    ========================================================================== */
 .auth {
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: var(--space-xl);
@@ -1956,7 +2072,7 @@ button {
    ========================================================================== */
 @media (max-width: 960px) {
   .workspace {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .workspace__sidebar {
     position: static;
@@ -1997,7 +2113,7 @@ button {
   .grid--2,
   .grid--3,
   .repo-monitors__grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .workspace__content {
     padding: var(--space-lg);
@@ -2016,4 +2132,99 @@ button {
     padding-left: var(--space-lg);
     padding-right: var(--space-lg);
   }
+  /* Nav becomes a single horizontally scrollable row instead of wrapping
+     into several cramped rows — the standard mobile tab-strip pattern. */
+  .nav {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: var(--space-xs);
+  }
+  .nav::-webkit-scrollbar {
+    display: none;
+  }
+  .nav__group {
+    flex-wrap: nowrap;
+  }
+  .nav__item {
+    white-space: nowrap;
+  }
 }
+
+/* Small phones: tighten shell padding so content keeps breathing room. */
+@media (max-width: 480px) {
+  .workspace__content {
+    padding: var(--space-md);
+  }
+  .workspace__sidebar {
+    padding-left: max(var(--space-sm), env(safe-area-inset-left));
+    padding-right: var(--space-sm);
+  }
+  .topbar {
+    padding-left: var(--space-md);
+    padding-right: max(var(--space-md), env(safe-area-inset-right));
+  }
+  .auth {
+    padding: var(--space-lg) var(--space-md);
+  }
+  .landing {
+    padding: var(--space-xl) var(--space-md);
+  }
+  .confidence__track {
+    width: 48px;
+  }
+}
+
+/* ============================================================================
+   TOUCH ERGONOMICS — applied when the primary pointer is a finger
+   (phones/tablets), so desktop keeps its compact density.
+   ========================================================================== */
+@media (pointer: coarse) {
+  /* iOS Safari auto-zooms any focused field whose font-size is below 16px.
+     Hold form controls at 16px on touch devices to prevent it. */
+  .input,
+  .textarea,
+  .person-link__select,
+  select,
+  input,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* WCAG 2.5.5 / Apple HIG: ≥44px touch targets. Visual style is unchanged —
+     min-height grows the hit area, content stays centred. */
+  .btn,
+  .btn--sm,
+  .nav__item,
+  .nav__signout,
+  .filter-chip,
+  .person-link__select,
+  .segmented__option {
+    min-height: 44px;
+  }
+  .input,
+  .textarea {
+    min-height: 44px;
+  }
+
+  /* The switch keeps its 34×18 visual but gains an invisible 44px hit area. */
+  .switch::after {
+    content: "";
+    position: absolute;
+    inset: -13px -5px;
+  }
+
+  /* Prevent double-tap zoom and tap-delay on controls. */
+  .btn,
+  .nav__item,
+  .nav__signout,
+  .filter-chip,
+  .switch,
+  .segmented__option,
+  a,
+  button {
+    touch-action: manipulation;
+  }
+}
+} /* end @layer components */

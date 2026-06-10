@@ -26,11 +26,7 @@ export function ObsidianUploadForm() {
   }, [state]);
 
   return (
-    <form
-      ref={formRef}
-      action={formAction}
-      style={{ display: "flex", flexDirection: "column", gap: "var(--space-md)" }}
-    >
+    <form ref={formRef} action={formAction} className="flex flex-col gap-md">
       <p className="scaffold-note">
         Obsidian is local-first. Select the Markdown notes you want to bring in —
         nothing on your machine is read automatically. Frontmatter, tags, and
@@ -40,12 +36,7 @@ export function ObsidianUploadForm() {
       <div>
         <label
           htmlFor="obsidian-files"
-          style={{
-            display: "block",
-            fontSize: "var(--text-small)",
-            color: "var(--colour-text-secondary)",
-            marginBottom: "var(--space-xs)",
-          }}
+          className="block text-small text-text-secondary mb-xs"
         >
           Vault notes (.md)
         </label>
@@ -56,22 +47,18 @@ export function ObsidianUploadForm() {
           accept=".md,.markdown,.mdx,.txt,text/markdown,text/plain"
           multiple
           className="input"
-          style={{ padding: "6px 12px" }}
           disabled={pending}
         />
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-md)" }}>
+      <div className="flex flex-wrap items-center gap-md">
         <button type="submit" disabled={pending} className="btn btn--primary btn--sm">
           {pending ? "Importing…" : "Import notes"}
         </button>
         {state ? (
           <span
             role="status"
-            style={{
-              fontSize: "var(--text-small)",
-              color: state.ok ? "var(--colour-accent)" : "var(--colour-text-secondary)",
-            }}
+            className={`text-small ${state.ok ? "text-accent" : "text-text-secondary"}`}
           >
             {state.message}
           </span>

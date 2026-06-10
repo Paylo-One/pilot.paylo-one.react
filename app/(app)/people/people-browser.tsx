@@ -54,8 +54,8 @@ export function PeopleBrowser({
   return (
     <div className="people">
       <div className="sources-toolbar">
-        <div style={{ display: "flex", gap: "var(--space-md)", alignItems: "center" }}>
-          <div style={{ flex: 1 }}>
+        <div className="flex flex-wrap items-center gap-md">
+          <div className="min-w-[220px] flex-1">
             <PersonSearch value={query} onChange={setQuery} resultCount={filtered.length} />
           </div>
           <button type="button" className="btn btn--primary btn--sm" onClick={() => setShowForm((v) => !v)}>
@@ -65,7 +65,7 @@ export function PeopleBrowser({
       </div>
 
       {showForm ? (
-        <div style={{ marginBottom: "var(--space-lg)" }}>
+        <div className="mb-lg">
           <PersonForm
             onCreated={() => {
               setShowForm(false);
@@ -75,10 +75,10 @@ export function PeopleBrowser({
         </div>
       ) : null}
 
-      <section style={{ marginBottom: "var(--space-xl)" }}>
+      <section className="mb-xl">
         <div className="card-head">
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
-            <p className="eyebrow" style={{ margin: 0 }}>Is this the same person?</p>
+          <div className="flex items-center gap-sm">
+            <p className="eyebrow">Is this the same person?</p>
             {suggestions.length > 0 ? <span className="badge">{suggestions.length}</span> : null}
           </div>
           <button
@@ -102,7 +102,7 @@ export function PeopleBrowser({
             ones appear here to confirm.
           </p>
         ) : (
-          <div className="stack" style={{ gap: "var(--space-sm)" }}>
+          <div className="stack gap-sm">
             {suggestions.map((s) => (
               <PersonLinkSuggestionCard key={s.id} suggestion={s} />
             ))}
@@ -180,7 +180,7 @@ export function PeopleBrowser({
             </div>
 
             {selected.tags.length > 0 ? (
-              <div className="person-card__tags" style={{ marginBottom: "var(--space-md)" }}>
+              <div className="person-card__tags mb-md">
                 {selected.tags.map((t) => (
                   <span key={t} className="chip">{t}</span>
                 ))}
@@ -188,17 +188,17 @@ export function PeopleBrowser({
             ) : null}
 
             {selected.notes ? (
-              <p className="action-card__rationale" style={{ marginTop: 0 }}>{selected.notes}</p>
+              <p className="action-card__rationale mt-0">{selected.notes}</p>
             ) : null}
 
-            <p className="eyebrow" style={{ margin: "var(--space-md) 0 var(--space-sm)" }}>
+            <p className="eyebrow mt-md mb-sm">
               Source identities
             </p>
             <PersonIdentityList person={selected} />
 
             {selected.relationships.length > 0 ? (
               <>
-                <p className="eyebrow" style={{ margin: "var(--space-lg) 0 var(--space-sm)" }}>
+                <p className="eyebrow mt-lg mb-sm">
                   Projects &amp; topics
                 </p>
                 <div className="person-card__tags">
@@ -209,17 +209,17 @@ export function PeopleBrowser({
               </>
             ) : null}
 
-            <p className="eyebrow" style={{ margin: "var(--space-lg) 0 var(--space-sm)" }}>
+            <p className="eyebrow mt-lg mb-sm">
               Recent correlated signals
             </p>
             <PersonSignalList signals={selected.signals} />
 
             {selected.linkedActions.length > 0 ? (
               <>
-                <p className="eyebrow" style={{ margin: "var(--space-lg) 0 var(--space-sm)" }}>
+                <p className="eyebrow mt-lg mb-sm">
                   Linked actions
                 </p>
-                <ul className="stack" style={{ gap: "var(--space-xs)" }}>
+                <ul className="stack gap-xs">
                   {selected.linkedActions.map((a) => (
                     <li key={a.id} className="meta-row">
                       <span className="meta-row__key">{a.title}</span>
@@ -231,7 +231,7 @@ export function PeopleBrowser({
             ) : null}
 
             <div className="integration__detail-block">
-              <p className="eyebrow" style={{ marginBottom: "var(--space-sm)" }}>Refine this person</p>
+              <p className="eyebrow mb-sm">Refine this person</p>
               <div className="refinement-actions">
                 <FeedbackChip feedback="raise_priority" targetType="person" targetId={selected.id} label="Always high priority" />
                 <FeedbackChip feedback="lower_priority" targetType="person" targetId={selected.id} />

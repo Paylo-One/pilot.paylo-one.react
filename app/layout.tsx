@@ -26,6 +26,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  // cover + safe-area padding in globals.css keeps the sticky topbar and the
+  // dark command layer clear of notches/home indicators on modern phones.
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f4f5f7" },
     { media: "(prefers-color-scheme: dark)", color: "#0e1014" },
