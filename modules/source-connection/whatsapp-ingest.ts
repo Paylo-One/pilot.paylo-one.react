@@ -45,6 +45,20 @@ export async function ingestWhatsAppMessage(msg: BridgeInboundMessage): Promise<
   if (!monitor) return { ingested: false, reason: "no_active_monitor" };
   if (monitor.storagePolicy === "disabled") return { ingested: false, reason: "disabled" };
 
+  // Dedupe on the provider message id: backfill (buffer replay + on-demand
+  // history) and live forwarding may legitimately deliver the same message
+  // more than once.
+  const externalId = `whatsapp:${msg.providerMessageId}`;
+  const dedupe = createSupabaseSecretClient();
+  const { data: existing } = await dedupe
+    .from("source_items")
+    .select("id")
+    .eq("tenant_id", msg.tenantId)
+    .eq("system", "whatsapp")
+    .eq("external_id", externalId)
+    .maybeSingle();
+  if (existing) return { ingested: false, reason: "duplicate" };
+
   // Storage-policy enforcement: only `raw_and_summaries` keeps the raw body
   // (under the 90-day raw window, ADR-035). Everything else stores metadata only
   // — the summary is produced downstream by the intelligence lane.
@@ -58,7 +72,7 @@ export async function ingestWhatsAppMessage(msg: BridgeInboundMessage): Promise<
 
   const itemId = await insertSourceItem(msg.tenantId, {
     system: "whatsapp",
-    externalId: `whatsapp:${msg.providerMessageId}`,
+    externalId,
     kind: normalised.kind,
     title: normalised.title,
     body: keepRaw ? normalised.body : null,

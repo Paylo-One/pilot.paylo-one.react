@@ -130,6 +130,32 @@ export async function bridgeSetMonitors(
   });
 }
 
+export interface BridgeBackfillResult {
+  ok: boolean;
+  /** Buffered recent messages replayed immediately. */
+  replayed: number;
+  /** Whether the bridge issued an on-demand history request for older messages. */
+  requestedHistory: boolean;
+  reason?: string;
+}
+
+/**
+ * Backfill one APPROVED chat's recent history: the bridge replays its buffer of
+ * recent inbound messages and requests older history on demand; everything is
+ * delivered through the normal ingestion webhook (deduplicated on provider
+ * message id). The bridge refuses unapproved chats.
+ */
+export async function bridgeBackfillChat(
+  tenantId: string,
+  chatId: string,
+  count = 50,
+): Promise<BridgeBackfillResult> {
+  return bridgeFetch<BridgeBackfillResult>(`/sessions/${enc(tenantId)}/backfill`, {
+    method: "POST",
+    body: { chatId, count },
+  });
+}
+
 /** Disconnect: revoke the linked device and wipe session material on the bridge. */
 export async function bridgeDisconnect(tenantId: string): Promise<void> {
   await bridgeFetch(`/sessions/${enc(tenantId)}/disconnect`, { method: "POST" });

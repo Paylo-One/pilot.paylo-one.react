@@ -46,7 +46,9 @@ import {
   bridgeGetSession,
   bridgeListChats,
   bridgeSetMonitors,
+  bridgeBackfillChat,
   bridgeDisconnect,
+  type BridgeSessionState,
 } from "@/modules/source-connection/whatsapp-bridge-client";
 import {
   MOCK_WHATSAPP_CHATS,
@@ -343,6 +345,28 @@ async function syncBridgeMonitors(tenantId: string, sessionId: string): Promise<
   }
 }
 
+/**
+ * Live bridge state, resuming a dropped session when needed: if the bridge
+ * reports `disconnected` (e.g. it restarted and lost its in-memory session) but
+ * our persisted session says it should be live, ask the bridge to start — it
+ * resumes from the encrypted material without a re-scan. Keeps the operator
+ * from facing a dead "connected" card after a bridge deploy/restart.
+ */
+async function ensureBridgeSession(tenantId: string): Promise<BridgeSessionState> {
+  const state = await bridgeGetSession(tenantId);
+  if (state.status !== "disconnected") return state;
+  const session = await getWhatsAppSession();
+  if (
+    session &&
+    (session.status === "connected" ||
+      session.status === "connecting" ||
+      session.status === "needs_reconnect")
+  ) {
+    return bridgeStartSession(tenantId);
+  }
+  return state;
+}
+
 /** Start the tenant's WhatsApp session (→ awaiting QR). */
 export async function startWhatsAppSessionAction(): Promise<WaResult> {
   const ctx = await requireTenantContext();
@@ -388,7 +412,7 @@ export async function getWhatsAppSessionStatusAction(): Promise<{
     return { ok: true, status: "disconnected", qr: null, error: null };
   }
   try {
-    const state = await bridgeGetSession(ctx.tenantId);
+    const state = await ensureBridgeSession(ctx.tenantId);
     await setSessionStatus(ctx.tenantId, state.status, {
       qrCodeStatus: state.qr ? "pending" : state.status === "connected" ? "scanned" : "none",
       deviceLabel: state.deviceLabel,
@@ -422,6 +446,9 @@ export async function getWhatsAppChatsAction(
     return { ok: true, chats: [...MOCK_WHATSAPP_CHATS], error: null };
   }
   try {
+    // Resume the bridge session first if it was dropped (restart/redeploy) —
+    // otherwise discovery would silently return an empty list.
+    await ensureBridgeSession(ctx.tenantId);
     const chats = await bridgeListChats(ctx.tenantId, query);
     return {
       ok: true,
@@ -515,9 +542,24 @@ export async function approveWhatsAppChatAction(input: {
     if (!session) return { ok: false, error: "Start a WhatsApp session first." };
     await createWhatsAppMonitor(ctx.tenantId, session.id, input);
     await syncBridgeMonitors(ctx.tenantId, session.id);
+    // Pull the chat's recent history now that it is approved — replayed buffer +
+    // on-demand fetch, all through the deduplicated ingestion webhook. Best-
+    // effort: live forwarding works regardless.
+    let backfill: { replayed: number; requestedHistory: boolean } | null = null;
+    if (whatsappBridgeEnabled()) {
+      try {
+        backfill = await bridgeBackfillChat(ctx.tenantId, input.chatId);
+      } catch {
+        // Backfill is opportunistic; the monitor itself is already persisted.
+      }
+    }
     await auditService.record(ctx, {
       action: "whatsapp.monitor.approved",
-      metadata: { chatId: input.chatId },
+      metadata: {
+        chatId: input.chatId,
+        backfillReplayed: backfill?.replayed ?? 0,
+        backfillRequestedHistory: backfill?.requestedHistory ?? false,
+      },
     });
     revalidatePath("/sources");
     return { ok: true, error: null };
