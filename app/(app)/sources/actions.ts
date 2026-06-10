@@ -35,11 +35,26 @@ import {
   getWhatsAppSession,
   setSessionStatus,
   deleteSession,
+  deleteSessionMaterial,
+  listActiveMonitorChatIds,
   createMonitor as createWhatsAppMonitor,
   updateMonitor as updateWhatsAppMonitor,
   removeMonitor as removeWhatsAppMonitor,
 } from "@/modules/source-connection/whatsapp-server";
-import type { WhatsAppStoragePolicy } from "@/modules/source-connection/whatsapp.types";
+import {
+  bridgeStartSession,
+  bridgeGetSession,
+  bridgeListChats,
+  bridgeSetMonitors,
+  bridgeDisconnect,
+} from "@/modules/source-connection/whatsapp-bridge-client";
+import {
+  MOCK_WHATSAPP_CHATS,
+  type WhatsAppChat,
+  type WhatsAppSessionStatus,
+  type WhatsAppStoragePolicy,
+} from "@/modules/source-connection/whatsapp.types";
+import { whatsappBridgeEnabled } from "@/lib/config";
 import {
   getValidGoogleToken,
   syncGmail,
@@ -303,20 +318,124 @@ export async function syncGoogleAction(input: {
   }
 }
 
-// --- WhatsApp (tenant-scoped session + monitors; scaffold, no real session) -
+// --- WhatsApp (tenant-scoped session + monitors; real bridge behind a flag) --
+//
+// When WHATSAPP_BRIDGE_ENABLED is on, the lifecycle is driven by the real
+// Web-session bridge (ADR-036). When off, the persisted scaffold path is used
+// (simulated scan, mock discovery) so the UX stays explorable without a bridge.
 
 type WaResult = { ok: boolean; error: string | null };
 
-/** Start the tenant's WhatsApp session (→ awaiting QR). Scaffold: no real session. */
+/**
+ * Push the active-monitor chat allowlist to the bridge so it forwards messages
+ * from approved chats only — enforcement at the bridge boundary, not just the
+ * UI. No-op when the bridge is disabled. Best-effort: failures don't block the
+ * operator's selection (which is already persisted and authoritative).
+ */
+async function syncBridgeMonitors(tenantId: string, sessionId: string): Promise<void> {
+  if (!whatsappBridgeEnabled()) return;
+  try {
+    const chatIds = await listActiveMonitorChatIds(sessionId);
+    await bridgeSetMonitors(tenantId, chatIds);
+  } catch {
+    // Allowlist sync is best-effort; the persisted monitors remain the source
+    // of truth and the ingestion webhook re-checks every message anyway.
+  }
+}
+
+/** Start the tenant's WhatsApp session (→ awaiting QR). */
 export async function startWhatsAppSessionAction(): Promise<WaResult> {
   const ctx = await requireTenantContext();
   try {
-    await setSessionStatus(ctx.tenantId, "awaiting_qr", { qrCodeStatus: "pending" });
-    await auditService.record(ctx, { action: "whatsapp.session.started" });
+    if (whatsappBridgeEnabled()) {
+      // Create the session row BEFORE the bridge connects, so the bridge's
+      // material-persistence callback always has a session to attach to (no race).
+      await setSessionStatus(ctx.tenantId, "connecting", { qrCodeStatus: "pending" });
+      const state = await bridgeStartSession(ctx.tenantId);
+      await setSessionStatus(ctx.tenantId, state.status, {
+        qrCodeStatus: state.qr ? "pending" : "none",
+        deviceLabel: state.deviceLabel,
+        lastConnectedAt: state.lastConnectedAt,
+      });
+    } else {
+      await setSessionStatus(ctx.tenantId, "awaiting_qr", { qrCodeStatus: "pending" });
+    }
+    await auditService.record(ctx, {
+      action: "whatsapp.session.started",
+      metadata: { bridge: whatsappBridgeEnabled() },
+    });
     revalidatePath("/sources");
     return { ok: true, error: null };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to start session." };
+  }
+}
+
+/**
+ * Poll the live session while onboarding: returns the short-lived QR to render
+ * and the current status, persisting status transitions (e.g. → connected) so a
+ * page refresh reflects the linked device. QR is returned transiently and never
+ * persisted. Bridge-only; returns disconnected when the bridge is off.
+ */
+export async function getWhatsAppSessionStatusAction(): Promise<{
+  ok: boolean;
+  status: WhatsAppSessionStatus;
+  qr: string | null;
+  error: string | null;
+}> {
+  const ctx = await requireTenantContext();
+  if (!whatsappBridgeEnabled()) {
+    return { ok: true, status: "disconnected", qr: null, error: null };
+  }
+  try {
+    const state = await bridgeGetSession(ctx.tenantId);
+    await setSessionStatus(ctx.tenantId, state.status, {
+      qrCodeStatus: state.qr ? "pending" : state.status === "connected" ? "scanned" : "none",
+      deviceLabel: state.deviceLabel,
+      lastConnectedAt: state.lastConnectedAt,
+    });
+    if (state.status === "connected") {
+      // Make sure the bridge has the current allowlist after a (re)connect.
+      const session = await getWhatsAppSession();
+      if (session) await syncBridgeMonitors(ctx.tenantId, session.id);
+    }
+    return { ok: true, status: state.status, qr: state.qr, error: null };
+  } catch (err) {
+    return {
+      ok: false,
+      status: "error",
+      qr: null,
+      error: err instanceof Error ? err.message : "Status check failed.",
+    };
+  }
+}
+
+/**
+ * Discover chats/contacts for the live session (search-filtered). Returns the
+ * real bridge discovery when enabled, otherwise the scaffold mock chats.
+ */
+export async function getWhatsAppChatsAction(
+  query?: string,
+): Promise<{ ok: boolean; chats: WhatsAppChat[]; error: string | null }> {
+  const ctx = await requireTenantContext();
+  if (!whatsappBridgeEnabled()) {
+    return { ok: true, chats: [...MOCK_WHATSAPP_CHATS], error: null };
+  }
+  try {
+    const chats = await bridgeListChats(ctx.tenantId, query);
+    return {
+      ok: true,
+      chats: chats.map((c) => ({
+        id: c.id,
+        name: c.name,
+        kind: c.kind,
+        participantCount: c.participantCount,
+        providerId: c.id,
+      })),
+      error: null,
+    };
+  } catch (err) {
+    return { ok: false, chats: [], error: err instanceof Error ? err.message : "Discovery failed." };
   }
 }
 
@@ -344,6 +463,15 @@ export async function simulateWhatsAppScanAction(): Promise<WaResult> {
 export async function pauseWhatsAppAction(): Promise<WaResult> {
   const ctx = await requireTenantContext();
   try {
+    // Stop forwarding immediately by clearing the bridge allowlist; the live
+    // session + material are kept so the operator can resume without re-scanning.
+    if (whatsappBridgeEnabled()) {
+      try {
+        await bridgeSetMonitors(ctx.tenantId, []);
+      } catch {
+        // best-effort; status below still reflects the paused intent
+      }
+    }
     await setSessionStatus(ctx.tenantId, "needs_reconnect");
     await auditService.record(ctx, { action: "whatsapp.session.paused" });
     revalidatePath("/sources");
@@ -353,12 +481,21 @@ export async function pauseWhatsAppAction(): Promise<WaResult> {
   }
 }
 
-/** Disconnect & delete the session (cascades monitors). */
+/** Disconnect & delete the session: revoke the linked device, wipe material. */
 export async function disconnectWhatsAppAction(): Promise<WaResult> {
   const ctx = await requireTenantContext();
   try {
-    await deleteSession(ctx.tenantId);
-    await auditService.record(ctx, { action: "whatsapp.session.disconnected" });
+    if (whatsappBridgeEnabled()) {
+      // Revoke the linked device + wipe in-bridge state first, so a failure here
+      // surfaces rather than leaving an orphaned live session behind.
+      await bridgeDisconnect(ctx.tenantId);
+    }
+    await deleteSessionMaterial(ctx.tenantId);
+    await deleteSession(ctx.tenantId); // cascades monitors/contacts/chats
+    await auditService.record(ctx, {
+      action: "whatsapp.session.disconnected",
+      metadata: { bridge: whatsappBridgeEnabled() },
+    });
     revalidatePath("/sources");
     return { ok: true, error: null };
   } catch (err) {
@@ -377,6 +514,7 @@ export async function approveWhatsAppChatAction(input: {
     const session = await getWhatsAppSession();
     if (!session) return { ok: false, error: "Start a WhatsApp session first." };
     await createWhatsAppMonitor(ctx.tenantId, session.id, input);
+    await syncBridgeMonitors(ctx.tenantId, session.id);
     await auditService.record(ctx, {
       action: "whatsapp.monitor.approved",
       metadata: { chatId: input.chatId },
@@ -403,6 +541,11 @@ export async function updateWhatsAppMonitorAction(input: {
       includeInDailyMemo: input.includeInDailyMemo,
       storagePolicy: input.storagePolicy,
     });
+    // Activation/deactivation changes the forwarding allowlist.
+    if (input.isActive !== undefined) {
+      const session = await getWhatsAppSession();
+      if (session) await syncBridgeMonitors(ctx.tenantId, session.id);
+    }
     await auditService.record(ctx, {
       action: "whatsapp.monitor.updated",
       target: input.monitorId,
@@ -421,6 +564,8 @@ export async function removeWhatsAppMonitorAction(input: { monitorId: string }):
   if (!input?.monitorId) return { ok: false, error: "Missing monitor." };
   try {
     await removeWhatsAppMonitor(input.monitorId);
+    const session = await getWhatsAppSession();
+    if (session) await syncBridgeMonitors(ctx.tenantId, session.id);
     await auditService.record(ctx, { action: "whatsapp.monitor.removed", target: input.monitorId });
     revalidatePath("/sources");
     return { ok: true, error: null };

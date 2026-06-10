@@ -99,6 +99,108 @@ export async function deleteSession(tenantId: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+// --- Session material (crown jewel; secret client; server-only table) --------
+//
+// The opaque, bridge-encrypted auth/session blob (ADR-036). Held in
+// whatsapp_session_material, which has NO authenticated grant — only the secret
+// client (and the bridge via the internal route) ever touches it. The app never
+// decrypts the ciphertext; the key lives only on the bridge runtime.
+
+/** Persist (upsert) the tenant's encrypted session material. SECRET client. */
+export async function storeSessionMaterial(
+  tenantId: string,
+  sessionId: string,
+  ciphertext: string,
+  keyVersion = 1,
+): Promise<void> {
+  const secret = createSupabaseSecretClient();
+  const { error } = await secret.from("whatsapp_session_material").upsert(
+    {
+      tenant_id: tenantId,
+      whatsapp_session_id: sessionId,
+      ciphertext,
+      key_version: keyVersion,
+    },
+    { onConflict: "tenant_id" },
+  );
+  if (error) throw new Error(error.message);
+}
+
+/** Read the tenant's encrypted session material (for the bridge to resume). */
+export async function getSessionMaterial(
+  tenantId: string,
+): Promise<{ ciphertext: string; keyVersion: number } | null> {
+  const secret = createSupabaseSecretClient();
+  const { data, error } = await secret
+    .from("whatsapp_session_material")
+    .select("ciphertext, key_version")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? { ciphertext: data.ciphertext as string, keyVersion: data.key_version as number } : null;
+}
+
+/** Wipe the tenant's session material (on disconnect/delete). SECRET client. */
+export async function deleteSessionMaterial(tenantId: string): Promise<void> {
+  const secret = createSupabaseSecretClient();
+  const { error } = await secret
+    .from("whatsapp_session_material")
+    .delete()
+    .eq("tenant_id", tenantId);
+  if (error) throw new Error(error.message);
+}
+
+/** Active-monitor chat ids for a session — the bridge forwarding allowlist. */
+export async function listActiveMonitorChatIds(sessionId: string): Promise<string[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("whatsapp_monitors")
+    .select("chat_id")
+    .eq("whatsapp_session_id", sessionId)
+    .eq("is_active", true);
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as { chat_id: string }[]).map((r) => r.chat_id);
+}
+
+/** Resolve the active monitor matching an inbound chat id (ingestion gate). */
+export async function findActiveMonitorByChatId(
+  tenantId: string,
+  chatId: string,
+): Promise<WhatsAppMonitor | null> {
+  const secret = createSupabaseSecretClient();
+  const { data, error } = await secret
+    .from("whatsapp_monitors")
+    .select(MONITOR_COLS)
+    .eq("tenant_id", tenantId)
+    .eq("chat_id", chatId)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? mapMonitor(data as MonitorRow) : null;
+}
+
+/** Stamp last_sync_at after a successful ingest. SECRET client (job context). */
+export async function touchMonitorSync(monitorId: string, at: string): Promise<void> {
+  const secret = createSupabaseSecretClient();
+  const { error } = await secret
+    .from("whatsapp_monitors")
+    .update({ last_sync_at: at })
+    .eq("id", monitorId);
+  if (error) throw new Error(error.message);
+}
+
+/** The tenant's session read via the SECRET client (for job/webhook contexts). */
+export async function getSessionByTenant(tenantId: string): Promise<WhatsAppSession | null> {
+  const secret = createSupabaseSecretClient();
+  const { data, error } = await secret
+    .from("whatsapp_sessions")
+    .select(SESSION_COLS)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? mapSession(data as SessionRow) : null;
+}
+
 // --- Monitors (operator-owned; RLS user client) -----------------------------
 
 interface MonitorRow {

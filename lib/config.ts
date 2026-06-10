@@ -54,6 +54,49 @@ export function devPort(): string {
   return process.env.PORT?.trim() || "3000";
 }
 
+// --- WhatsApp Web-session bridge (ADR-036) ----------------------------------
+//
+// The bridge is a long-lived runtime OUTSIDE Vercel/Supabase that maintains the
+// real WhatsApp Web sessions (same boundary posture as the vLLM runtime,
+// ADR-014). The app reaches it only over a private, authenticated path; it is
+// never client- or tenant-facing. Production enablement remains gated on the
+// ToS/legal/platform validation ADR-036 calls for — hence the feature flag,
+// which is OFF by default (the app falls back to the persisted scaffold).
+
+/**
+ * Whether the real Web-session bridge is wired in. OFF by default: with the
+ * flag off the WhatsApp UX uses the persisted scaffold (simulated scan, mock
+ * discovery) and no real session, QR, or credentials are established.
+ */
+export function whatsappBridgeEnabled(): boolean {
+  return process.env.WHATSAPP_BRIDGE_ENABLED === "true";
+}
+
+/** Private base URL of the bridge runtime (e.g. http://bridge.internal:8088). */
+export function whatsappBridgeBaseUrl(): string {
+  const url = process.env.WHATSAPP_BRIDGE_BASE_URL?.trim();
+  if (!url) throw new Error("WHATSAPP_BRIDGE_BASE_URL is not set");
+  return url.replace(/\/$/, "");
+}
+
+/** Bearer token the app presents to the bridge on every request (app → bridge). */
+export function whatsappBridgeAuthToken(): string {
+  const token = process.env.WHATSAPP_BRIDGE_AUTH_TOKEN?.trim();
+  if (!token) throw new Error("WHATSAPP_BRIDGE_AUTH_TOKEN is not set");
+  return token;
+}
+
+/**
+ * Shared secret the bridge uses to authenticate its callbacks INTO the app
+ * (message push + session-material persistence). Verified server-side on the
+ * webhook / internal routes; never exposed to the browser.
+ */
+export function whatsappBridgeCallbackToken(): string {
+  const token = process.env.WHATSAPP_BRIDGE_CALLBACK_TOKEN?.trim();
+  if (!token) throw new Error("WHATSAPP_BRIDGE_CALLBACK_TOKEN is not set");
+  return token;
+}
+
 /** Absolute base URL for the apex (auth/onboarding) host. */
 export function apexBaseUrl(): string {
   return isDev() ? `http://${devApex()}:${devPort()}` : `https://${appApex()}`;

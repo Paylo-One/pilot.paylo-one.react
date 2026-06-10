@@ -152,6 +152,12 @@ export interface SourceView {
   readonly whatsappSession: WhatsAppSession | null;
   /** WhatsApp only: the operator's approved monitors (empty unless any). */
   readonly whatsappMonitors: readonly WhatsAppMonitor[];
+  /**
+   * WhatsApp only: whether the real Web-session bridge is wired in (ADR-036).
+   * Drives real QR/discovery when true; the scaffold (simulate scan, mock
+   * chats) when false.
+   */
+  readonly whatsappBridgeEnabled: boolean;
 }
 
 /** How (and whether) a source can actually be connected in this build. */

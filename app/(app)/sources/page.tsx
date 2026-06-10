@@ -12,6 +12,7 @@
  * list to the client browser for search / filter / configuration.
  */
 
+import { whatsappBridgeEnabled } from "@/lib/config";
 import { requireTenantContext } from "@/modules/identity-tenant/server";
 import { listSourceConnections } from "@/modules/source-connection/server";
 import { isGithubOAuthConfigured } from "@/modules/source-connection/github";
@@ -133,7 +134,9 @@ export default async function SourcesPage({
       : Promise.resolve([]),
   ]);
 
-  // WhatsApp: tenant session + approved monitors (scaffold session lifecycle).
+  // WhatsApp: tenant session + approved monitors. The bridge flag decides
+  // whether the card drives the real Web-session bridge or the scaffold path.
+  const bridgeEnabled = whatsappBridgeEnabled();
   const whatsappSession = await getWhatsAppSession();
   const whatsappMonitors = whatsappSession
     ? await listWhatsAppMonitors(whatsappSession.id)
@@ -180,6 +183,7 @@ export default async function SourcesPage({
             : [],
       whatsappSession: d.system === "whatsapp" ? whatsappSession : null,
       whatsappMonitors: d.system === "whatsapp" ? whatsappMonitors : [],
+      whatsappBridgeEnabled: d.system === "whatsapp" ? bridgeEnabled : false,
     };
   });
 

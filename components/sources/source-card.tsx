@@ -226,6 +226,7 @@ export function SourceCard({
               <WhatsAppSessionCard
                 session={view.whatsappSession}
                 monitors={view.whatsappMonitors}
+                bridgeEnabled={view.whatsappBridgeEnabled}
               />
             </div>
           ) : null}
