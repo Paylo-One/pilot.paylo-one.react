@@ -103,16 +103,27 @@ export async function bridgeGetSession(tenantId: string): Promise<BridgeSessionS
   return bridgeFetch<BridgeSessionState>(`/sessions/${enc(tenantId)}`);
 }
 
-/** Discover the session's chats/contacts (optionally filtered by a search term). */
+export interface BridgeChatPage {
+  readonly chats: BridgeChat[];
+  /** Total matches across the whole index for this query (for pagination). */
+  readonly total: number;
+}
+
+/** Discover one page of the session's chats/contacts (search across the full index). */
 export async function bridgeListChats(
   tenantId: string,
   query?: string,
-): Promise<BridgeChat[]> {
-  const q = query?.trim() ? `?query=${encodeURIComponent(query.trim())}` : "";
-  const { chats } = await bridgeFetch<{ chats: BridgeChat[] }>(
-    `/sessions/${enc(tenantId)}/chats${q}`,
+  offset = 0,
+  limit = 60,
+): Promise<BridgeChatPage> {
+  const params = new URLSearchParams();
+  if (query?.trim()) params.set("query", query.trim());
+  params.set("offset", String(offset));
+  params.set("limit", String(limit));
+  const page = await bridgeFetch<{ chats: BridgeChat[]; total?: number }>(
+    `/sessions/${enc(tenantId)}/chats?${params.toString()}`,
   );
-  return chats;
+  return { chats: page.chats, total: page.total ?? page.chats.length };
 }
 
 /**

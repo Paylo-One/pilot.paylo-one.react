@@ -435,34 +435,53 @@ export async function getWhatsAppSessionStatusAction(): Promise<{
 }
 
 /**
- * Discover chats/contacts for the live session (search-filtered). Returns the
- * real bridge discovery when enabled, otherwise the scaffold mock chats.
+ * Discover one page of chats/contacts for the live session. The query searches
+ * the bridge's FULL index (not just the loaded page); `total` drives the
+ * "Load more" affordance. Returns the scaffold mock chats when the bridge is
+ * disabled, paged the same way so both modes behave identically.
  */
 export async function getWhatsAppChatsAction(
   query?: string,
-): Promise<{ ok: boolean; chats: WhatsAppChat[]; error: string | null }> {
+  offset = 0,
+  limit = 60,
+): Promise<{ ok: boolean; chats: WhatsAppChat[]; total: number; error: string | null }> {
   const ctx = await requireTenantContext();
   if (!whatsappBridgeEnabled()) {
-    return { ok: true, chats: [...MOCK_WHATSAPP_CHATS], error: null };
+    const q = query?.trim().toLowerCase() ?? "";
+    const matches = MOCK_WHATSAPP_CHATS.filter(
+      (c) => q === "" || c.name.toLowerCase().includes(q),
+    );
+    return {
+      ok: true,
+      chats: matches.slice(offset, offset + limit),
+      total: matches.length,
+      error: null,
+    };
   }
   try {
     // Resume the bridge session first if it was dropped (restart/redeploy) —
     // otherwise discovery would silently return an empty list.
     await ensureBridgeSession(ctx.tenantId);
-    const chats = await bridgeListChats(ctx.tenantId, query);
+    const page = await bridgeListChats(ctx.tenantId, query, offset, limit);
     return {
       ok: true,
-      chats: chats.map((c) => ({
+      chats: page.chats.map((c) => ({
         id: c.id,
         name: c.name,
         kind: c.kind,
         participantCount: c.participantCount,
         providerId: c.id,
       })),
+      total: page.total,
       error: null,
     };
   } catch (err) {
-    return { ok: false, chats: [], error: err instanceof Error ? err.message : "Discovery failed." };
+    return {
+      ok: false,
+      chats: [],
+      total: 0,
+      error: err instanceof Error ? err.message : "Discovery failed.",
+    };
   }
 }
 

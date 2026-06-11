@@ -18,7 +18,7 @@
  * monitors the people or chats the operator approves.
  */
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   WHATSAPP_STATUS_LABELS,
@@ -34,7 +34,6 @@ import {
   disconnectWhatsAppAction,
   approveWhatsAppChatAction,
   updateWhatsAppMonitorAction,
-  getWhatsAppChatsAction,
 } from "@/app/(app)/sources/actions";
 import { WhatsAppQrOnboarding } from "./whatsapp-qr-onboarding";
 import { WhatsAppContactSelector } from "./whatsapp-contact-selector";
@@ -51,26 +50,12 @@ export function WhatsAppSessionCard({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [chats, setChats] = useState<WhatsAppChat[]>([]);
 
   const status = session?.status ?? "disconnected";
   const connected = status === "connected";
   const onboarding = status === "awaiting_qr" || status === "connecting";
   const monitoredChatIds = useMemo(() => new Set(monitors.map((m) => m.chatId)), [monitors]);
   const activeCount = monitors.filter((m) => m.isActive).length;
-
-  // Load discoverable chats once connected (real bridge discovery when enabled,
-  // mock chats otherwise — the action picks the right source).
-  useEffect(() => {
-    if (!connected) return;
-    let cancelled = false;
-    getWhatsAppChatsAction().then((res) => {
-      if (!cancelled && res.ok) setChats(res.chats);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [connected]);
 
   function run(action: () => Promise<{ ok: boolean; error: string | null }>) {
     startTransition(async () => {
@@ -192,7 +177,6 @@ export function WhatsAppSessionCard({
           <div className="integration__detail-block">
             <p className="eyebrow" style={{ marginBottom: "var(--space-sm)" }}>Add people or chats</p>
             <WhatsAppContactSelector
-              chats={chats}
               monitoredChatIds={monitoredChatIds}
               onApprove={(chat: WhatsAppChat) =>
                 run(() => approveWhatsAppChatAction({ chatId: chat.id, chatName: chat.name, chatKind: chat.kind }))

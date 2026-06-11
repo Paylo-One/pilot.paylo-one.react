@@ -5,45 +5,84 @@
  *
  * Search the session's chats/contacts and approve specific people or chats to
  * monitor. Reinforces the principle: monitor selected people or chats only —
- * never everything. Scaffold: chats are mock; approving adds a local monitor.
+ * never everything.
+ *
+ * Discovery is paginated: the component fetches pages from the server action
+ * (which pages the bridge's full index) and the search box queries that full
+ * index server-side — so a chat beyond the current page is still findable.
+ * "Load more" walks deeper into the list, named chats first.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { getWhatsAppChatsAction } from "@/app/(app)/sources/actions";
 import {
   formatWhatsAppChatLabel,
   isWhatsAppChatNamed,
   type WhatsAppChat,
 } from "@/modules/source-connection/whatsapp.types";
 
+const PAGE_SIZE = 60;
+const SEARCH_DEBOUNCE_MS = 300;
+
 export function WhatsAppContactSelector({
-  chats,
   monitoredChatIds,
   onApprove,
 }: {
-  chats: readonly WhatsAppChat[];
   monitoredChatIds: ReadonlySet<string>;
   onApprove: (chat: WhatsAppChat) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [chats, setChats] = useState<WhatsAppChat[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const available = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return chats
-      .filter(
-        (c) =>
-          !monitoredChatIds.has(c.id) &&
-          (q === "" ||
-            c.name.toLowerCase().includes(q) ||
-            formatWhatsAppChatLabel(c.name, c.id, c.kind).toLowerCase().includes(q)),
-      )
-      // Resolved names first; bare numbers are the hardest rows to recognise.
-      .sort((a, b) => {
-        const an = isWhatsAppChatNamed(a.name, a.id);
-        const bn = isWhatsAppChatNamed(b.name, b.id);
-        if (an !== bn) return an ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
-  }, [chats, monitoredChatIds, query]);
+  // Page 0 on mount and (debounced) whenever the query changes. The query is
+  // applied server-side over the bridge's full index.
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(
+      () => {
+        setLoading(true);
+        getWhatsAppChatsAction(query, 0, PAGE_SIZE).then((res) => {
+          if (cancelled) return;
+          setLoading(false);
+          if (res.ok) {
+            setChats(res.chats);
+            setTotal(res.total);
+            setError(null);
+          } else {
+            setError(res.error);
+          }
+        });
+      },
+      query.trim() ? SEARCH_DEBOUNCE_MS : 0,
+    );
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [query]);
+
+  function loadMore() {
+    setLoadingMore(true);
+    getWhatsAppChatsAction(query, chats.length, PAGE_SIZE).then((res) => {
+      setLoadingMore(false);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setTotal(res.total);
+      setChats((prev) => [
+        ...prev,
+        ...res.chats.filter((c) => !prev.some((p) => p.id === c.id)),
+      ]);
+    });
+  }
+
+  const available = chats.filter((c) => !monitoredChatIds.has(c.id));
+  const hasMore = chats.length < total;
 
   return (
     <div>
@@ -57,15 +96,23 @@ export function WhatsAppContactSelector({
         <input
           type="search"
           className="input source-search__input"
-          placeholder="Search contacts and chats…"
+          placeholder="Search all contacts and chats…"
           value={query}
           aria-label="Search WhatsApp contacts and chats"
           onChange={(e) => setQuery(e.target.value)}
         />
-        <span className="source-search__count mono">{available.length} found</span>
+        <span className="source-search__count mono">
+          {loading ? "searching…" : `${total} found`}
+        </span>
       </div>
 
-      {available.length === 0 ? (
+      {error ? (
+        <p className="empty__body" style={{ marginTop: "var(--space-md)" }}>
+          Discovery failed: {error}
+        </p>
+      ) : null}
+
+      {!loading && available.length === 0 ? (
         <p className="empty__body" style={{ marginTop: "var(--space-md)" }}>
           No more chats to add{query ? " for that search" : ""}.
         </p>
@@ -100,6 +147,22 @@ export function WhatsAppContactSelector({
           })}
         </ul>
       )}
+
+      {hasMore ? (
+        <div style={{ marginTop: "var(--space-md)", display: "flex", alignItems: "center", gap: "var(--space-md)" }}>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            disabled={loadingMore}
+            onClick={loadMore}
+          >
+            {loadingMore ? "Loading…" : "Load more"}
+          </button>
+          <span className="repo-row__meta mono">
+            showing {chats.length} of {total}
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }
