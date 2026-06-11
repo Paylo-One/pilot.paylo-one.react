@@ -181,8 +181,10 @@ export function isWhatsAppChatNamed(name: string, chatId: string): boolean {
 
 /**
  * Operator-facing label for a chat. Real names pass through; unnamed direct
- * chats render as an international-format number ("+27764858621"); unnamed
- * groups render as "Unnamed group" (the id stays available as secondary text).
+ * chats on a phone jid render as an international-format number
+ * ("+27764858621"); unnamed LID (privacy-id) chats keep their bare id — a "+"
+ * would misrepresent a non-dialable identifier; unnamed groups render as
+ * "Unnamed group" (the id stays available as secondary text).
  */
 export function formatWhatsAppChatLabel(
   name: string,
@@ -192,5 +194,6 @@ export function formatWhatsAppChatLabel(
   if (isWhatsAppChatNamed(name, chatId)) return name;
   if (kind === "group") return "Unnamed group";
   const bare = chatId.split("@")[0] ?? chatId;
-  return /^\d+$/.test(bare) ? `+${bare}` : bare;
+  const isPhoneJid = chatId.endsWith("@s.whatsapp.net") || chatId.endsWith("@c.us");
+  return isPhoneJid && /^\d+$/.test(bare) ? `+${bare}` : bare;
 }
