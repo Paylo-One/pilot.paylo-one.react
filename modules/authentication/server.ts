@@ -25,9 +25,13 @@ import "server-only";
 
 import { createHmac, timingSafeEqual } from "crypto";
 import {
+  generateAuthenticationOptions,
   generateRegistrationOptions,
+  verifyAuthenticationResponse,
   verifyRegistrationResponse,
+  type AuthenticationResponseJSON,
   type PublicKeyCredentialCreationOptionsJSON,
+  type PublicKeyCredentialRequestOptionsJSON,
   type RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 import { isoBase64URL, isoUint8Array } from "@simplewebauthn/server/helpers";
@@ -61,7 +65,10 @@ export interface PasskeyView {
 // --- Signed challenge token ---------------------------------------------------
 
 interface ChallengeTokenPayload {
-  readonly userId: string;
+  /** Which ceremony the token authorises — prevents cross-ceremony replay. */
+  readonly scope: "register" | "assert";
+  /** Bound user for registration; null for usernameless assertion. */
+  readonly userId: string | null;
   readonly challenge: string;
   /** Expiry (epoch seconds). */
   readonly exp: number;
@@ -71,8 +78,13 @@ function sign(value: string): string {
   return createHmac("sha256", supabaseSecretKey()).update(value).digest("base64url");
 }
 
-function createChallengeToken(userId: string, challenge: string): string {
+function createChallengeToken(
+  scope: ChallengeTokenPayload["scope"],
+  userId: string | null,
+  challenge: string,
+): string {
   const payload: ChallengeTokenPayload = {
+    scope,
     userId,
     challenge,
     exp: Math.floor(Date.now() / 1000) + PASSKEY_CHALLENGE_TTL_SECONDS,
@@ -81,7 +93,11 @@ function createChallengeToken(userId: string, challenge: string): string {
   return `${body}.${sign(body)}`;
 }
 
-function verifyChallengeToken(token: string, userId: string): ChallengeTokenPayload | null {
+function verifyChallengeToken(
+  token: string,
+  scope: ChallengeTokenPayload["scope"],
+  userId: string | null,
+): ChallengeTokenPayload | null {
   const [body, signature] = token.split(".");
   if (!body || !signature) return null;
 
@@ -97,6 +113,7 @@ function verifyChallengeToken(token: string, userId: string): ChallengeTokenPayl
   } catch {
     return null;
   }
+  if (payload.scope !== scope) return null;
   if (payload.userId !== userId) return null;
   if (payload.exp < Math.floor(Date.now() / 1000)) return null;
   return payload;
@@ -144,7 +161,7 @@ export async function beginPasskeyRegistration(user: {
 
   return {
     optionsJSON,
-    token: createChallengeToken(user.userId, optionsJSON.challenge),
+    token: createChallengeToken("register", user.userId, optionsJSON.challenge),
   };
 }
 
@@ -168,7 +185,7 @@ export async function completePasskeyRegistration(input: {
   response: RegistrationResponseJSON;
   label?: string | null;
 }): Promise<PasskeyRegistrationOutcome> {
-  const payload = verifyChallengeToken(input.token, input.ctx.userId);
+  const payload = verifyChallengeToken(input.token, "register", input.ctx.userId);
   if (!payload) return { ok: false, error: "challenge_expired" };
 
   let verification;
@@ -218,6 +235,146 @@ export async function completePasskeyRegistration(input: {
   }
 
   return { ok: true, credentialRowId: row.id as string };
+}
+
+// --- Assertion (login) ----------------------------------------------------------
+
+export interface PasskeyAssertionStart {
+  readonly optionsJSON: PublicKeyCredentialRequestOptionsJSON;
+  /** Signed challenge token; must be returned verbatim to complete. */
+  readonly token: string;
+}
+
+/**
+ * Issue a WebAuthn assertion challenge. Usernameless: credentials are enrolled
+ * as discoverable (residentKey: required), so no allowCredentials list is
+ * needed — the authenticator offers the user's passkeys for this RP itself.
+ */
+export async function beginPasskeyAssertion(): Promise<PasskeyAssertionStart> {
+  const optionsJSON = await generateAuthenticationOptions({
+    rpID: activeApex(),
+    userVerification: "preferred",
+  });
+  return {
+    optionsJSON,
+    token: createChallengeToken("assert", null, optionsJSON.challenge),
+  };
+}
+
+export interface PasskeyAssertionOutcome {
+  readonly ok: boolean;
+  readonly error?: string;
+  /** The verified owner of the asserted credential. */
+  readonly userId?: string;
+}
+
+/**
+ * Verify a WebAuthn assertion against the stored credential: signature,
+ * challenge, origin, RP ID, and signature counter. On success the counter and
+ * last_used_at are persisted. Establishing a session is the caller's job
+ * (mintSessionForUser) — verification and session creation stay separable.
+ */
+export async function completePasskeyAssertion(input: {
+  token: string;
+  response: AuthenticationResponseJSON;
+  /** The proxy-validated origin the ceremony ran on. */
+  origin: string;
+}): Promise<PasskeyAssertionOutcome> {
+  const payload = verifyChallengeToken(input.token, "assert", null);
+  if (!payload) return { ok: false, error: "challenge_expired" };
+
+  const secret = createSupabaseSecretClient();
+  const { data: cred, error } = await secret
+    .from("passkey_credentials")
+    .select("id, user_id, credential_id, public_key, transports, sign_count")
+    .eq("credential_id", input.response.id)
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!cred) return { ok: false, error: "unknown_credential" };
+
+  // The discoverable credential's user handle was set to the Supabase user id
+  // at enrolment; a mismatch with the stored owner is a hard failure.
+  const userHandle = input.response.response.userHandle;
+  if (
+    userHandle &&
+    Buffer.from(userHandle, "base64url").toString("utf8") !== (cred.user_id as string)
+  ) {
+    return { ok: false, error: "user_mismatch" };
+  }
+
+  let verification;
+  try {
+    verification = await verifyAuthenticationResponse({
+      response: input.response,
+      expectedChallenge: payload.challenge,
+      expectedOrigin: input.origin,
+      expectedRPID: activeApex(),
+      credential: {
+        id: cred.credential_id as string,
+        publicKey: isoBase64URL.toBuffer(cred.public_key as string),
+        counter: Number(cred.sign_count),
+        transports: (cred.transports as PasskeyTransports | null) ?? undefined,
+      },
+      requireUserVerification: false,
+    });
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : "verification_failed";
+    return { ok: false, error: message };
+  }
+
+  if (!verification.verified) {
+    return { ok: false, error: "assertion_not_verified" };
+  }
+
+  await secret
+    .from("passkey_credentials")
+    .update({
+      sign_count: verification.authenticationInfo.newCounter,
+      last_used_at: new Date().toISOString(),
+    })
+    .eq("id", cred.id);
+
+  return { ok: true, userId: cred.user_id as string };
+}
+
+/**
+ * Establish a Supabase session for a passkey-verified user. Supabase Auth has
+ * no native WebAuthn sign-in, so the session is minted through the admin API:
+ * generate a magic-link token_hash for the user's email (generateLink sends no
+ * email) and verify it immediately with the cookie-bound server client. The
+ * token never leaves the server and is single-use. Trade-off vs
+ * signInWithIdToken: no external OIDC provider needed, and the resulting
+ * session is indistinguishable from a magic-link session for tenant binding
+ * and RLS — exactly the §11 "swap login without changing the contract" goal.
+ */
+export async function mintSessionForUser(
+  userId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const secret = createSupabaseSecretClient();
+
+  const { data: userData, error: userErr } = await secret.auth.admin.getUserById(userId);
+  const email = userData?.user?.email;
+  if (userErr || !email) {
+    return { ok: false, error: userErr?.message ?? "user_not_found" };
+  }
+
+  const { data: link, error: linkErr } = await secret.auth.admin.generateLink({
+    type: "magiclink",
+    email,
+  });
+  const tokenHash = link?.properties?.hashed_token;
+  if (linkErr || !tokenHash) {
+    return { ok: false, error: linkErr?.message ?? "session_mint_failed" };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { error: verifyErr } = await supabase.auth.verifyOtp({
+    type: "magiclink",
+    token_hash: tokenHash,
+  });
+  if (verifyErr) return { ok: false, error: verifyErr.message };
+
+  return { ok: true };
 }
 
 // --- Credential management (RLS-enforced: user's own rows only) ---------------

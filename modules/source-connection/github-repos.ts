@@ -38,6 +38,7 @@ interface RepoMonitorRow {
   description: string | null;
   visibility: string | null;
   is_active: boolean;
+  include_in_daily_memo: boolean;
   monitor_pull_requests: boolean;
   monitor_issues: boolean;
   monitor_commits: boolean;
@@ -53,7 +54,7 @@ interface RepoMonitorRow {
 // Single string literal (not concatenation) so the Supabase select parser can
 // type the result rather than falling back to GenericStringError.
 const SELECT_COLUMNS =
-  "id, repository_id, repository_full_name, description, visibility, is_active, monitor_pull_requests, monitor_issues, monitor_commits, monitor_releases, monitor_discussions, monitor_workflows, monitor_security_alerts, monitor_metadata, monitor_readme_docs, last_sync_at";
+  "id, repository_id, repository_full_name, description, visibility, is_active, include_in_daily_memo, monitor_pull_requests, monitor_issues, monitor_commits, monitor_releases, monitor_discussions, monitor_workflows, monitor_security_alerts, monitor_metadata, monitor_readme_docs, last_sync_at";
 
 function mapRow(row: RepoMonitorRow): GitHubRepositoryMonitor {
   const fullName = row.repository_full_name;
@@ -64,6 +65,7 @@ function mapRow(row: RepoMonitorRow): GitHubRepositoryMonitor {
     description: row.description,
     visibility: (row.visibility as GitHubRepoVisibility | null) ?? "private",
     isActive: row.is_active,
+    includeInDailyMemo: row.include_in_daily_memo,
     lastSyncAt: row.last_sync_at,
     monitors: {
       pullRequests: row.monitor_pull_requests,
@@ -179,6 +181,7 @@ export async function listRepositoryMonitors(
 /** Fields the operator may change on a repository monitor. */
 export interface RepoMonitorPatch {
   isActive?: boolean;
+  includeInDailyMemo?: boolean;
   monitors?: Partial<GitHubMonitorSettings>;
 }
 
@@ -205,6 +208,9 @@ export async function updateRepositoryMonitor(
 ): Promise<boolean> {
   const update: Record<string, boolean> = {};
   if (typeof patch.isActive === "boolean") update.is_active = patch.isActive;
+  if (typeof patch.includeInDailyMemo === "boolean") {
+    update.include_in_daily_memo = patch.includeInDailyMemo;
+  }
   if (patch.monitors) {
     for (const [key, value] of Object.entries(patch.monitors)) {
       if (typeof value === "boolean") {

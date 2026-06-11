@@ -95,6 +95,7 @@ export async function disconnectConnectionAction(
 export async function updateRepoMonitorAction(input: {
   monitorId: string;
   isActive?: boolean;
+  includeInDailyMemo?: boolean;
   monitors?: Partial<GitHubMonitorSettings>;
 }): Promise<{ ok: boolean; error: string | null }> {
   const ctx = await requireTenantContext();
@@ -102,6 +103,7 @@ export async function updateRepoMonitorAction(input: {
   try {
     const changed = await updateRepositoryMonitor(input.monitorId, {
       isActive: input.isActive,
+      includeInDailyMemo: input.includeInDailyMemo,
       monitors: input.monitors,
     });
     if (changed) {
@@ -110,6 +112,7 @@ export async function updateRepoMonitorAction(input: {
         target: input.monitorId,
         metadata: {
           isActive: input.isActive,
+          includeInDailyMemo: input.includeInDailyMemo,
           monitors: input.monitors ?? null,
         },
       });

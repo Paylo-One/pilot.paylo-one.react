@@ -100,7 +100,11 @@ export function GithubRepositorySelector({
   // --- Optimistic mutation helpers ----------------------------------------
   function persist(
     monitorId: string,
-    patch: { isActive?: boolean; monitors?: Partial<GitHubMonitorSettings> },
+    patch: {
+      isActive?: boolean;
+      includeInDailyMemo?: boolean;
+      monitors?: Partial<GitHubMonitorSettings>;
+    },
     revert: () => void,
   ) {
     startTransition(async () => {
@@ -124,6 +128,21 @@ export function GithubRepositorySelector({
     persist(repo.id, { isActive: next }, () =>
       setRepos((prev) =>
         prev.map((r) => (r.id === repo.id ? { ...r, isActive: !next } : r)),
+      ),
+    );
+  }
+
+  function toggleDailyMemo(repo: GitHubRepositoryMonitor) {
+    const next = !repo.includeInDailyMemo;
+    setRepos((prev) =>
+      prev.map((r) => (r.id === repo.id ? { ...r, includeInDailyMemo: next } : r)),
+    );
+    setMessage(null);
+    persist(repo.id, { includeInDailyMemo: next }, () =>
+      setRepos((prev) =>
+        prev.map((r) =>
+          r.id === repo.id ? { ...r, includeInDailyMemo: !next } : r,
+        ),
       ),
     );
   }
@@ -298,6 +317,27 @@ export function GithubRepositorySelector({
 
                     {isOpen && repo.isActive ? (
                       <div className="repo-monitors">
+                        <button
+                          type="button"
+                          className={`monitor-toggle${repo.includeInDailyMemo ? " monitor-toggle--on" : ""}`}
+                          aria-pressed={repo.includeInDailyMemo}
+                          disabled={pending}
+                          style={{ marginBottom: "var(--space-md)" }}
+                          onClick={() => toggleDailyMemo(repo)}
+                        >
+                          <span className="monitor-toggle__check" aria-hidden="true">
+                            {repo.includeInDailyMemo ? "✓" : ""}
+                          </span>
+                          <span className="monitor-toggle__body">
+                            <span className="monitor-toggle__label">
+                              Include in Daily Memo
+                            </span>
+                            <span className="monitor-toggle__hint">
+                              Activity still syncs; switch off to keep this
+                              repository out of the memo.
+                            </span>
+                          </span>
+                        </button>
                         <p
                           className="eyebrow"
                           style={{ marginBottom: "var(--space-sm)" }}

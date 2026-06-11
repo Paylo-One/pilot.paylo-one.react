@@ -92,9 +92,11 @@ export async function listRecentSourceItems(
 /**
  * Source items eligible for the Daily Memo (newest first). Unlike
  * listRecentSourceItems, this enforces the per-source memo-inclusion contract:
- * WhatsApp items only qualify when their chat's monitor is active AND has
- * include_in_daily_memo enabled — the explicit per-chat consent gate (ADR-036).
- * Systems without such a flag (github, notion, …) are always eligible.
+ *  - WhatsApp items only qualify when their chat's monitor is active AND has
+ *    include_in_daily_memo enabled — opt-in per chat (ADR-036).
+ *  - GitHub items are dropped when their repository's monitor has
+ *    include_in_daily_memo disabled — opt-out per repository (default on).
+ * Systems without such a flag (notion, upload, …) are always eligible.
  */
 export async function listMemoSourceItems(
   tenantId: string,
@@ -102,18 +104,33 @@ export async function listMemoSourceItems(
 ): Promise<StoredSourceItem[]> {
   const secret = createSupabaseSecretClient();
 
-  const { data: monitors, error: monitorError } = await secret
-    .from("whatsapp_monitors")
-    .select("chat_id")
-    .eq("tenant_id", tenantId)
-    .eq("is_active", true)
-    .eq("include_in_daily_memo", true);
-  if (monitorError) throw new Error(monitorError.message);
-  const memoChatIds = new Set((monitors ?? []).map((m) => m.chat_id as string));
+  const [chatMonitors, repoMonitors] = await Promise.all([
+    secret
+      .from("whatsapp_monitors")
+      .select("chat_id")
+      .eq("tenant_id", tenantId)
+      .eq("is_active", true)
+      .eq("include_in_daily_memo", true),
+    secret
+      .from("github_repository_monitors")
+      .select("repository_full_name")
+      .eq("tenant_id", tenantId)
+      .eq("include_in_daily_memo", false),
+  ]);
+  if (chatMonitors.error) throw new Error(chatMonitors.error.message);
+  if (repoMonitors.error) throw new Error(repoMonitors.error.message);
 
-  // Over-fetch so WhatsApp items filtered out below don't underfill the memo
-  // pool. raw->chatId is the only link from an item back to its monitor (kept
-  // under every storage policy by ingestWhatsAppMessage).
+  const memoChatIds = new Set(
+    (chatMonitors.data ?? []).map((m) => m.chat_id as string),
+  );
+  const mutedRepos = new Set(
+    (repoMonitors.data ?? []).map((m) => m.repository_full_name as string),
+  );
+
+  // Over-fetch so items filtered out below don't underfill the memo pool. The
+  // raw payload carries the only link from an item back to its monitor:
+  // raw->chatId for WhatsApp (kept under every storage policy), raw->repository
+  // ("owner/name") for GitHub.
   const { data, error } = await secret
     .from("source_items")
     .select("id, system, title, body, author, occurred_at, created_at, raw")
@@ -124,9 +141,16 @@ export async function listMemoSourceItems(
 
   return (data ?? [])
     .filter((r) => {
-      if ((r.system as string) !== "whatsapp") return true;
-      const chatId = (r.raw as Record<string, unknown> | null)?.chatId;
-      return typeof chatId === "string" && memoChatIds.has(chatId);
+      const raw = r.raw as Record<string, unknown> | null;
+      if ((r.system as string) === "whatsapp") {
+        const chatId = raw?.chatId;
+        return typeof chatId === "string" && memoChatIds.has(chatId);
+      }
+      if ((r.system as string) === "github") {
+        const repository = raw?.repository;
+        return !(typeof repository === "string" && mutedRepos.has(repository));
+      }
+      return true;
     })
     .slice(0, limit)
     .map(mapStoredItem);

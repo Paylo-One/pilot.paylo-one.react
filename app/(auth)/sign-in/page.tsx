@@ -1,10 +1,11 @@
 /**
  * app/(auth)/sign-in/page.tsx
  *
- * Sign-in surface. Ships the passkey-READY interim method (magic link via
- * Supabase Auth); passkeys (authentication-architecture.md §5) replace it later
- * without changing tenant binding or RLS. If already signed in, bounce to
- * onboarding (which forwards to the user's workspace).
+ * Sign-in surface. Passkey-first (WebAuthn assertion,
+ * authentication-architecture.md §5) with the magic link (Supabase Auth) as
+ * the fallback — both establish the same session, tenant binding, and RLS.
+ * If already signed in, bounce to onboarding (which forwards to the user's
+ * workspace).
  */
 
 import type { Metadata } from "next";
@@ -38,10 +39,9 @@ export default async function SignInPage() {
       <SignInForm />
 
       <p className="scaffold-note" style={{ marginTop: "var(--space-lg)" }}>
-        Passkey-ready interim sign-in (magic link). Passkeys are the target
-        primary credential (RP ID = paylo.one, one passkey across every
-        &lt;slug&gt;.paylo.one); they slot in later without changing tenant
-        binding or RLS.
+        Passkeys are the primary credential (RP ID = paylo.one, one passkey
+        across every &lt;slug&gt;.paylo.one). No passkey on this device yet?
+        Use the magic link, then enrol one under Settings → Security.
       </p>
     </>
   );

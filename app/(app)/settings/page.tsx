@@ -148,13 +148,13 @@ export default async function SettingsPage() {
         <SectionCard label="Security" title="Passkey authentication">
           <p className="action-card__rationale" style={{ marginBottom: "var(--space-md)" }}>
             One passkey works across every &lt;slug&gt;.paylo.one workspace (RP
-            ID = the registrable domain). Sign-in stays on the magic link until
-            passkey login ships; enrol now so the switch is seamless.
+            ID = the registrable domain). Enrol at least two — on separate
+            devices — so losing one is a non-event.
           </p>
           <div className="meta-row">
-            <span className="meta-row__key">Current sign-in</span>
+            <span className="meta-row__key">Sign-in methods</span>
             <span className="meta-row__value">
-              <span className="badge badge--plain">magic link · passkey-ready</span>
+              <span className="badge badge--plain">passkey · magic link fallback</span>
             </span>
           </div>
           <div className="meta-row">

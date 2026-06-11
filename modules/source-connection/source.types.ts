@@ -214,6 +214,8 @@ export interface GitHubRepositoryMonitor {
   readonly visibility: GitHubRepoVisibility;
   /** Whether this repository is approved for monitoring. */
   readonly isActive: boolean;
+  /** Whether this repository's activity may inform the Daily Memo. */
+  readonly includeInDailyMemo: boolean;
   /** ISO timestamp of the last sync, or null if never synced. */
   readonly lastSyncAt: string | null;
   readonly monitors: GitHubMonitorSettings;
