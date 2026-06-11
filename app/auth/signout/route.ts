@@ -5,10 +5,10 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { apexBaseUrl } from "@/lib/config";
+import { appHostBaseUrl } from "@/lib/config";
 
 export async function POST(_request: NextRequest) {
   const supabase = await createSupabaseServerClient();
   await supabase.auth.signOut();
-  return NextResponse.redirect(`${apexBaseUrl()}/sign-in`, { status: 303 });
+  return NextResponse.redirect(`${appHostBaseUrl()}/sign-in`, { status: 303 });
 }

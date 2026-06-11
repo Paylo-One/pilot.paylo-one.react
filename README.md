@@ -7,9 +7,12 @@ with subdomain routing and Postgres RLS isolation, source ingestion (file/paste
 upload + a GitHub OAuth connector), a real **Daily Memo** generated via OpenAI
 through the governed Model Gateway, an Actions queue, and a private Diary.
 
-Still intentionally out for this pass: **real passkeys/WebAuthn, payments,
-vLLM/GPU, Cloudflare/DNS, and production deploy.** A few non-focus paths remain
-typed stubs that throw `NotImplementedError` (greppable).
+Passkey **registration + device management are real** (WebAuthn via
+SimpleWebAuthn, `passkey_credentials` table, Settings → Security); passkey
+**login/assertion is not yet** — sign-in stays on the magic link. Still
+intentionally out for this pass: **passkey login, payments, vLLM/GPU,
+Cloudflare/DNS, and production deploy.** A few non-focus paths remain typed
+stubs that throw `NotImplementedError` (greppable).
 
 Architecture and decisions are governed by `../governance/` — start with
 `governance/docs/architecture/technical-design.md`. This app is the
@@ -68,8 +71,10 @@ interface. `modules/shared` holds the tenant-context object and common types.
 - **Multi-tenancy** (`modules/identity-tenant`, `lib/tenant`, `proxy.ts`):
   tenant-per-workspace, subdomain routing with a shared reserved-subdomain
   blocklist, server-side tenant re-derivation, and RLS as the database backstop.
-- **Passkey-ready auth** (`modules/authentication`, `(auth)/`): WebAuthn-shaped
-  interfaces, recovery and session↔tenant-binding contracts. No real WebAuthn.
+- **Passkey-ready auth** (`modules/authentication`, `(auth)/`): real WebAuthn
+  registration + credential management (`modules/authentication/server.ts`,
+  Settings → Security; RP ID = the registrable apex). Login/assertion, recovery
+  and session↔tenant-binding remain documented contracts.
 - **MCP / Tool Gateway** (`modules/tool-gateway`, `modules/mcp-registry`,
   `api/tool-gateway`): the single front door for tool calls — policy, risk
   classification, human approval, routing, output sanitisation, audit. MCP

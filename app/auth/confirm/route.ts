@@ -12,7 +12,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { apexBaseUrl, tenantBaseUrl } from "@/lib/config";
+import { appHostBaseUrl, tenantBaseUrl } from "@/lib/config";
 import { findPrimaryTenantSlug } from "@/modules/identity-tenant/server";
 
 export async function GET(request: NextRequest) {
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 
   if (errorMessage) {
     return NextResponse.redirect(
-      `${apexBaseUrl()}/sign-in?error=${encodeURIComponent(errorMessage)}`,
+      `${appHostBaseUrl()}/sign-in?error=${encodeURIComponent(errorMessage)}`,
     );
   }
 
@@ -53,6 +53,6 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const target = next.startsWith("/") ? `${apexBaseUrl()}${next}` : next;
+  const target = next.startsWith("/") ? `${appHostBaseUrl()}${next}` : next;
   return NextResponse.redirect(target);
 }

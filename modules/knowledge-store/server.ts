@@ -61,6 +61,18 @@ export async function insertSourceItem(
   return data.id as string;
 }
 
+function mapStoredItem(r: Record<string, unknown>): StoredSourceItem {
+  return {
+    id: r.id as string,
+    system: r.system as string,
+    title: (r.title as string | null) ?? null,
+    body: (r.body as string | null) ?? null,
+    author: (r.author as string | null) ?? null,
+    occurredAt: (r.occurred_at as string | null) ?? null,
+    createdAt: r.created_at as string,
+  };
+}
+
 /** Most recent source items for a tenant (newest first). */
 export async function listRecentSourceItems(
   tenantId: string,
@@ -74,15 +86,50 @@ export async function listRecentSourceItems(
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) throw new Error(error.message);
-  return (data ?? []).map((r) => ({
-    id: r.id as string,
-    system: r.system as string,
-    title: (r.title as string | null) ?? null,
-    body: (r.body as string | null) ?? null,
-    author: (r.author as string | null) ?? null,
-    occurredAt: (r.occurred_at as string | null) ?? null,
-    createdAt: r.created_at as string,
-  }));
+  return (data ?? []).map(mapStoredItem);
+}
+
+/**
+ * Source items eligible for the Daily Memo (newest first). Unlike
+ * listRecentSourceItems, this enforces the per-source memo-inclusion contract:
+ * WhatsApp items only qualify when their chat's monitor is active AND has
+ * include_in_daily_memo enabled — the explicit per-chat consent gate (ADR-036).
+ * Systems without such a flag (github, notion, …) are always eligible.
+ */
+export async function listMemoSourceItems(
+  tenantId: string,
+  limit = 25,
+): Promise<StoredSourceItem[]> {
+  const secret = createSupabaseSecretClient();
+
+  const { data: monitors, error: monitorError } = await secret
+    .from("whatsapp_monitors")
+    .select("chat_id")
+    .eq("tenant_id", tenantId)
+    .eq("is_active", true)
+    .eq("include_in_daily_memo", true);
+  if (monitorError) throw new Error(monitorError.message);
+  const memoChatIds = new Set((monitors ?? []).map((m) => m.chat_id as string));
+
+  // Over-fetch so WhatsApp items filtered out below don't underfill the memo
+  // pool. raw->chatId is the only link from an item back to its monitor (kept
+  // under every storage policy by ingestWhatsAppMessage).
+  const { data, error } = await secret
+    .from("source_items")
+    .select("id, system, title, body, author, occurred_at, created_at, raw")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false })
+    .limit(limit * 4);
+  if (error) throw new Error(error.message);
+
+  return (data ?? [])
+    .filter((r) => {
+      if ((r.system as string) !== "whatsapp") return true;
+      const chatId = (r.raw as Record<string, unknown> | null)?.chatId;
+      return typeof chatId === "string" && memoChatIds.has(chatId);
+    })
+    .slice(0, limit)
+    .map(mapStoredItem);
 }
 
 /** Attach a summary to a source item. */

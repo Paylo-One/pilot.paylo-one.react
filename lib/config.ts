@@ -97,9 +97,15 @@ export function whatsappBridgeCallbackToken(): string {
   return token;
 }
 
-/** Absolute base URL for the apex (auth/onboarding) host. */
-export function apexBaseUrl(): string {
-  return isDev() ? `http://${devApex()}:${devPort()}` : `https://${appApex()}`;
+/**
+ * Absolute base URL for the reserved, tenant-neutral `app.` host that serves
+ * auth + onboarding (sign-in, magic-link callbacks, OAuth callbacks). The bare
+ * apex is the marketing site and never hosts app flows.
+ */
+export function appHostBaseUrl(): string {
+  return isDev()
+    ? `http://app.${devApex()}:${devPort()}`
+    : `https://app.${appApex()}`;
 }
 
 /** Absolute base URL for a tenant subdomain workspace. */

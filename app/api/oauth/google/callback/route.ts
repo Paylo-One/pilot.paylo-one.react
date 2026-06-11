@@ -13,7 +13,7 @@
 
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { tenantBaseUrl, apexBaseUrl, isDev } from "@/lib/config";
+import { tenantBaseUrl, appHostBaseUrl, isDev } from "@/lib/config";
 import type { TenantContext, TenantRole } from "@/modules/shared";
 import { auditService } from "@/modules/audit";
 import {
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
   const payload = verifySignedState(state, cookieNonce);
 
   if (!payload) {
-    const response = NextResponse.redirect(`${apexBaseUrl()}/sign-in?error=oauth_state`);
+    const response = NextResponse.redirect(`${appHostBaseUrl()}/sign-in?error=oauth_state`);
     clearStateCookie(response);
     return response;
   }

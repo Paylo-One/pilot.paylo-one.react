@@ -23,7 +23,7 @@ import { redirect } from "next/navigation";
 import type { TenantContext, TenantRole } from "@/modules/shared";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseSecretClient } from "@/lib/supabase/secret";
-import { apexBaseUrl, tenantBaseUrl } from "@/lib/config";
+import { appHostBaseUrl, tenantBaseUrl } from "@/lib/config";
 import { isSelectableSubdomain } from "@/lib/tenant/host";
 
 /** Header set by proxy.ts for a valid tenant subdomain (untrusted hint). */
@@ -117,11 +117,11 @@ export async function requireTenantContext(): Promise<TenantContext> {
     case "ok":
       return resolution.context;
     case "unauthenticated":
-      redirect(`${apexBaseUrl()}/sign-in`);
+      redirect(`${appHostBaseUrl()}/sign-in`);
     case "no_tenant_host":
-      redirect(`${apexBaseUrl()}/onboarding`);
+      redirect(`${appHostBaseUrl()}/onboarding`);
     case "forbidden":
-      redirect(`${apexBaseUrl()}/sign-in?error=not_a_member`);
+      redirect(`${appHostBaseUrl()}/sign-in?error=not_a_member`);
   }
   // Unreachable: the switch above is exhaustive and non-ok cases redirect().
   throw new Error("unreachable tenant-context resolution");

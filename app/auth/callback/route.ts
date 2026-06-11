@@ -8,7 +8,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { apexBaseUrl, tenantBaseUrl } from "@/lib/config";
+import { appHostBaseUrl, tenantBaseUrl } from "@/lib/config";
 import { findPrimaryTenantSlug } from "@/modules/identity-tenant/server";
 
 export async function GET(request: NextRequest) {
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   const next = url.searchParams.get("next") ?? "/onboarding";
 
   if (!code) {
-    return NextResponse.redirect(`${apexBaseUrl()}/sign-in?error=missing_code`);
+    return NextResponse.redirect(`${appHostBaseUrl()}/sign-in?error=missing_code`);
   }
 
   const supabase = await createSupabaseServerClient();
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     return NextResponse.redirect(
-      `${apexBaseUrl()}/sign-in?error=${encodeURIComponent(error.message)}`,
+      `${appHostBaseUrl()}/sign-in?error=${encodeURIComponent(error.message)}`,
     );
   }
 
@@ -40,6 +40,6 @@ export async function GET(request: NextRequest) {
   }
 
   // New user: send to onboarding to claim a subdomain.
-  const target = next.startsWith("/") ? `${apexBaseUrl()}${next}` : next;
+  const target = next.startsWith("/") ? `${appHostBaseUrl()}${next}` : next;
   return NextResponse.redirect(target);
 }

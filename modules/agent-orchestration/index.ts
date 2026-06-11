@@ -28,7 +28,7 @@ import {
   type TenantContext,
 } from "@/modules/shared";
 import { createSupabaseSecretClient } from "@/lib/supabase/secret";
-import { listRecentSourceItems, type StoredSourceItem } from "@/modules/knowledge-store/server";
+import { listMemoSourceItems, type StoredSourceItem } from "@/modules/knowledge-store/server";
 import { auditService } from "@/modules/audit";
 import { modelGateway, type GatewayRequest, type RetrievalContextItem } from "@/modules/model-gateway";
 
@@ -280,7 +280,7 @@ async function persistMemo(
 async function runDailyMemo(ctx: TenantContext): Promise<Result<AgentRunResult>> {
   const agentRunId = randomUUID();
 
-  const items = await listRecentSourceItems(ctx.tenantId, MEMO_ITEM_LIMIT);
+  const items = await listMemoSourceItems(ctx.tenantId, MEMO_ITEM_LIMIT);
   if (items.length === 0) {
     return persistQuietDayMemo(ctx, agentRunId);
   }

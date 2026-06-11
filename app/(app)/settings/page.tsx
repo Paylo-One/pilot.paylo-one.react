@@ -15,10 +15,12 @@ import {
   getSignedInUser,
 } from "@/modules/identity-tenant/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { listPasskeys } from "@/modules/authentication/server";
 import {
   SettingsProfileForm,
   type ProfileFormValues,
 } from "./settings-form";
+import { PasskeysCard } from "./passkeys-card";
 
 function SectionCard({
   label,
@@ -47,7 +49,10 @@ function SectionCard({
 
 export default async function SettingsPage() {
   const ctx = await requireTenantContext();
-  const user = await getSignedInUser();
+  const [user, passkeys] = await Promise.all([
+    getSignedInUser(),
+    listPasskeys(),
+  ]);
 
   const supabase = await createSupabaseServerClient();
   const { data: profile } = await supabase
@@ -140,36 +145,23 @@ export default async function SettingsPage() {
         </SectionCard>
 
         {/* --- Passkey authentication ------------------------------------ */}
-        <SectionCard label="Security" title="Passkey authentication" scaffolded>
+        <SectionCard label="Security" title="Passkey authentication">
           <p className="action-card__rationale" style={{ marginBottom: "var(--space-md)" }}>
-            Passkeys are the target primary credential (RP ID = paylo.one, so one
-            passkey works across every &lt;slug&gt;.paylo.one). The MVP ships a
-            passkey-ready interim sign-in.
+            One passkey works across every &lt;slug&gt;.paylo.one workspace (RP
+            ID = the registrable domain). Sign-in stays on the magic link until
+            passkey login ships; enrol now so the switch is seamless.
           </p>
           <div className="meta-row">
-            <span className="meta-row__key">Current method</span>
+            <span className="meta-row__key">Current sign-in</span>
             <span className="meta-row__value">
               <span className="badge badge--plain">magic link · passkey-ready</span>
             </span>
           </div>
           <div className="meta-row">
             <span className="meta-row__key">Enrolled passkeys</span>
-            <span className="meta-row__value mono">0</span>
+            <span className="meta-row__value mono">{passkeys.length}</span>
           </div>
-          <div className="meta-row">
-            <span className="meta-row__key">Recovery</span>
-            <span className="meta-row__value mono">
-              ≥2 passkeys · recovery codes · verified email
-            </span>
-          </div>
-          <div className="meta-row">
-            <span className="meta-row__key">Active sessions</span>
-            <span className="meta-row__value">
-              <button type="button" className="btn btn--ghost" disabled title="Designed — not wired in this scaffold">
-                Review
-              </button>
-            </span>
-          </div>
+          <PasskeysCard passkeys={passkeys} />
         </SectionCard>
 
         {/* --- Model routing --------------------------------------------- */}
