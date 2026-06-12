@@ -26,6 +26,7 @@ import { SOURCE_SYSTEM_LABELS } from "@/modules/source-connection";
 import {
   SOURCE_DESCRIPTORS,
   deriveSourceStatus,
+  deriveWhatsAppSourceStatus,
   isInDailyMemo,
 } from "@/modules/source-connection/source-service";
 import type { SourceView } from "@/modules/source-connection/source.types";
@@ -92,8 +93,16 @@ export async function buildSourceViews(): Promise<SourceView[]> {
   // view for the client components. Scope/policy stay conservative by default.
   return SOURCE_DESCRIPTORS.map((d) => {
     const connection = connectionBySystem.get(d.system);
-    const status = deriveSourceStatus(d, connection);
-    const lastSync = connection ? formatTimestamp(connection.updatedAt) : "";
+    const status =
+      d.system === "whatsapp"
+        ? deriveWhatsAppSourceStatus(whatsappSession, whatsappMonitors)
+        : deriveSourceStatus(d, connection);
+    const lastSync =
+      d.system === "whatsapp"
+        ? formatTimestamp(whatsappSession?.lastHealthCheckAt ?? whatsappSession?.lastConnectedAt ?? null)
+        : connection
+          ? formatTimestamp(connection.updatedAt)
+          : "";
     return {
       system: d.system,
       name: SOURCE_SYSTEM_LABELS[d.system],

@@ -17,6 +17,7 @@
 
 import type { SourceConnection } from "./index";
 import type { SourceDescriptor, SourceStatus } from "./source.types";
+import type { WhatsAppMonitor, WhatsAppSession } from "./whatsapp.types";
 
 // --- The designed source catalogue -----------------------------------------
 
@@ -200,6 +201,34 @@ export function deriveSourceStatus(
     case "github_oauth":
     case "file_upload":
     case "scaffold":
+    default:
+      return "available";
+  }
+}
+
+/**
+ * Derive the catalogue status for WhatsApp from its session + monitors.
+ * WhatsApp lives outside `source_connections`, so the generic deriver always
+ * reads `available` for it. Map session lifecycle → SourceStatus instead, and
+ * promote a connected session with at least one active monitor to `active`.
+ */
+export function deriveWhatsAppSourceStatus(
+  session: WhatsAppSession | null,
+  monitors: readonly WhatsAppMonitor[],
+): SourceStatus {
+  if (!session) return "available";
+  switch (session.status) {
+    case "error":
+      return "error";
+    case "needs_reconnect":
+    case "expired":
+      return "needs_attention";
+    case "awaiting_qr":
+    case "connecting":
+      return "needs_attention";
+    case "connected":
+      return monitors.some((m) => m.isActive) ? "active" : "connected";
+    case "disconnected":
     default:
       return "available";
   }
