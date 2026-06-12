@@ -155,8 +155,10 @@ max_indexes = 5
 [auth]
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
-# in emails.
-site_url = "http://lvh.me:3000"
+# in emails ({{ .SiteURL }}). MUST be the neutral app host so magic-link emails
+# point at app.<apex>/auth/confirm (token_hash flow), matching production where
+# Supabase's Site URL is https://app.paylo.one.
+site_url = "http://app.lvh.me:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of URLs (wildcards allowed) that auth providers may redirect to post-auth.
