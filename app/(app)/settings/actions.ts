@@ -2,25 +2,20 @@
 
 /**
  * Server actions for the Settings surface: persist the signed-in user's own
- * user_profiles row, and passkey enrolment + device management. Tenant context
- * is re-derived server-side; user-owned rows are written with the USER server
- * client so RLS guarantees a user can only ever touch their own rows.
+ * user_profiles row, and record audit events for passkey lifecycle changes.
+ * Tenant context is re-derived server-side; the profile is written with the
+ * USER server client so RLS (user_profiles_self_*) guarantees a user can only
+ * ever write their own row (user_id = auth.uid()).
+ *
+ * Passkey credentials themselves are owned by Supabase Auth (native WebAuthn);
+ * the enrolment/revocation ceremonies run client-side. These actions only mint
+ * the tenant-scoped audit trail after a ceremony succeeds — credential material
+ * never passes through here.
  */
 
 import { revalidatePath } from "next/cache";
-import {
-  requireTenantContext,
-  getSignedInUser,
-} from "@/modules/identity-tenant/server";
+import { requireTenantContext } from "@/modules/identity-tenant/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import {
-  beginPasskeyRegistration,
-  completePasskeyRegistration,
-  renamePasskey,
-  revokePasskey,
-  type PasskeyRegistrationStart,
-} from "@/modules/authentication/server";
-import type { RegistrationResponseJSON } from "@simplewebauthn/server";
 import { auditService } from "@/modules/audit";
 import type { ProfileFormState } from "./types";
 
@@ -71,76 +66,20 @@ export async function saveProfileAction(
   return { ok: true, error: null };
 }
 
-// --- Passkey enrolment + device management -----------------------------------
-
-/** Issue a registration challenge for the signed-in user (RP ID = apex). */
-export async function beginPasskeyRegistrationAction(): Promise<PasskeyRegistrationStart> {
-  await requireTenantContext();
-  const user = await getSignedInUser();
-  if (!user) throw new Error("unauthenticated");
-  return beginPasskeyRegistration(user);
-}
-
-export interface PasskeyActionResult {
-  ok: boolean;
-  error: string | null;
-}
-
-/** Verify the attestation and store the credential; audited per tenant. */
-export async function completePasskeyRegistrationAction(input: {
-  token: string;
-  response: RegistrationResponseJSON;
+/**
+ * Record a passkey enrolment/revocation in the tenant audit trail. Called by the
+ * Settings passkey card after the native Supabase ceremony succeeds; the
+ * credential id is the opaque Supabase passkey id (never key material).
+ */
+export async function recordPasskeyAuditAction(input: {
+  action: "registered" | "revoked";
+  credentialId: string;
   label?: string | null;
-}): Promise<PasskeyActionResult> {
+}): Promise<void> {
   const ctx = await requireTenantContext();
-
-  const outcome = await completePasskeyRegistration({
-    ctx,
-    token: input.token,
-    response: input.response,
-    label: input.label,
-  });
-  if (!outcome.ok) return { ok: false, error: outcome.error ?? "registration_failed" };
-
   await auditService.record(ctx, {
-    action: "auth.passkey.registered",
-    target: outcome.credentialRowId,
+    action: input.action === "registered" ? "auth.passkey.registered" : "auth.passkey.revoked",
+    target: input.credentialId,
     metadata: { label: input.label?.trim() || null },
   });
-
-  revalidatePath("/settings");
-  return { ok: true, error: null };
-}
-
-/** Relabel one of the user's own passkeys. */
-export async function renamePasskeyAction(input: {
-  credentialRowId: string;
-  label: string;
-}): Promise<PasskeyActionResult> {
-  await requireTenantContext();
-  try {
-    await renamePasskey(input.credentialRowId, input.label);
-  } catch (cause) {
-    return { ok: false, error: cause instanceof Error ? cause.message : "rename_failed" };
-  }
-  revalidatePath("/settings");
-  return { ok: true, error: null };
-}
-
-/** Revoke one of the user's own passkeys; audited per tenant. */
-export async function revokePasskeyAction(input: {
-  credentialRowId: string;
-}): Promise<PasskeyActionResult> {
-  const ctx = await requireTenantContext();
-  try {
-    await revokePasskey(input.credentialRowId);
-  } catch (cause) {
-    return { ok: false, error: cause instanceof Error ? cause.message : "revoke_failed" };
-  }
-  await auditService.record(ctx, {
-    action: "auth.passkey.revoked",
-    target: input.credentialRowId,
-  });
-  revalidatePath("/settings");
-  return { ok: true, error: null };
 }

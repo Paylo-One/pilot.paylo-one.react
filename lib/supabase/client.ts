@@ -15,5 +15,9 @@ import { supabaseCookieOptions } from "./cookies";
 export function createSupabaseBrowserClient() {
   return createBrowserClient(supabaseUrl(), supabasePublishableKey(), {
     cookieOptions: supabaseCookieOptions(),
+    // Native WebAuthn passkeys (auth.registerPasskey / signInWithPasskey /
+    // auth.passkey.*). Experimental opt-in; the methods throw without it. The
+    // RP ID and origins live on the Auth server (dashboard / config.toml).
+    auth: { experimental: { passkey: true } },
   });
 }

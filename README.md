@@ -7,12 +7,14 @@ with subdomain routing and Postgres RLS isolation, source ingestion (file/paste
 upload + a GitHub OAuth connector), a real **Daily Memo** generated via OpenAI
 through the governed Model Gateway, an Actions queue, and a private Diary.
 
-Passkey auth is **real end-to-end** (WebAuthn via SimpleWebAuthn:
-registration + device management in Settings → Security, passkey-first
-sign-in with the magic link as fallback, sessions minted through the Supabase
-admin API). Still intentionally out for this pass: **recovery codes, payments,
-vLLM/GPU, Cloudflare/DNS, and production deploy.** A few non-focus paths
-remain typed stubs that throw `NotImplementedError` (greppable).
+Passkey auth is **real end-to-end** via native Supabase WebAuthn
+(`auth.registerPasskey` / `signInWithPasskey` / `auth.passkey.*`): registration
++ device management in Settings → Security, passkey-first sign-in with the
+magic link as fallback. Supabase owns the credentials and mints the session;
+RP ID = the registrable apex, so one passkey spans every subdomain. Still
+intentionally out for this pass: **recovery codes, payments, vLLM/GPU,
+Cloudflare/DNS, and production deploy.** A few non-focus paths remain typed
+stubs that throw `NotImplementedError` (greppable).
 
 Architecture and decisions are governed by `../governance/` — start with
 `governance/docs/architecture/technical-design.md`. This app is the
@@ -71,11 +73,12 @@ interface. `modules/shared` holds the tenant-context object and common types.
 - **Multi-tenancy** (`modules/identity-tenant`, `lib/tenant`, `proxy.ts`):
   tenant-per-workspace, subdomain routing with a shared reserved-subdomain
   blocklist, server-side tenant re-derivation, and RLS as the database backstop.
-- **Passkey auth** (`modules/authentication`, `(auth)/`): real WebAuthn
-  registration, credential management, and passkey-first login
-  (`modules/authentication/server.ts`, Settings → Security, sign-in; RP ID =
-  the registrable apex; sessions minted via the Supabase admin API). Recovery
-  codes and the email-recovery flow remain documented contracts.
+- **Passkey auth** (`(auth)/sign-in`, `(app)/settings`): native Supabase
+  WebAuthn — registration, credential management, and passkey-first login
+  (`auth.registerPasskey` / `signInWithPasskey` / `auth.passkey.*`; Settings →
+  Security, sign-in; RP ID = the registrable apex; Supabase owns credentials +
+  session). Recovery codes and the email-recovery flow remain documented
+  contracts in `modules/authentication`.
 - **MCP / Tool Gateway** (`modules/tool-gateway`, `modules/mcp-registry`,
   `api/tool-gateway`): the single front door for tool calls — policy, risk
   classification, human approval, routing, output sanitisation, audit. MCP

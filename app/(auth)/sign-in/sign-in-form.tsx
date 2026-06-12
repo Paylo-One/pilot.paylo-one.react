@@ -1,35 +1,31 @@
 "use client";
 
 /**
- * Sign-in form: passkey-first (WebAuthn assertion via the sign-in server
- * actions) with the magic link as the fallback. The magic link calls Supabase
- * Auth `signInWithOtp` with the browser client; the email link returns to
- * /auth/callback, which exchanges the code for a session cookie scoped to the
- * apex (shared across tenant subdomains). Passkey login follows
- * authentication-architecture.md §5 — same session, tenant binding, and RLS.
+ * Sign-in form: passkey-first (native Supabase WebAuthn) with the magic link as
+ * the fallback. Both establish the same apex-scoped session cookie, so tenant
+ * binding and RLS are identical regardless of method.
+ *
+ *   - signInWithPasskey() runs the full discoverable-credential ceremony
+ *     (challenge → navigator.credentials.get() → verify → session) entirely on
+ *     the Auth server; the user picks their account from the authenticator UI,
+ *     so no email is needed up front.
+ *   - signInWithOtp() emails a magic link back to /auth/callback.
+ *
+ * After either succeeds we send the user to /onboarding on the app host, which
+ * forwards to their workspace (or claims a subdomain for a brand-new user).
  */
 
 import { useState, useSyncExternalStore } from "react";
-import {
-  startAuthentication,
-  browserSupportsWebAuthn,
-} from "@simplewebauthn/browser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import {
-  beginPasskeyLoginAction,
-  completePasskeyLoginAction,
-} from "./actions";
 
 /** WebAuthn support never changes within a page lifetime — no updates to push. */
 function subscribeNever(): () => void {
   return () => {};
 }
 
-const PASSKEY_ERROR_COPY: Record<string, string> = {
-  challenge_expired: "The sign-in request expired — try again.",
-  unknown_credential: "This passkey is not enrolled here. Use the magic link, then add it in Settings.",
-  assertion_not_verified: "The passkey could not be verified.",
-};
+function passkeySupported(): boolean {
+  return typeof window !== "undefined" && typeof window.PublicKeyCredential === "function";
+}
 
 export function SignInForm() {
   const [email, setEmail] = useState("");
@@ -40,24 +36,16 @@ export function SignInForm() {
   const [passkeyBusy, setPasskeyBusy] = useState(false);
 
   // null on the server snapshot so SSR and hydration agree.
-  const passkeySupported = useSyncExternalStore(
-    subscribeNever,
-    () => browserSupportsWebAuthn(),
-    () => null,
-  );
+  const supported = useSyncExternalStore(subscribeNever, passkeySupported, () => null);
 
   async function signInWithPasskey() {
     setError(null);
     setPasskeyBusy(true);
     try {
-      const { optionsJSON, token } = await beginPasskeyLoginAction();
-      const response = await startAuthentication({ optionsJSON });
-      const result = await completePasskeyLoginAction({ token, response });
-      if (!result.ok || !result.redirectTo) {
-        setError(PASSKEY_ERROR_COPY[result.error ?? ""] ?? result.error ?? "Passkey sign-in failed.");
-        return;
-      }
-      window.location.assign(result.redirectTo);
+      const supabase = createSupabaseBrowserClient();
+      const { error } = await supabase.auth.signInWithPasskey();
+      if (error) throw error;
+      window.location.assign("/onboarding");
     } catch (err) {
       const name = err instanceof Error ? err.name : "";
       setError(
@@ -107,12 +95,12 @@ export function SignInForm() {
 
   return (
     <form className="card" onSubmit={onSubmit}>
-      {passkeySupported !== false ? (
+      {supported !== false ? (
         <>
           <button
             type="button"
             className="btn btn--primary btn--block"
-            disabled={passkeyBusy || passkeySupported !== true}
+            disabled={passkeyBusy || supported !== true}
             onClick={signInWithPasskey}
             style={{ marginBottom: "var(--space-md)" }}
           >
@@ -126,6 +114,7 @@ export function SignInForm() {
           </p>
         </>
       ) : null}
+
       <div className="field" style={{ marginBottom: 0 }}>
         <label htmlFor="email" className="field__label">
           Email
@@ -134,7 +123,7 @@ export function SignInForm() {
           id="email"
           type="email"
           required
-          autoComplete="email"
+          autoComplete="email webauthn"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@company.com"

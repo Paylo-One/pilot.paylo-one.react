@@ -15,7 +15,6 @@ import {
   getSignedInUser,
 } from "@/modules/identity-tenant/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { listPasskeys } from "@/modules/authentication/server";
 import {
   SettingsProfileForm,
   type ProfileFormValues,
@@ -49,10 +48,7 @@ function SectionCard({
 
 export default async function SettingsPage() {
   const ctx = await requireTenantContext();
-  const [user, passkeys] = await Promise.all([
-    getSignedInUser(),
-    listPasskeys(),
-  ]);
+  const user = await getSignedInUser();
 
   const supabase = await createSupabaseServerClient();
   const { data: profile } = await supabase
@@ -157,11 +153,7 @@ export default async function SettingsPage() {
               <span className="badge badge--plain">passkey · magic link fallback</span>
             </span>
           </div>
-          <div className="meta-row">
-            <span className="meta-row__key">Enrolled passkeys</span>
-            <span className="meta-row__value mono">{passkeys.length}</span>
-          </div>
-          <PasskeysCard passkeys={passkeys} />
+          <PasskeysCard />
         </SectionCard>
 
         {/* --- Model routing --------------------------------------------- */}

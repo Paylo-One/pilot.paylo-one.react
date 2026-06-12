@@ -192,15 +192,22 @@ minimum_password_length = 6
 # are: `letters_digits`, `lower_upper_letters_digits`, `lower_upper_letters_digits_symbols`
 password_requirements = ""
 
-# Configure passkey sign-ins.
+# Native WebAuthn passkeys. DISABLED locally on purpose: GoTrue rejects any
+# non-HTTPS RP origin except bare localhost/127.0.0.1, and the app serves
+# tenants on http://*.lvh.me:3000 — so there is no valid local RP origin and
+# the WebAuthn ceremony cannot run over plain http anyway. Passkeys are
+# configured on the hosted project (Auth → Passkeys): enabled, rp_id =
+# paylo.one. rp_origins MUST cover every host a ceremony runs on — sign-in is on
+# app.paylo.one but enrolment (Settings) is on the tenant host <slug>.paylo.one,
+# so use the glob https://*.paylo.one (GoTrue supports wildcard origins; it
+# matches both app. and every tenant subdomain). Exercise the flow against
+# production / any https deployment.
 # [auth.passkey]
-# enabled = false
-
-# Configure WebAuthn relying party settings (required when passkey is enabled).
+# enabled = true
 # [auth.webauthn]
-# rp_display_name = "Supabase"
-# rp_id = "localhost"
-# rp_origins = ["http://127.0.0.1:3000"]
+# rp_display_name = "Management OS"
+# rp_id = "paylo.one"
+# rp_origins = ["https://*.paylo.one"]
 
 [auth.rate_limit]
 # Number of emails that can be sent per hour. Raised for local dev (Inbucket).
