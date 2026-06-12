@@ -20,7 +20,7 @@ import type { WhatsAppMonitor, WhatsAppSession } from "./whatsapp.types";
 /**
  * The catalogue identifier for a connectable source. Aligned 1:1 with the
  * domain `SourceSystem` so there is a single source of truth: `email` is the
- * generic email category, `ms365_mail` the specific Microsoft 365 connector.
+ * Gmail connector, `ms365_mail` the Microsoft 365 connector.
  */
 export type SourceType = SourceSystem;
 
@@ -78,9 +78,7 @@ export type SourceMvpStatus = "core" | "fast_follow" | "phased" | "enterprise";
 export interface SourceDescriptor {
   readonly system: SourceType;
   readonly category: SourceCategory;
-  /** Short mono glyph for the card. */
-  readonly glyph: string;
-  /** "Email · Gmail" style provider hint. */
+  /** "Google · Gmail" style provider hint. */
   readonly provider: string;
   readonly description: string;
   readonly mvpStatus: SourceMvpStatus;
@@ -112,7 +110,6 @@ export interface SourceView {
   readonly system: SourceType;
   readonly name: string;
   readonly provider: string;
-  readonly glyph: string;
   readonly description: string;
   readonly category: SourceCategory;
   readonly status: SourceStatus;

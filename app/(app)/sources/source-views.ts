@@ -98,7 +98,6 @@ export async function buildSourceViews(): Promise<SourceView[]> {
       system: d.system,
       name: SOURCE_SYSTEM_LABELS[d.system],
       provider: d.provider,
-      glyph: d.glyph,
       description: d.description,
       category: d.category,
       status,

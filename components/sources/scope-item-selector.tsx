@@ -20,6 +20,7 @@ import {
   syncMicrosoftAction,
 } from "@/app/(app)/sources/actions";
 import { Toggle } from "./toggle";
+import { SourceIcon } from "./source-icon";
 
 function formatSync(value: string | null): string {
   if (!value) return "never";
@@ -36,7 +37,6 @@ function formatSync(value: string | null): string {
 interface FamilyCopy {
   plural: string;
   singular: string;
-  glyph: string;
   heading: string;
   scopeNote: string;
   connectHref: string;
@@ -49,7 +49,6 @@ const FAMILY: Partial<Record<SourceType, FamilyCopy>> = {
   email: {
     plural: "labels",
     singular: "label",
-    glyph: "G",
     heading: "Gmail labels",
     scopeNote: "Read-only. Only the labels you activate are synced (last 7 days).",
     connectHref: "/api/oauth/google/start",
@@ -62,7 +61,6 @@ const FAMILY: Partial<Record<SourceType, FamilyCopy>> = {
   calendar: {
     plural: "calendars",
     singular: "calendar",
-    glyph: "G",
     heading: "Google calendars",
     scopeNote: "Read-only. Only the calendars you activate are synced (today + 7 days).",
     connectHref: "/api/oauth/google/start",
@@ -75,7 +73,6 @@ const FAMILY: Partial<Record<SourceType, FamilyCopy>> = {
   ms365_mail: {
     plural: "folders & calendars",
     singular: "item",
-    glyph: "M",
     heading: "Mail folders & calendars",
     scopeNote:
       "Read-only (Mail.Read + Calendars.Read). Only the folders and calendars you activate are synced (mail: last 7 days; events: next 7 days).",
@@ -89,7 +86,6 @@ const FAMILY: Partial<Record<SourceType, FamilyCopy>> = {
   teams: {
     plural: "chats & channels",
     singular: "chat",
-    glyph: "T",
     heading: "Chats & channels",
     scopeNote:
       "Read-only (Chat.Read). Only the chats/channels you activate are synced. Channel messages additionally need tenant-admin consent — denied channels are skipped, never silently ingested.",
@@ -186,9 +182,7 @@ export function ScopeItemSelector({
     <div className="repo-selector">
       <div className="repo-selector__head">
         <div className="repo-selector__account">
-          <span className="integration__glyph" aria-hidden="true">
-            {copy.glyph}
-          </span>
+          <SourceIcon system={system} />
           <div>
             <p className="repo-selector__org">{copy.heading}</p>
             <p className="integration__kind">

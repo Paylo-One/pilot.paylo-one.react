@@ -20,6 +20,7 @@
 
 import { useCallback, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { SourceIcon } from "./source-icon";
 import {
   WHATSAPP_STATUS_LABELS,
   WHATSAPP_STATUS_TONE,
@@ -70,7 +71,7 @@ export function WhatsAppSessionCard({
     <div className="wa-session">
       <div className="wa-session__head">
         <div className="repo-selector__account">
-          <span className="integration__glyph" aria-hidden="true">W</span>
+          <SourceIcon system="whatsapp" />
           <div>
             <p className="repo-selector__org">WhatsApp session</p>
             <p className="integration__kind">

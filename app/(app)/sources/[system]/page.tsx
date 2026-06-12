@@ -19,6 +19,7 @@ import {
   SOURCE_CATEGORY_LABELS,
   MVP_STATUS_LABELS,
 } from "@/modules/source-connection/source.types";
+import { SourceIcon } from "@/components/sources/source-icon";
 import { buildSourceViews } from "../source-views";
 import { SourceDetail } from "./source-detail";
 
@@ -53,9 +54,7 @@ export default async function SourceDetailPage({
 
       <div className="page-head">
         <div className="source-head">
-          <span className="integration__glyph source-head__glyph" aria-hidden="true">
-            {view.glyph}
-          </span>
+          <SourceIcon system={view.system} className="source-head__glyph" size={22} />
           <div className="source-head__id">
             <h1 className="page-head__title" style={{ marginTop: 0 }}>
               {view.name}

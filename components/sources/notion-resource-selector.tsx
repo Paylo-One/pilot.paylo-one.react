@@ -22,6 +22,7 @@ import {
   syncNotionAction,
 } from "@/app/(app)/sources/actions";
 import { Toggle } from "./toggle";
+import { SourceIcon } from "./source-icon";
 
 function formatSync(value: string | null): string {
   if (!value) return "never";
@@ -161,9 +162,7 @@ export function NotionResourceSelector({
     <div className="repo-selector">
       <div className="repo-selector__head">
         <div className="repo-selector__account">
-          <span className="integration__glyph" aria-hidden="true">
-            N
-          </span>
+          <SourceIcon system="notion" />
           <div>
             <p className="repo-selector__org">Shared with Notion</p>
             <p className="integration__kind">

@@ -16,6 +16,7 @@
  */
 
 import { useMemo, useState, useTransition } from "react";
+import { SourceIcon } from "./source-icon";
 import {
   GITHUB_MONITOR_OPTIONS,
   type GitHubMonitorSettings,
@@ -190,9 +191,7 @@ export function GithubRepositorySelector({
     <div className="repo-selector">
       <div className="repo-selector__head">
         <div className="repo-selector__account">
-          <span className="integration__glyph" aria-hidden="true">
-            GH
-          </span>
+          <SourceIcon system="github" />
           <div>
             <p className="repo-selector__org">Repositories</p>
             <p className="integration__kind">

@@ -29,14 +29,13 @@ export const SOURCE_DESCRIPTORS: readonly SourceDescriptor[] = [
   {
     system: "email",
     category: "communication",
-    glyph: "@",
-    provider: "Email · Gmail / Outlook",
+    provider: "Google · Gmail",
     description:
-      "The generic email category. Surfaces threads, asks, and commitments owed.",
+      "Your Gmail inbox. Surfaces threads, asks, and commitments owed.",
     mvpStatus: "core",
-    authModel: "OAuth 2.0 (Gmail API / Microsoft Graph), read-only",
+    authModel: "OAuth 2.0 (Gmail API), read-only",
     dataPulled: "Thread metadata, participants, body/snippet (per policy)",
-    scopeControl: "Selected labels/folders, sender rules, time window",
+    scopeControl: "Selected labels, sender rules, time window",
     dailyMemoUse: "Threads needing a reply, decisions requested, follow-ups",
     defaultPolicy: "summaries_only",
     referenceReady: true,
@@ -46,7 +45,6 @@ export const SOURCE_DESCRIPTORS: readonly SourceDescriptor[] = [
   {
     system: "ms365_mail",
     category: "communication",
-    glyph: "M",
     provider: "Microsoft 365 · Mail",
     description:
       "The specific Microsoft 365 mailbox connector via Entra consent and Graph.",
@@ -63,11 +61,10 @@ export const SOURCE_DESCRIPTORS: readonly SourceDescriptor[] = [
   {
     system: "calendar",
     category: "calendar",
-    glyph: "◷",
-    provider: "Calendar · Google / Microsoft 365",
+    provider: "Google · Calendar",
     description: "Meetings today with prep pointers and linked context.",
     mvpStatus: "core",
-    authModel: "OAuth (Google Calendar / Graph Calendars), read-only",
+    authModel: "OAuth (Google Calendar), read-only",
     dataPulled: "Events, attendees, times, descriptions, linked notes",
     scopeControl: "Selected calendars, forward window (today + 7d)",
     dailyMemoUse: "“Meetings today” and meeting-prep context",
@@ -79,7 +76,6 @@ export const SOURCE_DESCRIPTORS: readonly SourceDescriptor[] = [
   {
     system: "github",
     category: "engineering",
-    glyph: "GH",
     provider: "GitHub",
     description:
       "Engineering signals from the repositories you approve — never the whole account.",
@@ -96,7 +92,6 @@ export const SOURCE_DESCRIPTORS: readonly SourceDescriptor[] = [
   {
     system: "teams",
     category: "communication",
-    glyph: "T",
     provider: "Microsoft Teams",
     description: "Signals and themes across selected chats and channels.",
     mvpStatus: "fast_follow",
@@ -112,7 +107,6 @@ export const SOURCE_DESCRIPTORS: readonly SourceDescriptor[] = [
   {
     system: "whatsapp",
     category: "communication",
-    glyph: "W",
     provider: "WhatsApp",
     description: "Monitor selected people or chats — never every conversation.",
     mvpStatus: "phased",
@@ -128,7 +122,6 @@ export const SOURCE_DESCRIPTORS: readonly SourceDescriptor[] = [
   {
     system: "notion",
     category: "knowledge",
-    glyph: "N",
     provider: "Notion",
     description: "Docs and briefs from the pages and databases you share.",
     mvpStatus: "core",
@@ -144,7 +137,6 @@ export const SOURCE_DESCRIPTORS: readonly SourceDescriptor[] = [
   {
     system: "obsidian",
     category: "knowledge",
-    glyph: "Ob",
     provider: "Obsidian · local-first",
     description: "Markdown vault context — starting with file/vault upload.",
     mvpStatus: "phased",
@@ -160,7 +152,6 @@ export const SOURCE_DESCRIPTORS: readonly SourceDescriptor[] = [
   {
     system: "file_upload",
     category: "files",
-    glyph: "↑",
     provider: "File & paste upload",
     description: "Bring in a note or document directly — no credentials needed.",
     mvpStatus: "core",

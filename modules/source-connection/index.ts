@@ -31,9 +31,9 @@ export interface SourceConnectionService {
 
 /** Human-facing label for each connectable source system. */
 export const SOURCE_SYSTEM_LABELS: Record<SourceSystem, string> = {
-  email: "Email",
-  ms365_mail: "MS 365 — Mail",
-  calendar: "Calendar",
+  email: "Gmail",
+  ms365_mail: "Microsoft 365 — Mail",
+  calendar: "Google Calendar",
   teams: "Microsoft Teams",
   whatsapp: "WhatsApp",
   github: "GitHub",

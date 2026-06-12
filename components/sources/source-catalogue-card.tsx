@@ -9,6 +9,7 @@
  */
 
 import Link from "next/link";
+import { SourceIcon } from "./source-icon";
 import {
   SOURCE_CATEGORY_LABELS,
   SOURCE_STATUS_LABELS,
@@ -43,9 +44,7 @@ export function SourceCatalogueCard({ view }: { view: SourceView }) {
   return (
     <Link href={`/sources/${view.system}`} className="catalogue-card">
       <div className="catalogue-card__head">
-        <span className="integration__glyph" aria-hidden="true">
-          {view.glyph}
-        </span>
+        <SourceIcon system={view.system} />
         <div className="catalogue-card__id">
           <p className="integration__name">{view.name}</p>
           <p className="integration__kind">{view.provider}</p>
