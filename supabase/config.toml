@@ -199,17 +199,19 @@ password_requirements = ""
 # tenants on http://*.lvh.me:3000 — so there is no valid local RP origin and
 # the WebAuthn ceremony cannot run over plain http anyway. Passkeys are
 # configured on the hosted project (Auth → Passkeys): enabled, rp_id =
-# paylo.one. rp_origins MUST cover every host a ceremony runs on — sign-in is on
-# app.paylo.one but enrolment (Settings) is on the tenant host <slug>.paylo.one,
-# so use the glob https://*.paylo.one (GoTrue supports wildcard origins; it
-# matches both app. and every tenant subdomain). Exercise the flow against
+# paylo.one. rp_origins MUST list every host a ceremony runs on, as EXACT
+# origins — wildcards are NOT supported (go-webauthn matches RPOrigins
+# literally; "https://*.paylo.one" fails every verify with "Error validating
+# origin") and the dashboard caps the list at 5. Tenant hosts
+# <slug>.paylo.one therefore cannot all be allowed: ceremonies must run on a
+# fixed listed origin such as app.paylo.one. Exercise the flow against
 # production / any https deployment.
 # [auth.passkey]
 # enabled = true
 # [auth.webauthn]
 # rp_display_name = "Management OS"
 # rp_id = "paylo.one"
-# rp_origins = ["https://*.paylo.one"]
+# rp_origins = ["https://app.paylo.one"]
 
 [auth.rate_limit]
 # Number of emails that can be sent per hour. Raised for local dev (Inbucket).
