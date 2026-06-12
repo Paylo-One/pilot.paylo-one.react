@@ -2562,4 +2562,51 @@ button {
     touch-action: manipulation;
   }
 }
+/* ============================================================================
+   PROMPT LIBRARY (content blocks + version diff)
+   ========================================================================== */
+.prompt-content {
+  margin: 0;
+  padding: var(--space-md);
+  background: var(--colour-surface-sunken);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-small);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.diff {
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+  background: var(--colour-surface-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  line-height: 1.55;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.diff-line {
+  display: flex;
+  gap: var(--space-sm);
+  padding: 0 var(--space-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.diff-line__marker {
+  flex-shrink: 0;
+  width: 1ch;
+  color: var(--colour-text-tertiary);
+}
+.diff-line--added {
+  background: var(--colour-success-tint);
+  color: var(--colour-success);
+}
+.diff-line--removed {
+  background: var(--colour-danger-tint);
+  color: var(--colour-danger);
+}
 } /* end @layer components */

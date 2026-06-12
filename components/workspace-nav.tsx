@@ -97,6 +97,16 @@ const GROUPS: NavGroup[] = [
         ),
       },
       {
+        href: "/prompts",
+        label: "Prompts",
+        icon: (
+          <svg {...ICON_PROPS}>
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="m7 9 3 3-3 3M12 15h5" />
+          </svg>
+        ),
+      },
+      {
         href: "/mcp",
         label: "Tenant Tool Layer",
         tag: "MCP",

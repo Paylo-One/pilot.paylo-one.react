@@ -14,24 +14,21 @@
  * ingested content is never treated as a template. Versions are immutable once
  * used so audited outputs stay reproducible.
  *
- * MVP implementation: templates/versions are an in-code, immutable registry
- * (no DB table is provisioned for prompts yet). `resolve` returns the pinned
- * version for a known `promptTemplateId`, or a generic JSON-output fallback for
- * any other id. The Gateway records the resolved `promptVersion` + `agentVersion`
- * on the invocation so outputs stay reproducible/auditable.
+ * Resolution: tenant-scoped prompts live in the database (tenant_prompts +
+ * prompt_versions, managed from /prompts) and are resolved by the DB-backed
+ * service in `./server`. This file keeps the pure types, the in-code default
+ * registry, and `fallbackResolve` — the terminal fallback when a tenant has no
+ * stored prompt (or the DB is unreachable), so inference never breaks. The
+ * Gateway records the resolved `promptVersion` + `agentVersion` (and the DB
+ * version id, when one served the call) on the invocation so outputs stay
+ * reproducible/auditable.
  */
 
-import {
-  ValidationError,
-  err,
-  ok,
-  type Result,
-  type TenantContext,
-} from "@/modules/shared";
+import type { Result, TenantContext } from "@/modules/shared";
 import type { ModelPolicy } from "@/modules/model-gateway";
 
 /** Lifecycle status of a prompt template/version. */
-export type PromptStatus = "draft" | "active" | "deprecated";
+export type PromptStatus = "draft" | "active" | "archived" | "deprecated";
 
 /** Retrieval behaviour bound to a prompt version (bounded context for cost/privacy). */
 export interface RetrievalPolicy {
@@ -88,6 +85,8 @@ export interface PromptVersion {
   readonly sourceReferencePolicy: SourceReferencePolicy;
   readonly status: PromptStatus;
   readonly createdAt: string;
+  /** Database id of the tenant prompt version that served this call, if any. */
+  readonly promptVersionDbId?: string;
 }
 
 /** Which template/version the Gateway wants resolved for a call. */
@@ -95,6 +94,8 @@ export interface PromptResolutionRequest {
   readonly promptTemplateId: string;
   /** Optional pin to a specific version; absent resolves the pinned default. */
   readonly promptVersion?: string;
+  /** Optional pin to an exact stored version row (test runs), any status. */
+  readonly promptVersionId?: string;
 }
 
 /**
@@ -124,7 +125,7 @@ export interface PromptVersioningService {
  * trust contract: synthesise only from supplied items, reference them by their
  * id token, never fabricate, and emit STRICT JSON the Gateway can validate.
  */
-const DAILY_MEMO_SYSTEM_PROMPT = [
+export const DAILY_MEMO_SYSTEM_PROMPT = [
   "You are the Daily Memo agent for Paylo.one, an executive management OS.",
   "You compose a calm, high-signal daily briefing from the operator's own connected channels.",
   "",
@@ -217,19 +218,113 @@ function genericPrompt(promptTemplateId: string): ResolvedPrompt {
   };
 }
 
-export const promptVersioningService: PromptVersioningService = {
-  async resolve(_ctx, req) {
-    const resolved = PROMPT_REGISTRY[req.promptTemplateId] ?? genericPrompt(req.promptTemplateId);
-    // A pinned version request must match the registry's immutable version.
-    if (req.promptVersion && req.promptVersion !== resolved.version.promptVersion) {
-      return err(
-        new ValidationError("requested prompt version is not available", {
-          promptTemplateId: req.promptTemplateId,
-          requested: req.promptVersion,
-          available: resolved.version.promptVersion,
-        }),
-      );
-    }
-    return ok(resolved);
-  },
+/**
+ * Resolve from the in-code registry (or the generic JSON fallback). This is the
+ * terminal branch of the DB-backed resolver in `./server` and the guarantee
+ * that inference works for tenants with no stored prompts.
+ */
+export function fallbackResolve(req: PromptResolutionRequest): ResolvedPrompt {
+  return PROMPT_REGISTRY[req.promptTemplateId] ?? genericPrompt(req.promptTemplateId);
+}
+
+// --- Tenant prompt library types (DB-backed; pure, importable by the UI) -----
+
+/** The four workflow templates every tenant library is seeded with. */
+export type PromptTemplateKey =
+  | "daily_memo"
+  | "signal_classification"
+  | "signal_ranking"
+  | "signal_triage";
+
+export const PROMPT_WORKFLOW_LABELS: Record<PromptTemplateKey, string> = {
+  daily_memo: "Briefing generation",
+  signal_classification: "Signal classification",
+  signal_ranking: "Signal ranking",
+  signal_triage: "Triage & summarisation",
 };
+
+/** Lifecycle status of a stored tenant prompt version. */
+export type StoredVersionStatus = "draft" | "active" | "archived";
+
+/** A declared input variable/placeholder (documented metadata in v1). */
+export interface PromptInputVariable {
+  readonly name: string;
+  readonly description: string;
+  readonly required: boolean;
+}
+
+/** Expected output contract for a prompt version. */
+export interface PromptOutputFormat {
+  readonly schemaId: string;
+  readonly description: string;
+  /** Top-level JSON keys the output must contain (test validation). */
+  readonly requiredKeys?: readonly string[];
+}
+
+/** Model/settings metadata bound to a prompt version. */
+export interface PromptModelSettings {
+  readonly policyName: string;
+  readonly temperature: number;
+  readonly maxTokens: number;
+}
+
+/** A tenant's prompt library entry (one per workflow). */
+export interface TenantPrompt {
+  readonly id: string;
+  readonly templateKey: PromptTemplateKey;
+  readonly name: string;
+  readonly description: string | null;
+  readonly workflow: string;
+  readonly catalogueVersion: string;
+  readonly archivedAt: string | null;
+  readonly createdBy: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+/** Library list row: the prompt plus its active version summary. */
+export interface TenantPromptSummary extends TenantPrompt {
+  readonly activeVersionNumber: number | null;
+  readonly versionCount: number;
+}
+
+/** A stored, immutable prompt version. */
+export interface StoredPromptVersion {
+  readonly id: string;
+  readonly tenantPromptId: string;
+  readonly versionNumber: number;
+  readonly content: string;
+  readonly inputVariables: readonly PromptInputVariable[];
+  readonly outputFormat: PromptOutputFormat;
+  readonly modelSettings: PromptModelSettings;
+  readonly status: StoredVersionStatus;
+  readonly changeNote: string | null;
+  readonly restoredFromVersionId: string | null;
+  readonly createdBy: string | null;
+  readonly createdAt: string;
+  readonly activatedAt: string | null;
+  readonly archivedAt: string | null;
+}
+
+/** Detail view: the prompt with its full version history (newest first). */
+export interface TenantPromptDetail extends TenantPrompt {
+  readonly versions: readonly StoredPromptVersion[];
+}
+
+/** A recorded prompt test run. */
+export interface StoredTestRun {
+  readonly id: string;
+  readonly tenantPromptId: string;
+  readonly promptVersionId: string;
+  readonly inputKind: "source_items" | "pasted";
+  readonly inputPayload: unknown;
+  readonly modelId: string | null;
+  readonly modelSettings: PromptModelSettings | null;
+  readonly status: "ok" | "failed";
+  readonly output: unknown;
+  readonly validation: unknown;
+  readonly error: string | null;
+  readonly latencyMs: number | null;
+  readonly totalTokens: number | null;
+  readonly createdAt: string;
+}

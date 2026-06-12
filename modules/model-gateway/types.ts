@@ -82,6 +82,10 @@ export interface GatewayRequest {
   readonly promptTemplateId: string;
   /** Optional pin to a specific prompt version; otherwise the default is used. */
   readonly promptVersion?: string;
+  /** Optional pin to an exact stored tenant prompt version (test runs). */
+  readonly promptVersionId?: string;
+  /** Why the call is made; "test" flags the metering row (default "agent"). */
+  readonly invocationKind?: "agent" | "test";
   /** Tenant-filtered retrieval context for prompt assembly. */
   readonly retrievalContext: readonly RetrievalContextItem[];
   /** Source references that must be carried through onto the output. */
@@ -111,6 +115,8 @@ export interface GatewayResult {
   /** Prompt + agent versions recorded for reproducibility. */
   readonly promptVersion: string;
   readonly agentVersion: string;
+  /** Database id of the tenant prompt version that served the call, if any. */
+  readonly promptVersionDbId: string | null;
 }
 
 /** What a caller hands the Gateway for an embedding call. */

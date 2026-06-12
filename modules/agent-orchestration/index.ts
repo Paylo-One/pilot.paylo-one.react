@@ -162,6 +162,7 @@ async function persistMemo(
   memo: Memo,
   tokenToItem: Map<string, StoredSourceItem>,
   itemsConsidered: number,
+  promptVersionDbId: string | null,
 ): Promise<Result<AgentRunResult>> {
   const secret = createSupabaseSecretClient();
   // A deterministic fallback reference target (most recent item) so every
@@ -170,7 +171,12 @@ async function persistMemo(
 
   const { data: briefing, error: briefingErr } = await secret
     .from("briefings")
-    .insert({ tenant_id: ctx.tenantId, status: "ready", summary: memo.summary })
+    .insert({
+      tenant_id: ctx.tenantId,
+      status: "ready",
+      summary: memo.summary,
+      prompt_version_id: promptVersionDbId,
+    })
     .select("id")
     .single();
   if (briefingErr || !briefing) {
@@ -270,6 +276,7 @@ async function persistMemo(
       itemsConsidered,
       sections: memo.sections.length,
       actions: actionsCreated,
+      promptVersionId: promptVersionDbId,
     },
   });
 
@@ -329,7 +336,14 @@ async function runDailyMemo(ctx: TenantContext): Promise<Result<AgentRunResult>>
     );
   }
 
-  return persistMemo(ctx, agentRunId, parsed.data, tokenToItem, items.length);
+  return persistMemo(
+    ctx,
+    agentRunId,
+    parsed.data,
+    tokenToItem,
+    items.length,
+    gatewayResult.value.promptVersionDbId,
+  );
 }
 
 export const agentOrchestrationService: AgentOrchestrationService = {

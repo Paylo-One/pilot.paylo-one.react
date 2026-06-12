@@ -25,6 +25,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseSecretClient } from "@/lib/supabase/secret";
 import { appHostBaseUrl, tenantBaseUrl } from "@/lib/config";
 import { isSelectableSubdomain } from "@/lib/tenant/host";
+import { seedTenantPrompts } from "@/modules/prompt-versioning/server";
 
 /** Header set by proxy.ts for a valid tenant subdomain (untrusted hint). */
 const TENANT_SLUG_HEADER = "x-paylo-tenant-slug";
@@ -250,6 +251,22 @@ export async function provisionTenantForUser(input: {
     },
     { onConflict: "user_id" },
   );
+
+  // Seed the tenant's prompt library from the default catalogue. Best-effort:
+  // a seed failure must not fail provisioning (the library lazily seeds on
+  // first read), but it is audited when it succeeds.
+  try {
+    await seedTenantPrompts(tenant.id as string, input.userId);
+    await secret.from("audit_events").insert({
+      tenant_id: tenant.id,
+      user_id: input.userId,
+      action: "prompt.defaults.seeded",
+      target: tenant.id,
+      metadata: { via: "provisioning" },
+    });
+  } catch {
+    /* lazy seeding on first /prompts read covers this */
+  }
 
   await secret.from("audit_events").insert({
     tenant_id: tenant.id,

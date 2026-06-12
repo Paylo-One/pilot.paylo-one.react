@@ -34,7 +34,7 @@ import {
 import { modelCatalogueService, defaultOpenAiModelId } from "@/modules/model-catalogue";
 import type { ModelDescriptor } from "@/modules/model-catalogue";
 import { modelEntitlementService } from "@/modules/model-entitlement";
-import { promptVersioningService } from "@/modules/prompt-versioning";
+import { promptVersioningService } from "@/modules/prompt-versioning/server";
 import { modelUsageCostService, type UsageStatus } from "@/modules/model-usage-cost";
 import { getAdapter, type AdapterRuntimeType } from "./adapters";
 import type {
@@ -134,6 +134,7 @@ export const livePipeline: GatewayPipeline = {
       const resolvedRes = await promptVersioningService.resolve(req.ctx, {
         promptTemplateId: req.promptTemplateId,
         promptVersion: req.promptVersion,
+        promptVersionId: req.promptVersionId,
       });
       if (!resolvedRes.ok) return resolvedRes;
       const resolved = resolvedRes.value;
@@ -191,6 +192,9 @@ export const livePipeline: GatewayPipeline = {
           estimatedCostUsd: estimateCost(model, raw.inputTokens, raw.outputTokens),
           latencyMs: raw.latencyMs,
           status,
+          promptTemplateKey: req.promptTemplateId,
+          promptVersionId: prompt.resolved.version.promptVersionDbId ?? null,
+          isTest: req.invocationKind === "test",
           createdAt: new Date().toISOString(),
         });
       } catch {
@@ -206,6 +210,7 @@ export const livePipeline: GatewayPipeline = {
         sourceReferences: req.sourceReferences,
         promptVersion: prompt.resolved.version.promptVersion,
         agentVersion: prompt.resolved.version.agentVersion,
+        promptVersionDbId: prompt.resolved.version.promptVersionDbId ?? null,
       });
     },
   },

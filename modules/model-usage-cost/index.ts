@@ -55,6 +55,11 @@ export interface ModelUsageRecord {
   readonly estimatedCostUsd: number;
   readonly latencyMs: number;
   readonly status: UsageStatus;
+  /** Prompt provenance: which template/stored version served the call. */
+  readonly promptTemplateKey?: string;
+  readonly promptVersionId?: string | null;
+  /** True for operator-initiated prompt test runs (still metered). */
+  readonly isTest?: boolean;
   readonly createdAt: string;
 }
 
@@ -93,6 +98,9 @@ export const modelUsageCostService: ModelUsageCostService = {
         est_cost_usd: usage.estimatedCostUsd,
         latency_ms: usage.latencyMs,
         status: usage.status,
+        prompt_template_key: usage.promptTemplateKey ?? null,
+        prompt_version_id: usage.promptVersionId ?? null,
+        is_test: usage.isTest ?? false,
       })
       .select("id")
       .single();
