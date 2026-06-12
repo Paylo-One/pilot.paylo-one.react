@@ -20,7 +20,7 @@ Architecture and decisions are governed by `../governance/` — start with
 `governance/docs/architecture/technical-design.md`. This app is the
 implementation of that design; the governance docs remain the source of truth.
 
-## Stack
+## Tech Stack
 
 - **Next.js (App Router) + TypeScript + React** (versions pinned to the
   marketing site).
