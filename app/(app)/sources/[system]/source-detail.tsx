@@ -118,16 +118,29 @@ export function SourceDetail({ view }: { view: SourceView }) {
         </section>
       ) : null}
 
-      {view.system === "email" || view.system === "calendar" ? (
+      {view.system === "email" ||
+      view.system === "calendar" ||
+      view.system === "ms365_mail" ||
+      view.system === "teams" ? (
         <section className="card">
           <h2 className="card__title" style={{ marginBottom: "var(--space-md)" }}>
-            {view.system === "email" ? "Labels to sync" : "Calendars to sync"}
+            {view.system === "email"
+              ? "Labels to sync"
+              : view.system === "calendar"
+                ? "Calendars to sync"
+                : view.system === "ms365_mail"
+                  ? "Folders & calendars to sync"
+                  : "Chats & channels to sync"}
           </h2>
           <ScopeItemSelector
             items={view.scopeItems}
             connectionId={view.connectionId}
             system={view.system}
-            googleConfigured={view.googleConfigured}
+            configured={
+              view.system === "ms365_mail" || view.system === "teams"
+                ? view.microsoftConfigured
+                : view.googleConfigured
+            }
           />
         </section>
       ) : null}

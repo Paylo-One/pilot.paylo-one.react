@@ -62,6 +62,11 @@ import {
   syncGmail,
   syncCalendar,
 } from "@/modules/source-connection/google";
+import {
+  getValidMicrosoftToken,
+  syncMs365Mail,
+  syncTeams,
+} from "@/modules/source-connection/microsoft";
 import type {
   GitHubMonitorSettings,
   SourceType,
@@ -318,6 +323,63 @@ export async function syncGoogleAction(input: {
     });
     revalidatePath("/sources");
     return { ok: true, itemCount: result.itemCount, scopeCount: result.scopeCount, error: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Sync failed." };
+  }
+}
+
+// --- Microsoft 365 (Mail + Teams) --------------------------------------------
+
+/**
+ * Sync the Microsoft 365 family for one system (`ms365_mail` = Exchange mail +
+ * calendars, `teams` = chats + channels) from its *active* scope items only.
+ * Reads the connection + token server-side (refreshing if expired) — never from
+ * the client. Channel reads denied by Graph (missing admin consent) are
+ * reported, not fatal (ADR-037).
+ */
+export async function syncMicrosoftAction(input: {
+  system: SourceType;
+}): Promise<{
+  ok: boolean;
+  itemCount?: number;
+  scopeCount?: number;
+  deniedCount?: number;
+  error: string | null;
+}> {
+  const ctx = await requireTenantContext();
+  const system = input?.system;
+  if (system !== "ms365_mail" && system !== "teams") {
+    return { ok: false, error: "Unsupported Microsoft 365 source." };
+  }
+  try {
+    const connectionId = await findConnectionIdBySystem(system);
+    if (!connectionId) return { ok: false, error: "Microsoft 365 is not connected." };
+    const token = await getValidMicrosoftToken(ctx.tenantId, connectionId);
+    if (!token) return { ok: false, error: "No Microsoft 365 credentials stored." };
+
+    const result =
+      system === "ms365_mail"
+        ? { deniedCount: 0, ...(await syncMs365Mail(ctx.tenantId, connectionId, token)) }
+        : await syncTeams(ctx.tenantId, connectionId, token);
+
+    await auditService.record(ctx, {
+      action: "microsoft.synced",
+      target: connectionId,
+      metadata: {
+        system,
+        itemCount: result.itemCount,
+        scopeCount: result.scopeCount,
+        deniedCount: result.deniedCount,
+      },
+    });
+    revalidatePath("/sources");
+    return {
+      ok: true,
+      itemCount: result.itemCount,
+      scopeCount: result.scopeCount,
+      deniedCount: result.deniedCount,
+      error: null,
+    };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Sync failed." };
   }

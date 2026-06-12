@@ -142,12 +142,15 @@ export interface SourceView {
    */
   readonly notionResources: readonly NotionResource[];
   /**
-   * Google (email/calendar): selectable scope items — Gmail labels or Google
-   * calendars (empty unless connected). Drives the scope selector.
+   * Google (email/calendar) and Microsoft 365 (ms365_mail/teams): selectable
+   * scope items — Gmail labels, calendars, mail folders, or Teams chats and
+   * channels (empty unless connected). Drives the scope selector.
    */
   readonly scopeItems: readonly SourceScopeItem[];
   /** Whether Google OAuth credentials are configured in this build. */
   readonly googleConfigured: boolean;
+  /** Whether Microsoft Entra OAuth credentials are configured in this build. */
+  readonly microsoftConfigured: boolean;
   /** WhatsApp only: the tenant's session (null until started). */
   readonly whatsappSession: WhatsAppSession | null;
   /** WhatsApp only: the operator's approved monitors (empty unless any). */
@@ -164,6 +167,7 @@ export interface SourceView {
 export type SourceConnectAffordance =
   | "github_oauth" // real GitHub OAuth (when configured)
   | "google_oauth" // real Google OAuth — Gmail + Calendar (when configured)
+  | "microsoft_oauth" // real Microsoft Entra OAuth — MS 365 Mail / Teams (when configured)
   | "notion_token" // real Notion internal-integration token (paste → store)
   | "whatsapp_session" // tenant-scoped WhatsApp session (QR onboarding, scaffold)
   | "file_upload" // real in-app upload
@@ -229,14 +233,20 @@ export interface GitHubAccount {
   readonly kind: "user" | "organization";
 }
 
-// --- Generic per-source scope items (Gmail labels, Google calendars) --------
+// --- Generic per-source scope items (labels, folders, calendars, chats) ------
 
-export type ScopeItemType = "gmail_label" | "google_calendar";
+export type ScopeItemType =
+  | "gmail_label"
+  | "google_calendar"
+  | "ms365_folder"
+  | "ms365_calendar"
+  | "teams_chat"
+  | "teams_channel";
 
 /**
- * A selectable scope item for a source — a Gmail label/folder or a Google
- * calendar. `isActive` is the approval gate; only active items are synced.
- * Mirrors the `source_scope_items` table.
+ * A selectable scope item for a source — a Gmail label, Google/MS 365 calendar,
+ * MS 365 mail folder, or Teams chat/channel. `isActive` is the approval gate;
+ * only active items are synced. Mirrors the `source_scope_items` table.
  */
 export interface SourceScopeItem {
   readonly id: string;

@@ -50,6 +50,29 @@ export function ConnectAction({ view }: { view: SourceView }) {
           Needs credentials
         </button>
       );
+    case "microsoft_oauth": {
+      if (connected && view.connectionId) {
+        return <DisconnectButton connectionId={view.connectionId} />;
+      }
+      const product = view.system === "teams" ? "teams" : "mail";
+      return view.microsoftConfigured ? (
+        <a
+          className="btn btn--primary btn--sm"
+          href={`/api/oauth/microsoft/start?product=${product}`}
+        >
+          {view.system === "teams" ? "Connect Teams" : "Connect Microsoft 365"}
+        </a>
+      ) : (
+        <button
+          type="button"
+          className="btn btn--ghost btn--sm"
+          disabled
+          title="Add MICROSOFT_OAUTH_CLIENT_ID / SECRET to enable"
+        >
+          Needs credentials
+        </button>
+      );
+    }
     case "enterprise":
       return (
         <button

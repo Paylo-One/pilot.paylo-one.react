@@ -10,10 +10,9 @@
  * Governance: architecture/source-integration-strategy.md (canonical),
  * integration-architecture.md, services/source-connection.md.
  *
- * Scaffold note: only File upload and (when credentials are configured) GitHub
- * are wired in this build. Every other entry is a designed connection contract.
- * The GitHub repositories below are mock data illustrating repository-level
- * monitoring — "monitor selected repositories only", never the whole account.
+ * Wired in this build (credentials permitting): File upload, Obsidian, GitHub,
+ * Google (Gmail + Calendar), Notion, Microsoft 365 (Mail + Teams), and the
+ * WhatsApp bridge behind its flag. Remaining entries are designed contracts.
  */
 
 import type { SourceConnection } from "./index";
@@ -52,14 +51,14 @@ export const SOURCE_DESCRIPTORS: readonly SourceDescriptor[] = [
     description:
       "The specific Microsoft 365 mailbox connector via Entra consent and Graph.",
     mvpStatus: "fast_follow",
-    authModel: "Microsoft Entra OAuth / Graph (Mail.Read), least-privilege",
-    dataPulled: "Selected folders only; metadata + body per policy",
-    scopeControl: "Selected folders, from people/domains, unread, flagged, window",
+    authModel: "Microsoft Entra OAuth / Graph (Mail.Read + Calendars.Read), least-privilege",
+    dataPulled: "Selected folders + calendars only; metadata + body per policy",
+    scopeControl: "Selected folders and calendars; only active items sync",
     dailyMemoUse: "Priority mail and commitments from the chosen folders",
     defaultPolicy: "summaries_only",
     referenceReady: true,
-    connect: "scaffold",
-    riskNote: "Mail.Read is broad — fold/sender scoping is essential.",
+    connect: "microsoft_oauth",
+    riskNote: "Mail.Read is broad — folder scoping is essential.",
   },
   {
     system: "calendar",
@@ -100,15 +99,15 @@ export const SOURCE_DESCRIPTORS: readonly SourceDescriptor[] = [
     glyph: "T",
     provider: "Microsoft Teams",
     description: "Signals and themes across selected chats and channels.",
-    mvpStatus: "phased",
-    authModel: "Microsoft Graph; channel scopes need admin/tenant consent",
+    mvpStatus: "fast_follow",
+    authModel: "Microsoft Entra OAuth / Graph (Chat.Read); channels need admin consent",
     dataPulled: "Chat/channel messages, mentions (per consent granted)",
     scopeControl: "Selected chats/channels; DMs vs channels chosen explicitly",
     dailyMemoUse: "Escalations, decisions, and mentions from chosen channels",
     defaultPolicy: "summaries_only",
     referenceReady: true,
-    connect: "enterprise",
-    riskNote: "Admin consent often unavailable; phased with a digest fallback.",
+    connect: "microsoft_oauth",
+    riskNote: "Channel reads need tenant-admin consent; chats are the dependable path.",
   },
   {
     system: "whatsapp",

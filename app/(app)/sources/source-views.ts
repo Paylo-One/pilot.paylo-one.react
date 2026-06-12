@@ -16,6 +16,7 @@ import { isGithubOAuthConfigured } from "@/modules/source-connection/github";
 import { listRepositoryMonitors } from "@/modules/source-connection/github-repos";
 import { listNotionResources } from "@/modules/source-connection/notion";
 import { isGoogleOAuthConfigured } from "@/modules/source-connection/google";
+import { isMicrosoftOAuthConfigured } from "@/modules/source-connection/microsoft";
 import { listScopeItems } from "@/modules/source-connection/source-scope";
 import {
   getWhatsAppSession,
@@ -47,6 +48,7 @@ export async function buildSourceViews(): Promise<SourceView[]> {
 
   const githubConfigured = isGithubOAuthConfigured();
   const googleConfigured = isGoogleOAuthConfigured();
+  const microsoftConfigured = isMicrosoftOAuthConfigured();
 
   // Real, persisted repository monitors for a *connected* GitHub (if any).
   const githubConnection = connectionBySystem.get("github");
@@ -62,17 +64,21 @@ export async function buildSourceViews(): Promise<SourceView[]> {
       ? await listNotionResources(notionConnection.id)
       : [];
 
-  // Google family: scope items for connected email (Gmail labels) + calendar.
-  const emailConnection = connectionBySystem.get("email");
-  const calendarConnection = connectionBySystem.get("calendar");
-  const [emailScopeItems, calendarScopeItems] = await Promise.all([
-    emailConnection && emailConnection.status === "connected"
-      ? listScopeItems(emailConnection.id)
-      : Promise.resolve([]),
-    calendarConnection && calendarConnection.status === "connected"
-      ? listScopeItems(calendarConnection.id)
-      : Promise.resolve([]),
-  ]);
+  // Scope-item families: Google (email = Gmail labels, calendar) and
+  // Microsoft 365 (ms365_mail = folders + calendars, teams = chats + channels).
+  const scopeItemsFor = (system: "email" | "calendar" | "ms365_mail" | "teams") => {
+    const connection = connectionBySystem.get(system);
+    return connection && connection.status === "connected"
+      ? listScopeItems(connection.id)
+      : Promise.resolve([]);
+  };
+  const [emailScopeItems, calendarScopeItems, ms365ScopeItems, teamsScopeItems] =
+    await Promise.all([
+      scopeItemsFor("email"),
+      scopeItemsFor("calendar"),
+      scopeItemsFor("ms365_mail"),
+      scopeItemsFor("teams"),
+    ]);
 
   // WhatsApp: tenant session + approved monitors. The bridge flag decides
   // whether the card drives the real Web-session bridge or the scaffold path.
@@ -115,12 +121,17 @@ export async function buildSourceViews(): Promise<SourceView[]> {
       githubRepositories: d.system === "github" ? githubRepositories : [],
       notionResources: d.system === "notion" ? notionResources : [],
       googleConfigured,
+      microsoftConfigured,
       scopeItems:
         d.system === "email"
           ? emailScopeItems
           : d.system === "calendar"
             ? calendarScopeItems
-            : [],
+            : d.system === "ms365_mail"
+              ? ms365ScopeItems
+              : d.system === "teams"
+                ? teamsScopeItems
+                : [],
       whatsappSession: d.system === "whatsapp" ? whatsappSession : null,
       whatsappMonitors: d.system === "whatsapp" ? whatsappMonitors : [],
       whatsappBridgeEnabled: d.system === "whatsapp" ? bridgeEnabled : false,

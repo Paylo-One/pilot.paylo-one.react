@@ -3,18 +3,22 @@
 /**
  * components/sources/scope-item-selector.tsx
  *
- * Generic scope selector for the Google family — Gmail labels (email) or Google
- * calendars (calendar). One Google OAuth grant covers both connections; this
- * selector lets the operator activate which labels/calendars to sync and run a
+ * Generic scope selector for the OAuth scope-item families — Google (Gmail
+ * labels, Google calendars) and Microsoft 365 (mail folders + calendars, Teams
+ * chats + channels). The operator activates which items to sync and runs a
  * sync. Only active items are ingested — scope is explicit (ADR-026).
  *
- * Governance: architecture/source-integration-strategy.md §8/§9.
+ * Governance: architecture/source-integration-strategy.md §8/§9/§10, ADR-037.
  */
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { SourceScopeItem, SourceType } from "@/modules/source-connection/source.types";
-import { updateScopeItemAction, syncGoogleAction } from "@/app/(app)/sources/actions";
+import {
+  updateScopeItemAction,
+  syncGoogleAction,
+  syncMicrosoftAction,
+} from "@/app/(app)/sources/actions";
 import { Toggle } from "./toggle";
 
 function formatSync(value: string | null): string {
@@ -29,28 +33,92 @@ function formatSync(value: string | null): string {
   });
 }
 
-const NOUN: Record<string, { plural: string; singular: string }> = {
-  email: { plural: "labels", singular: "label" },
-  calendar: { plural: "calendars", singular: "calendar" },
+interface FamilyCopy {
+  plural: string;
+  singular: string;
+  glyph: string;
+  heading: string;
+  scopeNote: string;
+  connectHref: string;
+  connectLabel: string;
+  connectPrompt: string;
+  unconfigured: string;
+}
+
+const FAMILY: Partial<Record<SourceType, FamilyCopy>> = {
+  email: {
+    plural: "labels",
+    singular: "label",
+    glyph: "G",
+    heading: "Gmail labels",
+    scopeNote: "Read-only. Only the labels you activate are synced (last 7 days).",
+    connectHref: "/api/oauth/google/start",
+    connectLabel: "Connect Google",
+    connectPrompt:
+      "Connect Google (read-only). One authorisation covers both Gmail and Calendar; you then choose which labels/calendars to sync.",
+    unconfigured:
+      "Google OAuth is not configured. Add GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET to enable.",
+  },
+  calendar: {
+    plural: "calendars",
+    singular: "calendar",
+    glyph: "G",
+    heading: "Google calendars",
+    scopeNote: "Read-only. Only the calendars you activate are synced (today + 7 days).",
+    connectHref: "/api/oauth/google/start",
+    connectLabel: "Connect Google",
+    connectPrompt:
+      "Connect Google (read-only). One authorisation covers both Gmail and Calendar; you then choose which labels/calendars to sync.",
+    unconfigured:
+      "Google OAuth is not configured. Add GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET to enable.",
+  },
+  ms365_mail: {
+    plural: "folders & calendars",
+    singular: "item",
+    glyph: "M",
+    heading: "Mail folders & calendars",
+    scopeNote:
+      "Read-only (Mail.Read + Calendars.Read). Only the folders and calendars you activate are synced (mail: last 7 days; events: next 7 days).",
+    connectHref: "/api/oauth/microsoft/start?product=mail",
+    connectLabel: "Connect Microsoft 365",
+    connectPrompt:
+      "Connect Microsoft 365 (read-only Entra consent). One authorisation covers Exchange mail and calendars; you then choose which folders/calendars to sync.",
+    unconfigured:
+      "Microsoft OAuth is not configured. Add MICROSOFT_OAUTH_CLIENT_ID / MICROSOFT_OAUTH_CLIENT_SECRET to enable.",
+  },
+  teams: {
+    plural: "chats & channels",
+    singular: "chat",
+    glyph: "T",
+    heading: "Chats & channels",
+    scopeNote:
+      "Read-only (Chat.Read). Only the chats/channels you activate are synced. Channel messages additionally need tenant-admin consent — denied channels are skipped, never silently ingested.",
+    connectHref: "/api/oauth/microsoft/start?product=teams",
+    connectLabel: "Connect Teams",
+    connectPrompt:
+      "Connect Microsoft Teams (read-only Entra consent). Chats are user-consentable; channel messages need your Microsoft 365 admin's consent.",
+    unconfigured:
+      "Microsoft OAuth is not configured. Add MICROSOFT_OAUTH_CLIENT_ID / MICROSOFT_OAUTH_CLIENT_SECRET to enable.",
+  },
 };
 
 export function ScopeItemSelector({
   items,
   connectionId,
   system,
-  googleConfigured,
+  configured,
 }: {
   items: readonly SourceScopeItem[];
   connectionId: string | null;
   system: SourceType;
-  googleConfigured: boolean;
+  configured: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
 
-  const noun = NOUN[system] ?? { plural: "items", singular: "item" };
+  const copy = FAMILY[system] ?? FAMILY.email!;
 
   const display = useMemo(
     () => items.map((i) => (i.id in overrides ? { ...i, isActive: overrides[i.id]! } : i)),
@@ -63,13 +131,11 @@ export function ScopeItemSelector({
     return (
       <div className="repo-selector">
         <p className="scaffold-note" style={{ marginBottom: "var(--space-md)" }}>
-          {googleConfigured
-            ? "Connect Google (read-only). One authorisation covers both Gmail and Calendar; you then choose which labels/calendars to sync."
-            : "Google OAuth is not configured. Add GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET to enable."}
+          {configured ? copy.connectPrompt : copy.unconfigured}
         </p>
-        {googleConfigured ? (
-          <a className="btn btn--secondary btn--sm" href="/api/oauth/google/start">
-            Connect Google
+        {configured ? (
+          <a className="btn btn--secondary btn--sm" href={copy.connectHref}>
+            {copy.connectLabel}
           </a>
         ) : (
           <button type="button" className="btn btn--ghost btn--sm" disabled>
@@ -97,9 +163,18 @@ export function ScopeItemSelector({
   function runSync() {
     setMessage(null);
     startTransition(async () => {
-      const res = await syncGoogleAction({ system });
+      const res =
+        system === "ms365_mail" || system === "teams"
+          ? await syncMicrosoftAction({ system })
+          : await syncGoogleAction({ system });
       if (res.ok) {
-        setMessage(`Synced ${res.itemCount ?? 0} item(s) from ${res.scopeCount ?? 0} ${noun.plural}.`);
+        const denied =
+          "deniedCount" in res && res.deniedCount
+            ? ` ${res.deniedCount} channel(s) skipped — needs tenant-admin consent.`
+            : "";
+        setMessage(
+          `Synced ${res.itemCount ?? 0} item(s) from ${res.scopeCount ?? 0} ${copy.plural}.${denied}`,
+        );
         router.refresh();
       } else {
         setMessage(res.error ?? "Sync failed.");
@@ -112,12 +187,10 @@ export function ScopeItemSelector({
       <div className="repo-selector__head">
         <div className="repo-selector__account">
           <span className="integration__glyph" aria-hidden="true">
-            G
+            {copy.glyph}
           </span>
           <div>
-            <p className="repo-selector__org">
-              {system === "email" ? "Gmail labels" : "Google calendars"}
-            </p>
+            <p className="repo-selector__org">{copy.heading}</p>
             <p className="integration__kind">
               {display.length} available · {activeCount} active
             </p>
@@ -128,16 +201,14 @@ export function ScopeItemSelector({
           className="btn btn--secondary btn--sm"
           onClick={runSync}
           disabled={pending || activeCount === 0}
-          title={activeCount === 0 ? `Activate a ${noun.singular} first` : "Sync now"}
+          title={activeCount === 0 ? `Activate a ${copy.singular} first` : "Sync now"}
         >
           {pending ? "Working…" : "Sync now"}
         </button>
       </div>
 
       <p className="scaffold-note" style={{ marginBottom: "var(--space-md)" }}>
-        {system === "email"
-          ? "Read-only. Only the labels you activate are synced (last 7 days)."
-          : "Read-only. Only the calendars you activate are synced (today + 7 days)."}
+        {copy.scopeNote}
       </p>
 
       {message ? (
@@ -148,8 +219,8 @@ export function ScopeItemSelector({
 
       {display.length === 0 ? (
         <div className="empty">
-          <p className="empty__title">No {noun.plural} found</p>
-          <p className="empty__body">Reconnect Google, or check the granted scopes.</p>
+          <p className="empty__title">No {copy.plural} found</p>
+          <p className="empty__body">Reconnect, or check the granted scopes.</p>
         </div>
       ) : (
         <ul className="repo-list">
@@ -165,7 +236,7 @@ export function ScopeItemSelector({
                 <Toggle
                   pressed={item.isActive}
                   onChange={() => toggle(item)}
-                  label={`Sync ${item.name ?? noun.singular}`}
+                  label={`Sync ${item.name ?? copy.singular}`}
                   disabled={pending}
                 />
               </div>
