@@ -43,6 +43,21 @@ export async function refreshSupabaseSession(
     },
   });
 
-  const { data } = await supabase.auth.getClaims();
-  return (data?.claims as VerifiedClaims | undefined) ?? null;
+  try {
+    const { data } = await supabase.auth.getClaims();
+    return (data?.claims as VerifiedClaims | undefined) ?? null;
+  } catch {
+    // A stale, rotated, or corrupt session (e.g. leftover cookie chunks after a
+    // flow change) makes getClaims throw `refresh_token_not_found`. Treat it as
+    // logged-out AND clear the auth cookies so the bad state self-heals instead
+    // of bouncing the user between the workspace and sign-in. Clearing uses the
+    // same apex domain/path the cookies were written with so the delete matches.
+    const base = supabaseCookieOptions();
+    for (const cookie of request.cookies.getAll()) {
+      if (cookie.name.startsWith("sb-")) {
+        response.cookies.set(cookie.name, "", { ...base, maxAge: 0 });
+      }
+    }
+    return null;
+  }
 }

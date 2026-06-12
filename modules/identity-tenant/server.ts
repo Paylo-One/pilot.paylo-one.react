@@ -47,8 +47,16 @@ export type TenantContextResolution =
 /** Read the verified current user via getClaims (never getSession). */
 export async function getSignedInUser(): Promise<SignedInUser | null> {
   const supabase = await createSupabaseServerClient();
-  const { data } = await supabase.auth.getClaims();
-  const claims = data?.claims;
+  // A stale/rotated/corrupt refresh token makes getClaims throw
+  // (`refresh_token_not_found`). Treat that as "not signed in" so callers
+  // redirect to sign-in cleanly; the proxy clears the bad cookies.
+  let claims;
+  try {
+    const { data } = await supabase.auth.getClaims();
+    claims = data?.claims;
+  } catch {
+    return null;
+  }
   if (!claims?.sub) return null;
   return {
     userId: claims.sub as string,
