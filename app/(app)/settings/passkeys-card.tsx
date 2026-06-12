@@ -1,11 +1,16 @@
 "use client";
 
 /**
- * Passkey enrolment + device management for the Settings security section,
- * backed by native Supabase WebAuthn (auth.registerPasskey / auth.passkey.*).
- * The browser SDK runs the whole ceremony and Supabase Auth owns the
- * credentials, so this component is fully client-side; it only calls a thin
- * server action to mint the tenant audit trail after a ceremony succeeds.
+ * Passkey management for the Settings security section, backed by native
+ * Supabase WebAuthn (auth.passkey.*).
+ *
+ * Enrolment does NOT run here: the Auth server matches WebAuthn origins
+ * exactly (no wildcards, max 5), so the create() ceremony cannot run on
+ * arbitrary tenant hosts. "Create a passkey" hands off to the fixed-origin
+ * page on the app host (/enroll-passkey) with a return_to back to this page;
+ * the result comes back as ?passkey_registered=<id>&passkey_label=<name>,
+ * which this card turns into the tenant audit trail. List / rename / revoke
+ * are plain REST calls (no ceremony) and stay on the tenant host.
  *
  * Requires a secure context (https, or localhost): on plain-http dev hosts
  * (lvh.me) the browser disables WebAuthn, so the card explains instead of
@@ -14,6 +19,7 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { appHostBaseUrl } from "@/lib/config";
 import { recordPasskeyAuditAction } from "./actions";
 
 interface PasskeyItem {
@@ -75,42 +81,50 @@ export function PasskeysCard() {
     };
   }, [supported, refresh]);
 
-  async function addPasskey() {
+  // Returning from the fixed-origin enrolment page: the ceremony already
+  // succeeded on the app host, so record the tenant audit trail here (this is
+  // the host with tenant context), then clean the URL. The params are stripped
+  // synchronously before the async work so a re-mount cannot double-record.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const newId = params.get("passkey_registered");
+    if (!newId) return;
+    const newLabel = params.get("passkey_label");
+    params.delete("passkey_registered");
+    params.delete("passkey_label");
+    const query = params.toString();
+    window.history.replaceState(
+      null,
+      "",
+      window.location.pathname + (query ? `?${query}` : ""),
+    );
+    void (async () => {
+      await recordPasskeyAuditAction({
+        action: "registered",
+        credentialId: newId,
+        label: newLabel || null,
+      });
+      setNotice(
+        "Passkey created. Add a second one on another device so losing this one is a non-event.",
+      );
+      await refresh();
+    })();
+  }, [refresh]);
+
+  /**
+   * Hand off to the fixed-origin enrolment page on the app host — the only
+   * origin the Auth server accepts WebAuthn ceremonies from. The apex-scoped
+   * session cookie travels with the user; they come straight back here.
+   */
+  function addPasskey() {
     setError(null);
     setNotice(null);
     setBusy(true);
-    try {
-      const supabase = createSupabaseBrowserClient();
-      const { data, error } = await supabase.auth.registerPasskey();
-      if (error) throw error;
-
-      const newId = data?.id;
-      const trimmed = label.trim();
-      if (newId && trimmed) {
-        await supabase.auth.passkey.update({ passkeyId: newId, friendlyName: trimmed });
-      }
-      if (newId) {
-        await recordPasskeyAuditAction({
-          action: "registered",
-          credentialId: newId,
-          label: trimmed || null,
-        });
-      }
-      setLabel("");
-      setNotice("Passkey created. Add a second one on another device so losing this one is a non-event.");
-      await refresh();
-    } catch (cause) {
-      const name = cause instanceof Error ? cause.name : "";
-      setError(
-        name === "NotAllowedError"
-          ? "Passkey creation was cancelled."
-          : cause instanceof Error
-            ? cause.message
-            : "Could not create the passkey.",
-      );
-    } finally {
-      setBusy(false);
-    }
+    const target = new URL("/enroll-passkey", appHostBaseUrl());
+    target.searchParams.set("return_to", window.location.href);
+    const trimmed = label.trim();
+    if (trimmed) target.searchParams.set("label", trimmed);
+    window.location.assign(target.toString());
   }
 
   async function saveLabel(passkeyId: string) {
@@ -229,7 +243,7 @@ export function PasskeysCard() {
             disabled={busy || supported !== true}
             onClick={addPasskey}
           >
-            {busy ? "Waiting for your authenticator…" : "Create a passkey"}
+            {busy ? "Opening the secure enrolment page…" : "Create a passkey"}
           </button>
         </div>
       ) : (

@@ -203,9 +203,12 @@ password_requirements = ""
 # origins — wildcards are NOT supported (go-webauthn matches RPOrigins
 # literally; "https://*.paylo.one" fails every verify with "Error validating
 # origin") and the dashboard caps the list at 5. Tenant hosts
-# <slug>.paylo.one therefore cannot all be allowed: ceremonies must run on a
-# fixed listed origin such as app.paylo.one. Exercise the flow against
-# production / any https deployment.
+# <slug>.paylo.one therefore cannot all be allowed: every ceremony runs on the
+# fixed app host — sign-in lives there already and enrolment hands off to
+# app.paylo.one/enroll-passkey (app/(auth)/enroll-passkey), returning to the
+# tenant Settings page afterwards. Hosted rp_origins is exactly
+# "https://app.paylo.one". Exercise the flow against production / any https
+# deployment.
 # [auth.passkey]
 # enabled = true
 # [auth.webauthn]
