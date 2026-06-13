@@ -21,6 +21,7 @@ import {
   type SourceConnection,
   type SourceConnectionStatus,
 } from "./index";
+import { checkCanAddSourceConnection } from "./entitlement-guard";
 
 interface SourceConnectionRow {
   id: string;
@@ -83,6 +84,13 @@ export async function ensureSourceConnection(
   if (selectError) throw new Error(selectError.message);
   if (existing) return existing.id as string;
 
+  // New connection (no existing row for this system) → enforce the plan's
+  // maxConnectedSources. Observe-only for now: a denial is logged, not thrown.
+  const allowed = await checkCanAddSourceConnection({ tenantId: ctx.tenantId, system });
+  if (!allowed) {
+    throw new Error("source_connection_limit_reached");
+  }
+
   const { data, error } = await supabase
     .from("source_connections")
     .insert({
@@ -136,6 +144,13 @@ export async function upsertProviderConnection(
       .eq("tenant_id", tenantId);
     if (error) throw new Error(error.message);
     return existing.id as string;
+  }
+
+  // New connection (no existing row for this system) → enforce the plan's
+  // maxConnectedSources. Observe-only for now: a denial is logged, not thrown.
+  const allowed = await checkCanAddSourceConnection({ tenantId, system });
+  if (!allowed) {
+    throw new Error("source_connection_limit_reached");
   }
 
   const { data, error } = await secret
