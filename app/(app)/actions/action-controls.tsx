@@ -49,14 +49,7 @@ export function ActionControls({
   }
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: "var(--space-xs)",
-        alignItems: "flex-end",
-      }}
-    >
+    <div className="action-controls-wrap">
       <div className="action-controls">
         <button
           type="button"
@@ -64,13 +57,13 @@ export function ActionControls({
           disabled={isPending}
           className="btn btn--accent-outline"
         >
-          Approve
+          {isPending ? "Updating…" : "Confirm"}
         </button>
         <button
           type="button"
           className="btn btn--ghost"
           disabled
-          title="Edit before confirm — designed, not yet wired in this scaffold"
+          title="Edit before confirming is planned"
         >
           Edit
         </button>
@@ -92,7 +85,11 @@ export function ActionControls({
         </button>
       </div>
       {error ? (
-        <p className="form-message form-message--error" role="alert">
+        <p
+          className="form-message form-message--error"
+          role="alert"
+          aria-live="polite"
+        >
           {error}
         </p>
       ) : null}
