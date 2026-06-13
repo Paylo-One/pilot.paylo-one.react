@@ -2,21 +2,34 @@
   "name": "paylo-one-app",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "npm@11.12.1",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "description": "Paylo.one Management OS — application scaffold (modular monolith, multi-tenant, passkey-ready, governed Model & Tool gateways). Scaffold only: no live integrations, providers, passkeys, or payments.",
   "scripts": {
     "dev": "next dev",
+    "dev:web": "next dev",
+    "dev:mobile": "npm run start --workspace @management-os/mobile",
     "build": "next build",
+    "build:web": "next build",
     "start": "next start",
-    "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "lint": "npm run lint:web && turbo run lint --filter='./apps/*' --filter='./packages/*'",
+    "lint:web": "eslint app components lib modules proxy.ts next.config.ts",
+    "typecheck": "npm run typecheck:web && turbo run typecheck --filter='./apps/*' --filter='./packages/*'",
+    "typecheck:web": "tsc --noEmit",
+    "format": "prettier --write \"apps/mobile/**/*.{ts,tsx,js,json,md}\" \"packages/**/*.{ts,json}\" \"docs/mobile-*.md\" app/providers.tsx package.json turbo.json tsconfig.packages.json",
+    "format:check": "prettier --check \"apps/mobile/**/*.{ts,tsx,js,json,md}\" \"packages/**/*.{ts,json}\" \"docs/mobile-*.md\" app/providers.tsx package.json turbo.json tsconfig.packages.json"
   },
   "dependencies": {
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.47.10",
+    "@tanstack/react-query": "^5.90.21",
     "next": "16.2.9",
     "openai": "^4.77.0",
-    "react": "19.2.7",
-    "react-dom": "19.2.7",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
     "react-icons": "^5.6.0",
     "zod": "^3.24.1"
   },
@@ -27,7 +40,9 @@
     "@types/react-dom": "19.2.3",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
+    "prettier": "^3.7.4",
     "tailwindcss": "^4.3.0",
+    "turbo": "^2.8.14",
     "typescript": "^5"
   },
   "overrides": {

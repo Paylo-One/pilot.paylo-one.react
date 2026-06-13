@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
+import { AppProviders } from "./providers";
 import "./globals.css";
 
 // IBM Plex Sans + IBM Plex Mono, the locked MVP type system, self-hosted via
@@ -46,7 +47,9 @@ export default function RootLayout({
           data-* attributes onto <body> before React hydrates. This suppresses
           the warning for <body>'s own attributes only — one level deep — so it
           does not mask real hydration mismatches in the app. */}
-      <body suppressHydrationWarning>{children}</body>
+      <body suppressHydrationWarning>
+        <AppProviders>{children}</AppProviders>
+      </body>
     </html>
   );
 }

@@ -3,6 +3,14 @@ import path from "path";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  transpilePackages: [
+    "@management-os/api-client",
+    "@management-os/auth",
+    "@management-os/config",
+    "@management-os/design-tokens",
+    "@management-os/domain",
+    "@management-os/ui-core",
+  ],
   allowedDevOrigins: ["lvh.me", "*.lvh.me"],
   // Pin the workspace root to this directory. Sibling lockfiles (site/, repo
   // root) would otherwise make Next infer the wrong workspace root.

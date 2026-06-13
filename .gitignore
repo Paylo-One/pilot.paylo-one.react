@@ -1,11 +1,14 @@
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.*
 
 # next.js
 /.next/
 /out/
+apps/mobile/.expo/
+apps/mobile/dist/
+.turbo/
 
 # production
 /build
@@ -18,6 +21,7 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+expo-debug.log*
 
 # env files
 .env*

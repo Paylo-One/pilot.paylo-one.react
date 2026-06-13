@@ -1,0 +1,6 @@
+.next/
+.turbo/
+apps/mobile/.expo/
+apps/mobile/dist/
+apps/mobile/expo-env.d.ts
+node_modules/
