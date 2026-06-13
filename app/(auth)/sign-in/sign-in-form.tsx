@@ -9,7 +9,9 @@
  *     (challenge → navigator.credentials.get() → verify → session) entirely on
  *     the Auth server; the user picks their account from the authenticator UI,
  *     so no email is needed up front.
- *   - signInWithOtp() emails a magic link back to /auth/callback.
+ *   - signInWithOtp() emails a magic link back to /auth/callback. Existing-user
+ *     sign-in disables account creation; the referral-only registration page
+ *     opts into it after server-side validation.
  *
  * After either succeeds we send the user to /onboarding on the app host, which
  * forwards to their workspace (or claims a subdomain for a brand-new user).
@@ -27,7 +29,11 @@ function passkeySupported(): boolean {
   return typeof window !== "undefined" && typeof window.PublicKeyCredential === "function";
 }
 
-export function SignInForm() {
+export function SignInForm({
+  mode = "sign-in",
+}: {
+  mode?: "sign-in" | "registration";
+}) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(
     "idle",
@@ -69,7 +75,10 @@ export function SignInForm() {
       const emailRedirectTo = `${window.location.origin}/auth/callback?next=/onboarding`;
       const { error } = await supabase.auth.signInWithOtp({
         email,
-        options: { emailRedirectTo },
+        options: {
+          emailRedirectTo,
+          shouldCreateUser: mode === "registration",
+        },
       });
       if (error) throw error;
       setStatus("sent");
@@ -83,7 +92,7 @@ export function SignInForm() {
     return (
       <div className="card">
         <p className="text-secondary">
-          Check your inbox for a sign-in link. Locally, open{" "}
+          Check your inbox for a one-time link. Locally, open{" "}
           <a className="mono" href="http://127.0.0.1:54324" target="_blank" rel="noreferrer">
             Mailpit
           </a>{" "}
@@ -95,7 +104,7 @@ export function SignInForm() {
 
   return (
     <form className="card" onSubmit={onSubmit}>
-      {supported !== false ? (
+      {mode === "sign-in" && supported !== false ? (
         <>
           <button
             type="button"
@@ -136,7 +145,11 @@ export function SignInForm() {
         className="btn btn--secondary btn--block"
         style={{ marginTop: "var(--space-md)" }}
       >
-        {status === "sending" ? "Sending…" : "Email me a sign-in link"}
+        {status === "sending"
+          ? "Sending…"
+          : mode === "registration"
+            ? "Verify my email"
+            : "Email me a sign-in link"}
       </button>
       {error && <p className="form-message form-message--error">{error}</p>}
     </form>

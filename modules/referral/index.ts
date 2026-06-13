@@ -29,6 +29,31 @@ export const DEFAULT_REFERRAL_ALLOCATION = 5;
 
 export type ReferralStatus = "active" | "suspended";
 export type ReferralOnboardingStatus = "pending" | "completed" | "expired";
+export type ReferralValidationStatus =
+  | "valid"
+  | "not_found"
+  | "suspended"
+  | "exhausted";
+
+export interface ReferralValidation {
+  readonly status: ReferralValidationStatus;
+  readonly code: string | null;
+  readonly allocation: number | null;
+  readonly used: number | null;
+  readonly remaining: number | null;
+}
+
+export type ReferralReservationOutcome =
+  | "reserved"
+  | "not_found"
+  | "self_referral"
+  | "exhausted";
+
+/** Apex-scoped cookie carrying a validated referral through authentication. */
+export const REFERRAL_COOKIE = "paylo_ref";
+
+/** A captured referral remains available for two weeks. */
+export const REFERRAL_TTL_SECONDS = 14 * 24 * 60 * 60;
 
 /** The owner-facing summary of their referral code. */
 export interface ReferralOverview {
@@ -121,13 +146,6 @@ async function countUsages(
   return count ?? 0;
 }
 
-export interface ConsumeInput {
-  readonly code: string;
-  readonly referredUserId: string;
-  readonly referredEmail: string | null;
-  readonly referredTenantId: string;
-}
-
 export interface ReferralService {
   /** Idempotently ensure the owner has a code (used at provisioning + reads). */
   getOrCreateForOwner(
@@ -138,10 +156,26 @@ export interface ReferralService {
   getOverview(ctx: TenantContext): Promise<Result<ReferralOverview>>;
   /** The people who joined through the owner's code, newest first. */
   listUsages(ctx: TenantContext): Promise<Result<ReferralUsageView[]>>;
-  /** True only if a code is active with remaining allowance. */
-  validateCode(code: string): Promise<Result<{ valid: boolean; code: string | null }>>;
-  /** Credit a signup to a code; suspends the code on the final use. */
-  consume(input: ConsumeInput): Promise<Result<{ credited: boolean }>>;
+  /** Explain whether a code can currently admit another person. */
+  validateCode(code: string): Promise<Result<ReferralValidation>>;
+  /** Atomically reserve one invitation slot before tenant provisioning starts. */
+  reserve(input: {
+    code: string;
+    referredUserId: string;
+    referredEmail: string | null;
+  }): Promise<
+    Result<{
+      outcome: ReferralReservationOutcome;
+      reservationId: string | null;
+    }>
+  >;
+  /** Attach a successful workspace provision to its reserved referral slot. */
+  completeReservation(
+    reservationId: string,
+    referredTenantId: string,
+  ): Promise<Result<void>>;
+  /** Release a pending reservation when provisioning fails. */
+  releaseReservation(reservationId: string): Promise<Result<void>>;
   /** Grant additional invitation uses (re-activates a suspended code). */
   topUp(ownerUserId: string, additional: number): Promise<Result<void>>;
 }
@@ -276,74 +310,98 @@ export const referralService: ReferralService = {
       .eq("code", normaliseCode(code))
       .maybeSingle();
     if (error) return err(new AppError("internal", error.message));
-    if (!data) return ok({ valid: false, code: null });
-
-    const row = data as { id: string; allocation: number; status: ReferralStatus; code: string };
-    if (row.status === "suspended") return ok({ valid: false, code: row.code });
-
-    const used = await countUsages(secret, row.id);
-    if (used >= row.allocation) return ok({ valid: false, code: row.code });
-
-    return ok({ valid: true, code: row.code });
-  },
-
-  async consume(input) {
-    const secret = createSupabaseSecretClient();
-    const { data, error } = await secret
-      .from("referral_codes")
-      .select(CODE_COLUMNS)
-      .eq("code", normaliseCode(input.code))
-      .maybeSingle();
-    if (error) return err(new AppError("internal", error.message));
-    if (!data) return ok({ credited: false });
-
-    const codeRow = data as ReferralCodeRow;
-    // No self-referral, and don't credit an exhausted/suspended code.
-    if (codeRow.owner_user_id === input.referredUserId) return ok({ credited: false });
-
-    const used = await countUsages(secret, codeRow.id);
-    if (codeRow.status === "suspended" || used >= codeRow.allocation) {
-      return ok({ credited: false });
-    }
-
-    const { error: insertErr } = await secret.from("referral_usages").insert({
-      referral_code_id: codeRow.id,
-      referrer_user_id: codeRow.owner_user_id,
-      referred_user_id: input.referredUserId,
-      referred_email: input.referredEmail,
-      referred_tenant_id: input.referredTenantId,
-      onboarding_status: "completed",
-    });
-    if (insertErr) {
-      // Already credited (unique index) — treat as a no-op success.
-      if (insertErr.code === "23505") return ok({ credited: false });
-      return err(new AppError("internal", insertErr.message));
-    }
-
-    const newUsed = used + 1;
-    await audit(secret, {
-      tenantId: codeRow.tenant_id,
-      userId: codeRow.owner_user_id,
-      action: "referral.used",
-      target: codeRow.id,
-      metadata: { referredUserId: input.referredUserId, used: newUsed },
-    });
-
-    if (newUsed >= codeRow.allocation) {
-      await secret
-        .from("referral_codes")
-        .update({ status: "suspended", updated_at: new Date().toISOString() })
-        .eq("id", codeRow.id);
-      await audit(secret, {
-        tenantId: codeRow.tenant_id,
-        userId: codeRow.owner_user_id,
-        action: "referral.suspended",
-        target: codeRow.id,
-        metadata: { reason: "allocation_exhausted" },
+    if (!data) {
+      return ok({
+        status: "not_found",
+        code: null,
+        allocation: null,
+        used: null,
+        remaining: null,
       });
     }
 
-    return ok({ credited: true });
+    const row = data as { id: string; allocation: number; status: ReferralStatus; code: string };
+    const used = await countUsages(secret, row.id);
+    const remaining = Math.max(0, row.allocation - used);
+
+    return ok({
+      status:
+        used >= row.allocation
+          ? "exhausted"
+          : row.status === "suspended"
+            ? "suspended"
+            : "valid",
+      code: row.code,
+      allocation: row.allocation,
+      used,
+      remaining,
+    });
+  },
+
+  async reserve(input) {
+    const secret = createSupabaseSecretClient();
+    const { data, error } = await secret.rpc("reserve_referral", {
+      p_code: normaliseCode(input.code),
+      p_referred_user_id: input.referredUserId,
+      p_referred_email: input.referredEmail,
+    });
+    if (error) return err(new AppError("internal", error.message));
+
+    const row = (
+      data as
+        | { usage_id: string | null; outcome: ReferralReservationOutcome }[]
+        | null
+    )?.[0];
+    if (!row) return err(new AppError("internal", "referral_reservation_failed"));
+
+    return ok({
+      outcome: row.outcome,
+      reservationId: row.usage_id,
+    });
+  },
+
+  async completeReservation(reservationId, referredTenantId) {
+    const secret = createSupabaseSecretClient();
+    const { error } = await secret
+      .from("referral_usages")
+      .update({
+        referred_tenant_id: referredTenantId,
+        onboarding_status: "completed",
+      })
+      .eq("id", reservationId)
+      .eq("onboarding_status", "pending");
+    if (error) return err(new AppError("internal", error.message));
+    return ok(undefined);
+  },
+
+  async releaseReservation(reservationId) {
+    const secret = createSupabaseSecretClient();
+    const { data, error } = await secret
+      .from("referral_usages")
+      .delete()
+      .eq("id", reservationId)
+      .eq("onboarding_status", "pending")
+      .select("referral_code_id")
+      .maybeSingle();
+    if (error) return err(new AppError("internal", error.message));
+
+    if (data?.referral_code_id) {
+      const { data: code } = await secret
+        .from("referral_codes")
+        .select("id, allocation")
+        .eq("id", data.referral_code_id)
+        .maybeSingle();
+      if (code) {
+        const used = await countUsages(secret, code.id as string);
+        if (used < (code.allocation as number)) {
+          await secret
+            .from("referral_codes")
+            .update({ status: "active", updated_at: new Date().toISOString() })
+            .eq("id", code.id);
+        }
+      }
+    }
+    return ok(undefined);
   },
 
   async topUp(ownerUserId, additional) {

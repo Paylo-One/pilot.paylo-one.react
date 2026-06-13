@@ -18,7 +18,43 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function InviteUnavailablePage() {
+interface InviteUnavailablePageProps {
+  searchParams: Promise<{ reason?: string }>;
+}
+
+const COPY = {
+  "limit-reached": {
+    eyebrow: "Invitation limit reached",
+    title: "This referral has no invitations left",
+    body:
+      "The available places on this referral have already been used. Ask the person who shared it whether they can send you another valid referral.",
+  },
+  "referral-required": {
+    eyebrow: "Invitation required",
+    title: "A valid referral is required to register",
+    body:
+      "Paylo.one is currently invite-only. Open the personal referral link you were sent, or request access if you do not have one.",
+  },
+  invalid: {
+    eyebrow: "Invalid invitation",
+    title: "This referral link is not valid",
+    body:
+      "The link may be incomplete or no longer active. Ask the person who shared it to check the referral and send it again.",
+  },
+  unavailable: {
+    eyebrow: "Invitation unavailable",
+    title: "We could not verify this referral",
+    body:
+      "The referral could not be checked right now. Try the original link again, or request access if the problem continues.",
+  },
+} as const;
+
+export default async function InviteUnavailablePage({
+  searchParams,
+}: InviteUnavailablePageProps) {
+  const { reason } = await searchParams;
+  const copy = COPY[reason as keyof typeof COPY] ?? COPY.invalid;
+
   return (
     <main className="landing">
       <Link
@@ -41,27 +77,30 @@ export default function InviteUnavailablePage() {
         </div>
       </Link>
 
-      <p className="eyebrow">Invitation</p>
+      <p className="eyebrow">{copy.eyebrow}</p>
       <h1
         style={{
           fontSize: "var(--text-h1)",
           margin: "var(--space-sm) 0 var(--space-md)",
         }}
       >
-        This invitation link is no longer available
+        {copy.title}
       </h1>
       <p
         className="text-secondary measure"
         style={{ fontSize: "var(--text-body)", marginBottom: "var(--space-xl)" }}
       >
-        The reference you used has already been fully used, or it is no longer
-        active. If you were expecting to join a workspace, ask the person who
-        shared it for a fresh link.
+        {copy.body}
       </p>
 
-      <Link href="/request-access" className="btn btn--primary">
-        Request access instead
-      </Link>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-sm)" }}>
+        <Link href="/request-access" className="btn btn--primary">
+          Request access
+        </Link>
+        <Link href="/sign-in?existing=1" className="btn btn--secondary">
+          Sign in to an existing account
+        </Link>
+      </div>
     </main>
   );
 }

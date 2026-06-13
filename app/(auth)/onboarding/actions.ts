@@ -20,11 +20,9 @@ import {
   provisionTenantForUser,
 } from "@/modules/identity-tenant/server";
 import { recordLegalAcceptances } from "@/modules/legal/server";
+import { REFERRAL_COOKIE, referralService } from "@/modules/referral";
 import { supabaseCookieOptions } from "@/lib/supabase/cookies";
 import { isSelectableSubdomain } from "@/lib/tenant/host";
-
-/** Apex-scoped cookie that carries a referral code from /join to onboarding. */
-const REFERRAL_COOKIE = "paylo_ref";
 
 export interface OnboardingState {
   error: string | null;
@@ -51,6 +49,31 @@ export async function createWorkspace(
 ): Promise<OnboardingState> {
   const user = await getSignedInUser();
   if (!user) redirect("/sign-in");
+
+  const cookieStore = await cookies();
+  const referralCode = cookieStore.get(REFERRAL_COOKIE)?.value;
+  if (!referralCode) redirect("/invite-unavailable?reason=referral-required");
+
+  const referralValidation = await referralService.validateCode(referralCode);
+  if (!referralValidation.ok || referralValidation.value.status !== "valid") {
+    const options = supabaseCookieOptions();
+    cookieStore.set(REFERRAL_COOKIE, "", {
+      domain: options.domain,
+      path: options.path,
+      sameSite: options.sameSite,
+      secure: options.secure,
+      maxAge: 0,
+    });
+    const reason =
+      referralValidation.ok &&
+      (referralValidation.value.status === "exhausted" ||
+        referralValidation.value.status === "suspended")
+        ? "limit-reached"
+        : referralValidation.ok
+          ? "invalid"
+          : "unavailable";
+    redirect(`/invite-unavailable?reason=${reason}`);
+  }
 
   const parsed = schema.safeParse({
     subdomain: formData.get("subdomain"),
@@ -83,22 +106,48 @@ export async function createWorkspace(
     return { error: "Could not record your acceptance. Please try again." };
   }
 
-  // A referral link (if any) was captured as an apex-scoped cookie by the
-  // /join handler; credit it during provisioning, then clear it below.
-  const cookieStore = await cookies();
-  const referralCode = cookieStore.get(REFERRAL_COOKIE)?.value;
+  const reservation = await referralService.reserve({
+    code: referralCode,
+    referredUserId: user.userId,
+    referredEmail: user.email,
+  });
+  if (!reservation.ok) {
+    return { error: "Could not confirm your invitation. Please try again." };
+  }
+  if (
+    reservation.value.outcome !== "reserved" ||
+    !reservation.value.reservationId
+  ) {
+    const options = supabaseCookieOptions();
+    cookieStore.set(REFERRAL_COOKIE, "", {
+      domain: options.domain,
+      path: options.path,
+      sameSite: options.sameSite,
+      secure: options.secure,
+      maxAge: 0,
+    });
+    redirect(
+      `/invite-unavailable?reason=${
+        reservation.value.outcome === "exhausted"
+          ? "limit-reached"
+          : "invalid"
+      }`,
+    );
+  }
 
   let redirectTo: string;
+  let tenantId: string;
   try {
     const result = await provisionTenantForUser({
       userId: user.userId,
       email: user.email,
       desiredSubdomain: parsed.data.subdomain,
       tenantName: parsed.data.workspaceName,
-      referralCode,
     });
     redirectTo = result.redirectTo;
+    tenantId = result.tenantId;
   } catch (err) {
+    await referralService.releaseReservation(reservation.value.reservationId);
     const code = err instanceof Error ? err.message : "unknown";
     if (code === "subdomain_taken") {
       return { error: "That subdomain is already taken. Try another." };
@@ -109,18 +158,21 @@ export async function createWorkspace(
     return { error: "Could not create your workspace. Please try again." };
   }
 
+  await referralService.completeReservation(
+    reservation.value.reservationId,
+    tenantId,
+  );
+
   // Clear the referral cookie so a later signup in the same browser can't
   // accidentally re-credit a stale code. Match the apex scope it was set with.
-  if (referralCode) {
-    const options = supabaseCookieOptions();
-    cookieStore.set(REFERRAL_COOKIE, "", {
-      domain: options.domain,
-      path: options.path,
-      sameSite: options.sameSite,
-      secure: options.secure,
-      maxAge: 0,
-    });
-  }
+  const options = supabaseCookieOptions();
+  cookieStore.set(REFERRAL_COOKIE, "", {
+    domain: options.domain,
+    path: options.path,
+    sameSite: options.sameSite,
+    secure: options.secure,
+    maxAge: 0,
+  });
 
   redirect(redirectTo);
 }

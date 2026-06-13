@@ -179,6 +179,7 @@ export async function findPrimaryTenantSlug(
 }
 
 export interface ProvisionResult {
+  readonly tenantId: string;
   readonly slug: string;
   /** Absolute URL of the provisioned tenant workspace. */
   readonly redirectTo: string;
@@ -199,8 +200,6 @@ export async function provisionTenantForUser(input: {
   desiredSubdomain: string;
   tenantName?: string;
   displayName?: string;
-  /** Referral code captured from a /join link, if this signup used one. */
-  referralCode?: string;
 }): Promise<ProvisionResult> {
   const slug = input.desiredSubdomain.toLowerCase().trim();
   if (!isSelectableSubdomain(slug)) {
@@ -212,7 +211,18 @@ export async function provisionTenantForUser(input: {
   // If the user is already provisioned, return their existing workspace.
   const existing = await findPrimaryTenantSlug(input.userId);
   if (existing) {
-    return { slug: existing, redirectTo: tenantBaseUrl(existing) };
+    const { data: membership } = await secret
+      .from("tenant_users")
+      .select("tenant_id")
+      .eq("user_id", input.userId)
+      .limit(1)
+      .maybeSingle();
+    if (!membership?.tenant_id) throw new Error("tenant_membership_missing");
+    return {
+      tenantId: membership.tenant_id as string,
+      slug: existing,
+      redirectTo: tenantBaseUrl(existing),
+    };
   }
 
   if (!(await isSubdomainAvailable(slug))) {
@@ -287,20 +297,9 @@ export async function provisionTenantForUser(input: {
     /* non-fatal: created lazily on first Settings read */
   }
 
-  // If this signup arrived through someone's referral link, credit it now.
-  // Referral bookkeeping must never block the new user's own workspace.
-  if (input.referralCode) {
-    try {
-      await referralService.consume({
-        code: input.referralCode,
-        referredUserId: input.userId,
-        referredEmail: input.email,
-        referredTenantId: tenant.id as string,
-      });
-    } catch {
-      /* non-fatal */
-    }
-  }
-
-  return { slug: tenant.slug as string, redirectTo: tenantBaseUrl(tenant.slug as string) };
+  return {
+    tenantId: tenant.id as string,
+    slug: tenant.slug as string,
+    redirectTo: tenantBaseUrl(tenant.slug as string),
+  };
 }

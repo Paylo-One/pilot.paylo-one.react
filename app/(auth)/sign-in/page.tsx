@@ -32,8 +32,8 @@ export default async function SignInPage() {
         className="text-secondary"
         style={{ marginBottom: "var(--space-lg)", fontSize: "var(--text-small)" }}
       >
-        Access is invite-only. Sign in to open your workspace at
-        &lt;slug&gt;.paylo.one.
+        Sign in to open your existing workspace. New accounts can only be
+        created from a valid referral link.
       </p>
 
       <SignInForm />
