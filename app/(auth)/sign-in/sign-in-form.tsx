@@ -92,11 +92,7 @@ export function SignInForm({
     return (
       <div className="card">
         <p className="text-secondary">
-          Check your inbox for a one-time link. Locally, open{" "}
-          <a className="mono" href="http://127.0.0.1:54324" target="_blank" rel="noreferrer">
-            Mailpit
-          </a>{" "}
-          to find it.
+          Check your inbox for a one-time link.
         </p>
       </div>
     );
