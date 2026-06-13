@@ -14,6 +14,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { referralService } from "@/modules/referral";
 import { supabaseCookieOptions } from "@/lib/supabase/cookies";
+import { appHostBaseUrl } from "@/lib/config";
 
 /** Must match the cookie name read by the onboarding action. */
 const REFERRAL_COOKIE = "paylo_ref";
@@ -22,17 +23,23 @@ const REFERRAL_COOKIE = "paylo_ref";
 const REFERRAL_TTL_SECONDS = 14 * 24 * 60 * 60;
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: Promise<{ code: string }> },
 ) {
   const { code } = await context.params;
   const result = await referralService.validateCode(code);
 
+  // Auth + onboarding live on the reserved `app.` host. Redirect there with an
+  // absolute URL (same convention as requireTenantContext / the auth routes) so
+  // the apex-scoped cookie host and the redirect host always agree — and so we
+  // never depend on request.url, which the dev server reports as `localhost`.
+  const base = appHostBaseUrl();
+
   if (!result.ok || !result.value.valid || !result.value.code) {
-    return NextResponse.redirect(new URL("/invite-unavailable", request.url));
+    return NextResponse.redirect(`${base}/invite-unavailable`);
   }
 
-  const response = NextResponse.redirect(new URL("/sign-in", request.url));
+  const response = NextResponse.redirect(`${base}/sign-in`);
   const options = supabaseCookieOptions();
   response.cookies.set(REFERRAL_COOKIE, result.value.code, {
     httpOnly: true,
