@@ -106,10 +106,20 @@ export const livePipeline: GatewayPipeline = {
       // never carried in the (loggable) policy outcome.
       let admittedModel: ModelDescriptor | null = null;
       if (!req.requestedModelId) {
-        const byo = await getActiveModelProviderWithKey(req.ctx);
-        if (byo) {
-          const descriptor = tenantModelToDescriptor(byo.provider, byo.modelId);
-          if (descriptor.supportedTasks.includes(req.task)) admittedModel = descriptor;
+        try {
+          const byo = await getActiveModelProviderWithKey(req.ctx);
+          if (byo) {
+            const descriptor = tenantModelToDescriptor(byo.provider, byo.modelId);
+            if (descriptor.supportedTasks.includes(req.task)) admittedModel = descriptor;
+          }
+        } catch (cause) {
+          // A BYO-lookup failure (e.g. table missing pre-migration, transient DB
+          // error) must never break inference — fall through to the platform
+          // default, exactly as prompt resolution does.
+          console.warn(
+            "[model-gateway] BYO provider lookup failed; using platform default:",
+            cause instanceof Error ? cause.message : cause,
+          );
         }
       }
 
