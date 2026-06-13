@@ -77,6 +77,8 @@ export function InvitationsCard({
           name="email"
           type="email"
           required
+          autoComplete="off"
+          spellCheck={false}
           disabled={noneLeft || pending}
           className="input"
           placeholder="name@company.com"
@@ -161,7 +163,18 @@ export function InvitationsCard({
                       >
                         {copiedId === inv.id ? "Copied" : "Copy link"}
                       </button>
-                      <form action={revokeInvitationAction}>
+                      <form
+                        action={revokeInvitationAction}
+                        onSubmit={(event) => {
+                          if (
+                            !window.confirm(
+                              "Revoke this invitation? The invite link will stop working.",
+                            )
+                          ) {
+                            event.preventDefault();
+                          }
+                        }}
+                      >
                         <input type="hidden" name="id" value={inv.id} />
                         <button type="submit" className="btn btn--ghost btn--sm">
                           Revoke

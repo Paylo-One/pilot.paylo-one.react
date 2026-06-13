@@ -35,6 +35,7 @@ interface NavGroup {
 
 const ICON_PROPS = {
   className: "nav__icon",
+  "aria-hidden": true,
   viewBox: "0 0 24 24",
   fill: "none",
   stroke: "currentColor",

@@ -120,6 +120,9 @@
 
 /* --- Tokens: light (default) ---------------------------------------------- */
 :root {
+  /* Match native controls + scrollbars to the active scheme (light-first). */
+  color-scheme: light dark;
+
   /* Surfaces — cool neutral, never pure white */
   --colour-bg: #f4f5f7;
   --colour-surface: #fbfbfd;
@@ -1400,6 +1403,93 @@ button {
   display: flex;
   gap: var(--space-sm);
   margin-top: var(--space-md);
+  flex-wrap: wrap;
+}
+.diary-entry__edit-row {
+  margin-top: var(--space-md);
+}
+
+/* Composer: guided prompts + capture controls */
+.diary-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+.diary-prompt {
+  border: 1px solid var(--colour-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--colour-surface);
+  color: var(--colour-text-secondary);
+  font-size: var(--text-small);
+  padding: 4px var(--space-md);
+  cursor: pointer;
+  transition: background var(--speed) var(--ease-standard),
+    color var(--speed) var(--ease-standard),
+    border-color var(--speed) var(--ease-standard);
+}
+.diary-prompt:hover {
+  background: var(--colour-surface-sunken);
+  color: var(--colour-text-primary);
+}
+.diary-prompt--active {
+  background: var(--colour-accent-soft);
+  color: var(--colour-accent);
+  border-color: var(--colour-accent);
+}
+.diary-composer__controls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  margin-top: var(--space-md);
+}
+.diary-composer__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+.diary-type-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.diary-type-select {
+  width: auto;
+  min-width: 9rem;
+}
+
+/* Timeline: search, type filter, day groups */
+.diary-timeline__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-md);
+}
+.diary-search {
+  width: auto;
+  min-width: 14rem;
+  max-width: 22rem;
+}
+.diary-filter {
+  margin-bottom: var(--space-lg);
+}
+.diary-days {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+.diary-day__label {
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--colour-text-tertiary);
+  margin-bottom: var(--space-md);
 }
 
 /* ============================================================================

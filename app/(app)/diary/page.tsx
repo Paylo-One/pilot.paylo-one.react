@@ -10,7 +10,11 @@
 
 import { requireTenantContext } from "@/modules/identity-tenant/server";
 import { diaryService } from "@/modules/diary";
-import { DiaryComposer, DiaryList, type DiaryEntryView } from "./diary-client";
+import {
+  DiaryComposer,
+  DiaryTimeline,
+  type DiaryEntryView,
+} from "./diary-client";
 
 export default async function DiaryPage() {
   const ctx = await requireTenantContext();
@@ -18,6 +22,7 @@ export default async function DiaryPage() {
   const entries: DiaryEntryView[] = result.ok
     ? result.value.map((entry) => ({
         id: entry.id,
+        entryType: entry.entryType,
         body: entry.body,
         createdAt: entry.createdAt,
         updatedAt: entry.updatedAt,
@@ -28,25 +33,26 @@ export default async function DiaryPage() {
     <main className="workspace__content">
       <div className="page-head">
         <p className="eyebrow">Diary</p>
-        <h1 className="page-head__title">Private diary</h1>
+        <h1 className="page-head__title">Your private diary</h1>
         <p className="page-head__lead">
-          A private thinking space for decisions, rationale, and reflection.
-          Entries are visible only to you and are never fed to the system&rsquo;s
-          intelligence unless you explicitly opt in. They can be linked, by your
-          choice, to a briefing insight or an action.
+          A quiet place to capture your day &mdash; what you decided, what
+          you&rsquo;re acting on, and what&rsquo;s still open. Private to you, and
+          never used by the system unless you choose.
         </p>
       </div>
 
       <DiaryComposer />
 
       <div style={{ marginTop: "var(--space-xl)" }}>
-        <p className="eyebrow">Timeline</p>
         {!result.ok ? (
-          <p className="scaffold-note" style={{ marginTop: "var(--space-md)" }}>
-            We couldn&rsquo;t load your entries just now. Please try again.
-          </p>
+          <>
+            <p className="eyebrow">Timeline</p>
+            <p className="scaffold-note" style={{ marginTop: "var(--space-md)" }}>
+              We couldn&rsquo;t load your entries just now. Please try again.
+            </p>
+          </>
         ) : (
-          <DiaryList entries={entries} />
+          <DiaryTimeline entries={entries} />
         )}
       </div>
     </main>

@@ -22,8 +22,9 @@ export async function createEntryAction(
 ): Promise<DiaryFormState> {
   const ctx = await requireTenantContext();
   const body = String(formData.get("body") ?? "");
+  const entryType = String(formData.get("entryType") ?? "");
 
-  const result = await diaryService.create(ctx, { body });
+  const result = await diaryService.create(ctx, { body, entryType });
   if (!result.ok) {
     return { ok: false, error: result.error.message };
   }
@@ -31,6 +32,7 @@ export async function createEntryAction(
   await auditService.record(ctx, {
     action: "diary.created",
     target: result.value.id,
+    metadata: { entryType: result.value.entryType },
   });
 
   revalidatePath("/diary");
@@ -44,14 +46,25 @@ export async function updateEntryAction(
   const ctx = await requireTenantContext();
   const id = String(formData.get("id") ?? "");
   const body = String(formData.get("body") ?? "");
+  const entryType = String(formData.get("entryType") ?? "");
+  const prevEntryType = String(formData.get("prevEntryType") ?? "");
 
   if (!id) {
     return { ok: false, error: "Missing entry reference." };
   }
 
-  const result = await diaryService.update(ctx, { id, body });
+  const result = await diaryService.update(ctx, { id, body, entryType });
   if (!result.ok) {
     return { ok: false, error: result.error.message };
+  }
+
+  // Record only a meaningful reclassification, not every text edit.
+  if (result.value.entryType !== prevEntryType) {
+    await auditService.record(ctx, {
+      action: "diary.updated",
+      target: result.value.id,
+      metadata: { entryType: result.value.entryType },
+    });
   }
 
   revalidatePath("/diary");

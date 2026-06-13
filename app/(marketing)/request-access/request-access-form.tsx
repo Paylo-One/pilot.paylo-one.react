@@ -69,6 +69,7 @@ export function RequestAccessForm() {
           type="email"
           required
           autoComplete="email"
+          spellCheck={false}
           className="input"
           placeholder="you@company.com"
         />
@@ -82,6 +83,7 @@ export function RequestAccessForm() {
           id="ra-company"
           name="companyOrRole"
           type="text"
+          autoComplete="organization"
           className="input"
           placeholder="e.g. CTO at Northwind, or fractional CTO"
         />
@@ -96,6 +98,7 @@ export function RequestAccessForm() {
           id="ra-reason"
           name="reason"
           rows={4}
+          autoComplete="off"
           className="textarea"
           placeholder="A sentence or two about your context and what you want to get on top of."
         />
