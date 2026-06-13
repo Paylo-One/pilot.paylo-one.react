@@ -262,6 +262,12 @@ otp_expiry = 3600
 subject = "Your Paylo.one sign-in link"
 content_path = "./supabase/templates/magic_link.html"
 
+# Custom signup confirmation email: same token_hash/SSR pattern as magic_link,
+# but type=signup so /auth/confirm verifies the signup OTP server-side.
+[auth.email.template.confirmation]
+subject = "Confirm your email · Paylo.one"
+content_path = "./supabase/templates/confirmation.html"
+
 # Use a production-ready SMTP server
 # [auth.email.smtp]
 # enabled = true
