@@ -31,6 +31,7 @@ export type SourceCategory =
   | "knowledge"
   | "engineering"
   | "files"
+  | "external"
   | "productivity"
   | "enterprise";
 
@@ -169,6 +170,7 @@ export type SourceConnectAffordance =
   | "whatsapp_session" // tenant-scoped WhatsApp session (QR onboarding, scaffold)
   | "file_upload" // real in-app upload
   | "obsidian_upload" // real Markdown vault upload (Configure → upload form)
+  | "news_preferences" // tenant-scoped News configuration (RSS + GDELT)
   | "scaffold" // designed, connection not wired
   | "phased" // designed, deliberately deferred
   | "enterprise"; // requires enterprise/admin consent
@@ -282,6 +284,7 @@ export const SOURCE_CATEGORY_LABELS: Record<SourceCategory, string> = {
   knowledge: "Knowledge",
   engineering: "Engineering",
   files: "Files",
+  external: "External signals",
   productivity: "Productivity",
   enterprise: "Enterprise",
 };

@@ -27,8 +27,16 @@ import { ObsidianUploadForm } from "@/components/sources/obsidian-upload-form";
 import { WhatsAppSessionCard } from "@/components/sources/whatsapp-session-card";
 import { Toggle } from "@/components/sources/toggle";
 import { UploadForm } from "../upload-form";
+import type { NewsAdminData } from "@/modules/news";
+import { NewsSourceConfig } from "@/components/sources/news-source-config";
 
-export function SourceDetail({ view }: { view: SourceView }) {
+export function SourceDetail({
+  view,
+  newsData,
+}: {
+  view: SourceView;
+  newsData?: NewsAdminData | null;
+}) {
   const [active, setActive] = useState(view.status === "active");
   const [inMemo, setInMemo] = useState(view.inDailyMemo);
   const [storagePolicy, setStoragePolicy] = useState<SourceStoragePolicy>(
@@ -38,6 +46,10 @@ export function SourceDetail({ view }: { view: SourceView }) {
   // Scaffold sources expose a (local) activation toggle; wired ones use their
   // real connect/disconnect affordances instead.
   const togglable = view.connect === "scaffold";
+
+  if (view.system === "news" && newsData) {
+    return <NewsSourceConfig data={newsData} />;
+  }
 
   return (
     <div className="stack" style={{ gap: "var(--space-lg)" }}>

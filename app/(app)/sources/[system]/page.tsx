@@ -22,16 +22,20 @@ import {
 import { SourceIcon } from "@/components/sources/source-icon";
 import { buildSourceViews } from "../source-views";
 import { SourceDetail } from "./source-detail";
+import { getNewsAdminData } from "@/modules/news/server";
 
 export default async function SourceDetailPage({
   params,
 }: {
   params: Promise<{ system: string }>;
 }) {
-  await requireTenantContext();
+  const ctx = await requireTenantContext();
   const { system } = await params;
 
-  const views = await buildSourceViews();
+  const [views, newsData] = await Promise.all([
+    buildSourceViews(ctx),
+    system === "news" ? getNewsAdminData(ctx) : Promise.resolve(null),
+  ]);
   const view = views.find((v) => v.system === system);
   if (!view) notFound();
 
@@ -74,7 +78,7 @@ export default async function SourceDetailPage({
         </div>
       </div>
 
-      <SourceDetail view={view} />
+      <SourceDetail view={view} newsData={newsData} />
     </main>
   );
 }

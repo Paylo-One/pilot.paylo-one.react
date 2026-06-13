@@ -25,7 +25,8 @@ export type SourceSystem =
   | "github"
   | "notion"
   | "file_upload"
-  | "obsidian";
+  | "obsidian"
+  | "news";
 
 /** Per-source retention choice (data-architecture.md `storage_policy` enum). */
 export type StoragePolicy =

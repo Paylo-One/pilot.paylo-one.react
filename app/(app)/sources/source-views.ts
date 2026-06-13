@@ -30,6 +30,8 @@ import {
   isInDailyMemo,
 } from "@/modules/source-connection/source-service";
 import type { SourceView } from "@/modules/source-connection/source.types";
+import type { TenantContext } from "@/modules/shared";
+import { getNewsPreferences } from "@/modules/news/preferences";
 
 export function formatTimestamp(value: string | null): string {
   if (!value) return "";
@@ -43,8 +45,11 @@ export function formatTimestamp(value: string | null): string {
   });
 }
 
-export async function buildSourceViews(): Promise<SourceView[]> {
-  const connections = await listSourceConnections();
+export async function buildSourceViews(ctx: TenantContext): Promise<SourceView[]> {
+  const [connections, newsPreferences] = await Promise.all([
+    listSourceConnections(),
+    getNewsPreferences(ctx),
+  ]);
   const connectionBySystem = new Map(connections.map((c) => [c.system, c]));
 
   const githubConfigured = isGithubOAuthConfigured();
@@ -94,7 +99,13 @@ export async function buildSourceViews(): Promise<SourceView[]> {
   return SOURCE_DESCRIPTORS.map((d) => {
     const connection = connectionBySystem.get(d.system);
     const status =
-      d.system === "whatsapp"
+      d.system === "news"
+        ? newsPreferences.enabled
+          ? "active"
+          : newsPreferences.updatedAt
+            ? "paused"
+            : "available"
+        : d.system === "whatsapp"
         ? deriveWhatsAppSourceStatus(whatsappSession, whatsappMonitors)
         : deriveSourceStatus(d, connection);
     const lastSync =
@@ -119,7 +130,10 @@ export async function buildSourceViews(): Promise<SourceView[]> {
       riskNote: d.riskNote,
       lastSync: status === "active" && lastSync ? lastSync : null,
       referenceReady: d.referenceReady,
-      inDailyMemo: isInDailyMemo(d, status),
+      inDailyMemo:
+        d.system === "news"
+          ? newsPreferences.enabled && newsPreferences.briefingEnabled
+          : isInDailyMemo(d, status),
       connect: d.connect,
       // Only a *connected* connection counts as connected in the UI. A stale
       // `disconnected`/`error` row must still surface the Connect affordance

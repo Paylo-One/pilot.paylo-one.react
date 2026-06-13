@@ -65,7 +65,7 @@ export default async function SourcesPage({
 }) {
   const ctx = await requireTenantContext();
   const [views, recentItems, params] = await Promise.all([
-    buildSourceViews(),
+    buildSourceViews(ctx),
     listRecentSourceItems(ctx.tenantId, 15),
     searchParams,
   ]);

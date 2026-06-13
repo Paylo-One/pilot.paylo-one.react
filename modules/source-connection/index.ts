@@ -40,6 +40,7 @@ export const SOURCE_SYSTEM_LABELS: Record<SourceSystem, string> = {
   notion: "Notion",
   file_upload: "File & paste upload",
   obsidian: "Obsidian",
+  news: "News",
 };
 
 /** Default `display_name` for a freshly created connection of `system`. */
