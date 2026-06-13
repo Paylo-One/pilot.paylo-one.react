@@ -31,6 +31,7 @@ import { createSupabaseSecretClient } from "@/lib/supabase/secret";
 import { listMemoSourceItems, type StoredSourceItem } from "@/modules/knowledge-store/server";
 import { auditService } from "@/modules/audit";
 import { modelGateway, type GatewayRequest, type RetrievalContextItem } from "@/modules/model-gateway";
+import { appendExternalSignalsToBriefing } from "@/modules/news/briefing";
 
 export type AgentKind =
   | "daily_memo"
@@ -106,6 +107,28 @@ function roundConfidence(value: number): number {
   return Math.round(Math.min(1, Math.max(0, value)) * 1000) / 1000;
 }
 
+async function appendNewsSafely(
+  tenantId: string,
+  briefingId: string,
+  position: number,
+): Promise<{ count: number; error: string | null }> {
+  try {
+    return {
+      count: await appendExternalSignalsToBriefing(
+        tenantId,
+        briefingId,
+        position,
+      ),
+      error: null,
+    };
+  } catch (cause) {
+    return {
+      count: 0,
+      error: cause instanceof Error ? cause.message : "external_signals_failed",
+    };
+  }
+}
+
 /**
  * Persist a minimal, honest "quiet day" memo when there is nothing to
  * synthesise. No source references are attached because there are no items to
@@ -141,10 +164,18 @@ async function persistQuietDayMemo(
     return err(new AppError("internal", sectionErr.message));
   }
 
+  const news = await appendNewsSafely(ctx.tenantId, briefingId, 1);
   await auditService.record(ctx, {
     action: "briefing.generated",
     target: briefingId,
-    metadata: { kind: "daily_memo", itemsConsidered: 0, sections: 1, actions: 0 },
+    metadata: {
+      kind: "daily_memo",
+      itemsConsidered: 0,
+      sections: 1 + (news.count > 0 ? 1 : 0),
+      actions: 0,
+      externalSignals: news.count,
+      externalSignalsError: news.error,
+    },
   });
 
   return ok({ agentRunId, kind: "daily_memo", briefingId });
@@ -268,15 +299,18 @@ async function persistMemo(
     }
   }
 
+  const news = await appendNewsSafely(ctx.tenantId, briefingId, position);
   await auditService.record(ctx, {
     action: "briefing.generated",
     target: briefingId,
     metadata: {
       kind: "daily_memo",
       itemsConsidered,
-      sections: memo.sections.length,
+      sections: memo.sections.length + (news.count > 0 ? 1 : 0),
       actions: actionsCreated,
       promptVersionId: promptVersionDbId,
+      externalSignals: news.count,
+      externalSignalsError: news.error,
     },
   });
 

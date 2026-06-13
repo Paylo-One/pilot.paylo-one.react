@@ -16,6 +16,9 @@ import "server-only";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { listPeople } from "@/modules/people/people-server";
 import type { PersonImportanceLevel, PersonSignal } from "@/modules/people/people.types";
+import type { ExternalSignalView } from "@/modules/news";
+import { getBriefingExternalSignals } from "@/modules/news/briefing";
+import type { TenantContext } from "@/modules/shared";
 
 export interface BriefingSourceReference {
   readonly id: string;
@@ -43,6 +46,7 @@ export interface LatestBriefing {
   readonly summary: string | null;
   readonly generatedAt: string;
   readonly sections: BriefingSectionView[];
+  readonly externalSignals: ExternalSignalView[];
 }
 
 interface BriefingRow {
@@ -71,13 +75,13 @@ interface SourceReferenceRow {
 }
 
 /** The most recent briefing for the tenant, with ordered sections + references. */
-export async function getLatestBriefing(tenantId: string): Promise<LatestBriefing | null> {
+export async function getLatestBriefing(ctx: TenantContext): Promise<LatestBriefing | null> {
   const supabase = await createSupabaseServerClient();
 
   const { data: briefingData } = await supabase
     .from("briefings")
     .select("id, status, summary, generated_at")
-    .eq("tenant_id", tenantId)
+    .eq("tenant_id", ctx.tenantId)
     .order("generated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -91,7 +95,9 @@ export async function getLatestBriefing(tenantId: string): Promise<LatestBriefin
     .eq("briefing_id", briefing.id)
     .order("position", { ascending: true });
 
-  const sections = (sectionData ?? []) as SectionRow[];
+  const sections = ((sectionData ?? []) as SectionRow[]).filter(
+    (section) => section.kind !== "external_signals",
+  );
   const sectionIds = sections.map((s) => s.id);
 
   const referencesBySection = new Map<string, BriefingSourceReference[]>();
@@ -132,11 +138,13 @@ export async function getLatestBriefing(tenantId: string): Promise<LatestBriefin
     }
   }
 
+  const externalSignals = await getBriefingExternalSignals(ctx, briefing.id);
   return {
     id: briefing.id,
     status: briefing.status,
     summary: briefing.summary,
     generatedAt: briefing.generated_at,
+    externalSignals,
     sections: sections.map((s) => ({
       id: s.id,
       kind: s.kind,

@@ -96,6 +96,7 @@ export function ConnectAction({ view }: { view: SourceView }) {
         </button>
       );
     case "file_upload":
+    case "news_preferences":
     case "scaffold":
     default:
       return null;

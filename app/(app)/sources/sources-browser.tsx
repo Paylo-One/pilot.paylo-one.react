@@ -30,6 +30,7 @@ const CATEGORY_ORDER: readonly SourceCategory[] = [
   "calendar",
   "knowledge",
   "files",
+  "external",
   "productivity",
   "enterprise",
 ];

@@ -19,7 +19,7 @@ import {
   PiMicrosoftOutlookLogoFill,
   PiMicrosoftTeamsLogoFill,
 } from "react-icons/pi";
-import { FiUpload } from "react-icons/fi";
+import { FiUpload, FiGlobe } from "react-icons/fi";
 import type { SourceSystem } from "@/modules/shared";
 
 const ICONS: Record<SourceSystem, { Icon: IconType; colour?: string }> = {
@@ -32,6 +32,7 @@ const ICONS: Record<SourceSystem, { Icon: IconType; colour?: string }> = {
   notion: { Icon: SiNotion },
   obsidian: { Icon: SiObsidian, colour: "#7C3AED" },
   file_upload: { Icon: FiUpload },
+  news: { Icon: FiGlobe, colour: "#157A86" },
 };
 
 export function SourceIcon({

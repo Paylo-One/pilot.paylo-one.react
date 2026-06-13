@@ -24,6 +24,11 @@ import { IMPORTANCE_LABELS, IMPORTANCE_TONE } from "@/modules/people/people.type
 import { GenerateMemoButton } from "./generate-button";
 import { RefinementActions } from "@/components/refinement/refinement-actions";
 import { FeedbackChip } from "@/components/refinement/feedback-chip";
+import { NewsFeedbackBar } from "@/components/news/news-feedback-bar";
+import {
+  NEWS_CATEGORY_LABELS,
+  type ExternalSignalView,
+} from "@/modules/news";
 import {
   SAMPLE_MEMO,
   type SampleSection,
@@ -151,6 +156,61 @@ function PeopleInFocusSection({ people }: { people: PersonInFocus[] }) {
   );
 }
 
+function ExternalSignalsSection({
+  signals,
+}: {
+  signals: readonly ExternalSignalView[];
+}) {
+  if (signals.length === 0) return null;
+  return (
+    <section className="memo__section">
+      <div className="memo__section-head">
+        <span className="memo__section-title">External Signals</span>
+      </div>
+      {signals.map((signal) => (
+        <article className="memo-item" key={signal.briefingItemId}>
+          <div className="memo-item__main">
+            <p className="memo-item__title">
+              <a
+                href={signal.canonicalUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="source-ref__system"
+              >
+                {signal.headline}
+              </a>
+            </p>
+            {signal.summary ? (
+              <p className="memo-item__detail">{signal.summary}</p>
+            ) : null}
+            <p className="memo-item__detail">
+              <strong>Why it matters:</strong> {signal.whyItMatters}
+            </p>
+            <div className="source-ref-row">
+              <span className="source-ref">
+                <span className="source-ref__system">{signal.sourceName}</span>
+                {signal.publishedAt ? (
+                  <span>{formatTimestamp(signal.publishedAt)}</span>
+                ) : null}
+              </span>
+              {signal.category ? (
+                <span className="chip">
+                  {NEWS_CATEGORY_LABELS[signal.category]}
+                </span>
+              ) : null}
+            </div>
+            <NewsFeedbackBar
+              newsItemId={signal.newsItemId}
+              sourceName={signal.sourceName}
+              topic={signal.category ?? undefined}
+            />
+          </div>
+        </article>
+      ))}
+    </section>
+  );
+}
+
 /* --- Sample memo rendering ----------------------------------------------- */
 
 function PeopleRow({ people }: { people: SamplePerson[] }) {
@@ -246,7 +306,7 @@ function SampleSectionBlock({
 export default async function BriefingPage() {
   const ctx = await requireTenantContext();
   const [briefing, peopleInFocus] = await Promise.all([
-    getLatestBriefing(ctx.tenantId),
+    getLatestBriefing(ctx),
     getPeopleInFocus(),
   ]);
 
@@ -316,6 +376,7 @@ export default async function BriefingPage() {
               <RealReferences section={section} />
             </section>
           ))}
+          <ExternalSignalsSection signals={briefing.externalSignals} />
         </div>
       ) : (
         /* --- Illustrative memo (no real briefing yet) -------------------- */

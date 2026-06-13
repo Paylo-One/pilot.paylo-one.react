@@ -1805,6 +1805,75 @@ button {
   max-width: 60ch;
 }
 
+/* News source configuration. */
+.news-toggle-row,
+.news-provider,
+.news-admin-item {
+  border-top: 1px solid var(--colour-border);
+  padding-top: var(--space-md);
+  margin-top: var(--space-md);
+}
+.news-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+.news-toggle-row > span:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.news-option-grid,
+.news-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm) var(--space-lg);
+  margin-top: var(--space-md);
+}
+.news-toggle-grid {
+  margin-top: var(--space-lg);
+}
+.news-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--colour-text-secondary);
+  font-size: var(--text-small);
+}
+.news-check input {
+  accent-color: var(--colour-accent);
+}
+.news-provider {
+  background: var(--colour-surface-sunken);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-md);
+  margin-top: 0;
+  padding: var(--space-md);
+}
+.news-admin-item:first-child {
+  border-top: none;
+}
+.news-why {
+  margin-top: var(--space-sm);
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+}
+.news-why summary {
+  cursor: pointer;
+}
+.news-why pre {
+  max-height: 220px;
+  overflow: auto;
+  margin-top: var(--space-sm);
+  padding: var(--space-sm);
+  border-radius: var(--radius-sm);
+  background: var(--colour-surface-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  white-space: pre-wrap;
+}
+
 /* GitHub repository selector. */
 .repo-selector {
   border: 1px solid var(--colour-border);
@@ -2470,6 +2539,10 @@ button {
   .grid--2,
   .grid--3,
   .repo-monitors__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .news-option-grid,
+  .news-toggle-grid {
     grid-template-columns: minmax(0, 1fr);
   }
   .workspace__content {

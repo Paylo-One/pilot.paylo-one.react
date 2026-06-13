@@ -4,7 +4,8 @@ The application for **Paylo.one Management OS**, a private management operating
 system for high-context leaders. It runs **operationally against a local
 Supabase stack**: real magic-link auth (passkey-ready), multi-tenant workspaces
 with subdomain routing and Postgres RLS isolation, source ingestion (file/paste
-upload + a GitHub OAuth connector), a real **Daily Memo** generated via OpenAI
+upload + direct connectors), optional tenant-scoped **News Briefing** via RSS
+and GDELT, a real **Daily Memo** generated via OpenAI
 through the governed Model Gateway, an Actions queue, and a private Diary.
 
 Passkey auth is **real end-to-end** via native Supabase WebAuthn
@@ -57,7 +58,7 @@ modules/                  # the modular monolith — one folder per service
   mcp-registry/           # MCP servers + tools registry (capability + risk class)
   model-gateway/          # provider abstraction, routing, policy, validation
   model-catalogue/ model-entitlement/ model-usage-cost/ prompt-versioning/
-  briefing/ action-extraction/ diary/ source-connection/ ingestion/
+  briefing/ action-extraction/ diary/ source-connection/ ingestion/ news/
   normalisation/ knowledge-store/ search-retrieval/ agent-orchestration/
   notification/ audit/ billing/
 proxy.ts                  # host-based tenant resolution + auth gate (edge)
@@ -109,6 +110,12 @@ GitHub connector (optional): create a GitHub OAuth app with callback
 `http://app.lvh.me:3000/api/oauth/github/callback` and set
 `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET` in `.env.local`. File /
 paste upload works without it.
+
+News Briefing is optional and off by default. Open **Sources → News**, choose
+categories/keywords/monitored entities, enable RSS and/or GDELT, then use
+**Fetch now**. Scheduled ingestion calls `POST /api/news/ingest` with
+`Authorization: Bearer $NEWS_INGESTION_TOKEN`. Full implementation and API
+contracts are in [`docs/news-briefing.md`](docs/news-briefing.md).
 
 Checks:
 

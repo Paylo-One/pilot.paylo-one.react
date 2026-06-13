@@ -28,6 +28,22 @@ import type { WhatsAppMonitor, WhatsAppSession } from "./whatsapp.types";
  */
 export const SOURCE_DESCRIPTORS: readonly SourceDescriptor[] = [
   {
+    system: "news",
+    category: "external",
+    provider: "RSS + GDELT",
+    description:
+      "Relevant external signals matched to your companies, people, markets, and strategic interests.",
+    mvpStatus: "core",
+    authModel: "Tenant preferences; provider keys remain server-side",
+    dataPulled: "Headline, source, canonical URL, timestamp, language, and short snippet",
+    scopeControl: "Categories, keywords, regions, monitored entities, providers, and blocked sources",
+    dailyMemoUse: "Decision-focused External Signals above your relevance threshold",
+    defaultPolicy: "summaries_only",
+    referenceReady: true,
+    connect: "news_preferences",
+    riskNote: "Optional and off by default. Full article bodies are not stored.",
+  },
+  {
     system: "email",
     category: "communication",
     provider: "Google · Gmail",
@@ -199,6 +215,7 @@ export function deriveSourceStatus(
     case "phased":
       return "coming_soon";
     case "github_oauth":
+    case "news_preferences":
     case "file_upload":
     case "scaffold":
     default:
