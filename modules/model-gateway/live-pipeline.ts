@@ -34,6 +34,10 @@ import {
 import { modelCatalogueService, defaultOpenAiModelId } from "@/modules/model-catalogue";
 import type { ModelDescriptor } from "@/modules/model-catalogue";
 import { modelEntitlementService } from "@/modules/model-entitlement";
+import {
+  getActiveModelProviderWithKey,
+  tenantModelToDescriptor,
+} from "@/modules/tenant-models/server";
 import { promptVersioningService } from "@/modules/prompt-versioning/server";
 import { modelUsageCostService, type UsageStatus } from "@/modules/model-usage-cost";
 import { getAdapter, type AdapterRuntimeType } from "./adapters";
@@ -96,17 +100,31 @@ function parseJsonObject(content: string): Result<Record<string, unknown>> {
 export const livePipeline: GatewayPipeline = {
   policyCheck: {
     async check(req): Promise<Result<PolicyCheckOutcome>> {
-      // Resolve the model the call may use (catalogue-driven; nothing routes to
+      // BYO key (ADR-038): unless the caller pinned an explicit model, route the
+      // completion through the tenant's active, verified provider when one is set
+      // and it supports this task. The key is fetched again at the route stage —
+      // never carried in the (loggable) policy outcome.
+      let admittedModel: ModelDescriptor | null = null;
+      if (!req.requestedModelId) {
+        const byo = await getActiveModelProviderWithKey(req.ctx);
+        if (byo) {
+          const descriptor = tenantModelToDescriptor(byo.provider, byo.modelId);
+          if (descriptor.supportedTasks.includes(req.task)) admittedModel = descriptor;
+        }
+      }
+
+      // Otherwise resolve a platform model (catalogue-driven; nothing routes to
       // an uncatalogued/inactive model). Explicit id wins; else the policy's
       // first ordered candidate; else the default hosted model.
-      const targetId =
-        req.requestedModelId ??
-        req.modelPolicy?.orderedModelIds?.[0] ??
-        defaultOpenAiModelId();
-
-      const modelRes = await modelCatalogueService.assertRoutable(targetId, req.ctx);
-      if (!modelRes.ok) return modelRes;
-      const admittedModel = modelRes.value;
+      if (!admittedModel) {
+        const targetId =
+          req.requestedModelId ??
+          req.modelPolicy?.orderedModelIds?.[0] ??
+          defaultOpenAiModelId();
+        const modelRes = await modelCatalogueService.assertRoutable(targetId, req.ctx);
+        if (!modelRes.ok) return modelRes;
+        admittedModel = modelRes.value;
+      }
 
       // Entitlement is consulted on every call (allow-by-default in MVP).
       const entitlementRes = await modelEntitlementService.check(req.ctx, {
@@ -148,17 +166,31 @@ export const livePipeline: GatewayPipeline = {
   },
 
   route: {
-    async route(_req, policy, prompt): Promise<Result<RouteOutcome>> {
+    async route(req, policy, prompt): Promise<Result<RouteOutcome>> {
       const model = policy.admittedModel;
       if (!isAdapterRuntime(model.runtimeType)) {
         return err(new AppError("internal", `no adapter for runtime ${model.runtimeType}`));
       }
+
+      // Tenant-owned (BYO) model → use the tenant's key (server-only, fetched
+      // here so it never travels through the policy outcome). Platform models
+      // leave apiKey undefined and the adapter uses the Paylo server env key.
+      let apiKey: string | undefined;
+      if (model.ownerType === "tenant") {
+        const byo = await getActiveModelProviderWithKey(req.ctx);
+        if (!byo || byo.modelId !== model.modelId) {
+          return err(new AppError("internal", "tenant model key is no longer available"));
+        }
+        apiKey = byo.apiKey;
+      }
+
       const adapter = getAdapter(model.runtimeType);
       const raw = await adapter.complete({
         params: {
           modelId: model.modelId,
           temperature: prompt.resolved.version.temperature,
           maxTokens: prompt.resolved.version.maxTokens,
+          apiKey,
         },
         systemPrompt: prompt.systemPrompt,
         userPrompt: prompt.userPrompt,

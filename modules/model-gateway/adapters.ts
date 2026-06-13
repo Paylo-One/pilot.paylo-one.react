@@ -48,6 +48,12 @@ export interface AdapterModelParams {
   readonly modelId: string;
   readonly temperature: number;
   readonly maxTokens: number;
+  /**
+   * Bring-your-own-key override (ADR-038). When present, the adapter uses this
+   * tenant-supplied key instead of the Paylo server env key. Server-only; never
+   * logged or returned. Absent → the hosted Paylo key (platform models).
+   */
+  readonly apiKey?: string;
 }
 
 /**
@@ -110,11 +116,13 @@ function makeStubAdapter(runtimeType: AdapterRuntimeType): ModelAdapter {
 
 /**
  * Lazily construct the OpenAI client so merely importing this module never
- * requires the key; it is read from server env at call time and never leaves
- * the server (security-and-privacy.md: provider keys are server-side only).
+ * requires the key. The key is the tenant's BYO key when supplied (ADR-038),
+ * otherwise the Paylo server env key; either way it stays on the server and is
+ * never logged or returned (security-and-privacy.md: provider keys are
+ * server-side only).
  */
-function openAiClient(): OpenAI {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
+function openAiClient(overrideKey?: string): OpenAI {
+  const apiKey = overrideKey?.trim() || process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
     throw new AppError("internal", "OPENAI_API_KEY is not set");
   }
@@ -129,7 +137,7 @@ function openAiClient(): OpenAI {
 const realOpenAiAdapter: ModelAdapter = {
   runtimeType: "openai",
   async complete(req) {
-    const client = openAiClient();
+    const client = openAiClient(req.params.apiKey);
     const startedAt = Date.now();
     const completion = await client.chat.completions.create({
       model: req.params.modelId,
@@ -165,8 +173,79 @@ const realOpenAiAdapter: ModelAdapter = {
   },
 };
 
+/** Anthropic version pin for the Messages API (stable; sent on every call). */
+const ANTHROPIC_VERSION = "2023-06-01";
+
+/**
+ * Extract a JSON object from a model response. Anthropic has no native
+ * json_object mode (unlike OpenAI), so even with a strict-JSON system prompt the
+ * reply can carry a markdown fence or stray prose. We slice the first balanced
+ * `{ … }` span so the Gateway's strict `JSON.parse` post-process sees clean JSON;
+ * if none is found the raw content is returned and validation fails honestly.
+ */
+function extractJsonObject(content: string): string {
+  const fenced = content.replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
+  const start = fenced.indexOf("{");
+  const end = fenced.lastIndexOf("}");
+  if (start !== -1 && end > start) return fenced.slice(start, end + 1);
+  return fenced;
+}
+
+/**
+ * Real Anthropic adapter (BYO-key path; ADR-038). Calls the Messages API over
+ * fetch — no SDK dependency. JSON output is requested via the system prompt and
+ * defensively extracted (see `extractJsonObject`). Embeddings are unsupported by
+ * Anthropic, so `embed` throws at the provider boundary.
+ */
+const realAnthropicAdapter: ModelAdapter = {
+  runtimeType: "anthropic",
+  async complete(req) {
+    const apiKey = req.params.apiKey?.trim() || process.env.ANTHROPIC_API_KEY?.trim();
+    if (!apiKey) throw new AppError("internal", "ANTHROPIC_API_KEY is not set");
+    const startedAt = Date.now();
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": ANTHROPIC_VERSION,
+      },
+      body: JSON.stringify({
+        model: req.params.modelId,
+        max_tokens: req.params.maxTokens,
+        temperature: req.params.temperature,
+        system: `${req.systemPrompt}\n\nRespond with a single raw JSON object only — no markdown, no prose.`,
+        messages: [{ role: "user", content: req.userPrompt }],
+      }),
+      cache: "no-store",
+    });
+    const latencyMs = Date.now() - startedAt;
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new AppError("internal", `anthropic_request_failed_${res.status}: ${detail.slice(0, 200)}`);
+    }
+    const data = (await res.json()) as {
+      content?: { type: string; text?: string }[];
+      usage?: { input_tokens?: number; output_tokens?: number };
+    };
+    const text = (data.content ?? [])
+      .filter((block) => block.type === "text")
+      .map((block) => block.text ?? "")
+      .join("");
+    return {
+      content: extractJsonObject(text),
+      inputTokens: data.usage?.input_tokens ?? 0,
+      outputTokens: data.usage?.output_tokens ?? 0,
+      latencyMs,
+    };
+  },
+  async embed() {
+    throw new NotImplementedError("model-gateway.adapter[anthropic].embed (Anthropic has no embeddings API)");
+  },
+};
+
 export const openaiAdapter: ModelAdapter = realOpenAiAdapter;
-export const anthropicAdapter: ModelAdapter = makeStubAdapter("anthropic");
+export const anthropicAdapter: ModelAdapter = realAnthropicAdapter;
 export const azureOpenAiAdapter: ModelAdapter = makeStubAdapter("azure_openai");
 export const googleAdapter: ModelAdapter = makeStubAdapter("google");
 /** Stub today; implementing this single adapter is all vLLM rollout requires. */
