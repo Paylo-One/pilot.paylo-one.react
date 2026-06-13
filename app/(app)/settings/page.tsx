@@ -16,7 +16,11 @@ import {
   requireTenantContext,
   getSignedInUser,
 } from "@/modules/identity-tenant/server";
-import { isPrivilegedRole } from "@/modules/shared";
+import {
+  isPrivilegedRole,
+  AVAILABILITY_LABELS,
+  AVAILABILITY_TONE,
+} from "@/modules/shared";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { listTenantModelProviders } from "@/modules/tenant-models/server";
 import {
@@ -310,8 +314,19 @@ export default async function SettingsPage() {
           </div>
           <div className="meta-row">
             <span className="meta-row__key">Export &amp; delete</span>
-            <span className="meta-row__value">
-              <button type="button" className="btn btn--ghost btn--sm" disabled title="Coming soon">
+            <span
+              className="meta-row__value"
+              style={{
+                display: "flex",
+                gap: "var(--space-sm)",
+                alignItems: "center",
+                justifyContent: "flex-end",
+              }}
+            >
+              <span className={`status status--${AVAILABILITY_TONE.coming_soon}`}>
+                {AVAILABILITY_LABELS.coming_soon}
+              </span>
+              <button type="button" className="btn btn--ghost btn--sm" disabled title="Export and delete are coming soon">
                 Request export
               </button>
             </span>

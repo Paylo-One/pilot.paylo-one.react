@@ -33,6 +33,7 @@ import {
   initialDiaryFormState,
   type DiaryEntryType,
 } from "./types";
+import { AVAILABILITY_LABELS } from "@/modules/shared/availability";
 
 /** Plain, serialisable shape passed from the server component. */
 export interface DiaryEntryView {
@@ -233,15 +234,26 @@ export function DiaryComposer() {
         </label>
 
         <div className="diary-composer__actions">
-          <button
-            type="button"
-            className="btn btn--ghost"
-            disabled
-            title="Voice capture is coming soon."
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "var(--space-sm)",
+            }}
           >
-            <MicIcon />
-            Record voice note
-          </button>
+            <button
+              type="button"
+              className="btn btn--ghost"
+              disabled
+              title="Voice capture is coming soon."
+            >
+              <MicIcon />
+              Record voice note
+            </button>
+            <span className="status status--neutral">
+              {AVAILABILITY_LABELS.coming_soon}
+            </span>
+          </span>
           <button type="submit" className="btn btn--primary" disabled={pending}>
             {pending ? "Saving…" : "Save"}
           </button>

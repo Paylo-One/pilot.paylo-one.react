@@ -90,9 +90,9 @@ export function ConnectAction({ view }: { view: SourceView }) {
           type="button"
           className="btn btn--ghost btn--sm"
           disabled
-          title="Phased — connection deliberately deferred"
+          title="Coming soon — not yet available to connect"
         >
-          Phased
+          Coming soon
         </button>
       );
     case "file_upload":
