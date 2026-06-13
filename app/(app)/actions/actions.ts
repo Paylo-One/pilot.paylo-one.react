@@ -30,6 +30,58 @@ export interface DecideActionResponse {
   readonly error?: string;
 }
 
+export async function linkActionPerson(
+  actionId: string,
+  personId: string | null,
+): Promise<DecideActionResponse> {
+  if (!actionId) {
+    return { ok: false, error: "Action not found." };
+  }
+
+  const ctx = await requireTenantContext();
+  const supabase = await createSupabaseServerClient();
+
+  if (personId) {
+    const { data: person, error: personError } = await supabase
+      .from("people")
+      .select("id")
+      .eq("id", personId)
+      .eq("tenant_id", ctx.tenantId)
+      .maybeSingle();
+
+    if (personError) {
+      return { ok: false, error: personError.message };
+    }
+    if (!person) {
+      return { ok: false, error: "Person not found in this workspace." };
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("suggested_actions")
+    .update({ person_id: personId })
+    .eq("id", actionId)
+    .eq("tenant_id", ctx.tenantId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+  if (!data) {
+    return { ok: false, error: "Action not found." };
+  }
+
+  await auditService.record(ctx, {
+    action: personId ? "action.person.linked" : "action.person.unlinked",
+    target: actionId,
+    metadata: { personId },
+  });
+
+  revalidatePath("/actions");
+  return { ok: true };
+}
+
 export async function decideAction(
   actionId: string,
   decision: ActionDecision,

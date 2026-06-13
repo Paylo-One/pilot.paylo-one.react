@@ -3,8 +3,12 @@
 import { useMemo, useState } from "react";
 import type { SuggestedActionView } from "@/modules/action-extraction/server";
 import { ActionControls } from "./action-controls";
-import { PersonLinkControl } from "@/components/refinement/person-link-control";
+import {
+  PersonLinkControl,
+  type PersonLinkOption,
+} from "@/components/refinement/person-link-control";
 import { RefinementActions } from "@/components/refinement/refinement-actions";
+import { linkActionPerson } from "./actions";
 
 type LiveView = "today" | "captured" | "reviewed" | "all";
 
@@ -94,7 +98,13 @@ function ActionRow({
   );
 }
 
-function ActionInspector({ action }: { action: SuggestedActionView | null }) {
+function ActionInspector({
+  action,
+  people,
+}: {
+  action: SuggestedActionView | null;
+  people: readonly PersonLinkOption[];
+}) {
   if (!action) {
     return (
       <aside className="actions-inspector">
@@ -152,7 +162,13 @@ function ActionInspector({ action }: { action: SuggestedActionView | null }) {
 
       <section className="actions-inspector__section">
         <p className="actions-inspector__label">People</p>
-        <PersonLinkControl targetId={action.id} />
+        <PersonLinkControl
+          key={action.id}
+          targetId={action.id}
+          people={people}
+          initialPersonId={action.personId}
+          onChange={(personId) => linkActionPerson(action.id, personId)}
+        />
       </section>
 
       <section className="actions-inspector__section">
@@ -211,8 +227,10 @@ function ActionInspector({ action }: { action: SuggestedActionView | null }) {
 
 export function ActionsWorkspace({
   actions,
+  people,
 }: {
   actions: readonly SuggestedActionView[];
+  people: readonly PersonLinkOption[];
 }) {
   const [view, setView] = useState<LiveView>("today");
   const [query, setQuery] = useState("");
@@ -450,7 +468,7 @@ export function ActionsWorkspace({
           )}
         </section>
 
-        <ActionInspector action={selected} />
+        <ActionInspector action={selected} people={people} />
       </div>
     </>
   );

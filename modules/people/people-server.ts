@@ -147,6 +147,11 @@ async function loadBasePeople(): Promise<Person[]> {
   );
 }
 
+/** Tenant-owned people records without running source-item correlation. */
+export async function listPeopleDirectory(): Promise<Person[]> {
+  return loadBasePeople();
+}
+
 // --- Correlation reads ------------------------------------------------------
 
 interface SourceItemRow {

@@ -30,6 +30,7 @@ export interface SuggestedActionView {
   readonly title: string;
   readonly rationale: string | null;
   readonly dueAt: string | null;
+  readonly personId: string | null;
   readonly createdAt: string;
   readonly references: ActionSourceReference[];
 }
@@ -40,6 +41,7 @@ interface ActionRow {
   title: string;
   rationale: string | null;
   due_at: string | null;
+  person_id: string | null;
   created_at: string;
 }
 
@@ -58,7 +60,7 @@ export async function listSuggestedActions(tenantId: string): Promise<SuggestedA
 
   const { data: actionData } = await supabase
     .from("suggested_actions")
-    .select("id, status, title, rationale, due_at, created_at")
+    .select("id, status, title, rationale, due_at, person_id, created_at")
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false });
 
@@ -92,6 +94,7 @@ export async function listSuggestedActions(tenantId: string): Promise<SuggestedA
     title: a.title,
     rationale: a.rationale,
     dueAt: a.due_at,
+    personId: a.person_id,
     createdAt: a.created_at,
     references: referencesByAction.get(a.id) ?? [],
   }));
