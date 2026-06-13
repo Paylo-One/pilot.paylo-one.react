@@ -1,52 +1,35 @@
 /**
  * Settings — workspace identity, profile, model use, security and privacy,
- * invitations, tool access, and trust, plus admin views for privileged roles.
+ * referral, tool access, and trust. Admin views live in the separate /admin
+ * project and are intentionally not exposed in the user app.
  * Governance: multi-tenancy-design.md (tenant/subdomain), security-and-privacy.md
  * (storage + retention), authentication-architecture.md (passkeys),
  * model-inference-architecture.md (model use), product/access-and-invitations.md
- * (invitations + access requests), audit-and-source-traceability.md (audit).
+ * (referrals), audit-and-source-traceability.md (audit).
  *
- * Server component. Interactive sections (profile, your own model key, passkeys,
- * invitations) are tagged "Available". Sections that describe enforced behaviour
- * you can read but not change are tagged "Read only". Features that are not open
- * yet are tagged "Planned" and rendered as non-interactive roadmap.
+ * Server component. Interactive sections (profile, your own model key, passkeys)
+ * are tagged "Available". The referral section is read-only here — the code is
+ * created automatically and consumed during others' onboarding. Sections that
+ * describe enforced behaviour you can read but not change are tagged "Read
+ * only". Features that are not open yet are tagged "Planned".
  */
 
 import {
   requireTenantContext,
   getSignedInUser,
 } from "@/modules/identity-tenant/server";
-import {
-  isPrivilegedRole,
-  AVAILABILITY_LABELS,
-  AVAILABILITY_TONE,
-} from "@/modules/shared";
+import { AVAILABILITY_LABELS, AVAILABILITY_TONE } from "@/modules/shared";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { listTenantModelProviders } from "@/modules/tenant-models/server";
-import {
-  accessRequestService,
-  type AccessRequest,
-  type AccessRequestStatus,
-} from "@/modules/access-requests";
-import {
-  betaInvitationService,
-  invitationLink,
-  INVITATION_ALLOWANCE,
-  type TenantInvitation,
-} from "@/modules/beta-invitations";
+import { referralService } from "@/modules/referral";
 import {
   SettingsProfileForm,
   type ProfileFormValues,
 } from "./settings-form";
 import { PasskeysCard } from "./passkeys-card";
 import { ByoModelCard } from "@/components/settings/byo-model-card";
-import { InvitationsCard } from "./invitations-card";
+import { ReferralCard } from "./referral-card";
 import { SettingsNav } from "./settings-nav";
-import {
-  INVITATION_STATUS_LABELS,
-  INVITATION_STATUS_TONE,
-  type InvitationView,
-} from "./invitation-types";
 
 type SectionTag = "active" | "read-only" | "planned";
 
@@ -60,23 +43,6 @@ const TAG_LABELS: Record<SectionTag, string> = {
   active: "Available",
   "read-only": "Read only",
   planned: "Planned",
-};
-
-const REQUEST_STATUS_LABELS: Record<AccessRequestStatus, string> = {
-  pending: "Pending",
-  approved: "Approved",
-  declined: "Declined",
-  invited: "Invited",
-};
-
-const REQUEST_STATUS_TONE: Record<
-  AccessRequestStatus,
-  "info" | "ok" | "neutral"
-> = {
-  pending: "info",
-  approved: "ok",
-  declined: "neutral",
-  invited: "ok",
 };
 
 function SectionCard({
@@ -149,46 +115,20 @@ export default async function SettingsPage() {
     briefingTime: (profile?.briefing_time as string | null)?.slice(0, 5) ?? "",
   };
 
-  // Invitations: the signed-in user's allowance + their own invitations.
-  const [allowanceRes, minesRes] = await Promise.all([
-    betaInvitationService.allowance(ctx),
-    betaInvitationService.listMine(ctx),
+  // Referral: the signed-in user's personal code + who has joined through it.
+  const [referralOverviewRes, referralUsagesRes] = await Promise.all([
+    referralService.getOverview(ctx),
+    referralService.listUsages(ctx),
   ]);
-  const allowance = allowanceRes.ok
-    ? allowanceRes.value
-    : { total: INVITATION_ALLOWANCE, used: 0, remaining: INVITATION_ALLOWANCE };
-  const myInvitations: InvitationView[] = minesRes.ok
-    ? minesRes.value.map((inv) => ({
-        id: inv.id,
-        email: inv.email,
-        status: inv.status,
-        createdAt: inv.createdAt,
-        expiresAt: inv.expiresAt,
-        link: invitationLink(ctx, inv.token),
-      }))
-    : [];
+  const referral = referralOverviewRes.ok ? referralOverviewRes.value : null;
+  const referralUsages = referralUsagesRes.ok ? referralUsagesRes.value : [];
 
-  // Admin-only: access requests + every invitation in the workspace.
-  const privileged = isPrivilegedRole(ctx.role);
-  let accessRequests: AccessRequest[] = [];
-  let tenantInvitations: TenantInvitation[] = [];
-  if (privileged) {
-    const [requestsRes, tenantInvitesRes] = await Promise.all([
-      accessRequestService.listForReview(ctx, 25),
-      betaInvitationService.listForTenant(ctx),
-    ]);
-    if (requestsRes.ok) accessRequests = requestsRes.value;
-    if (tenantInvitesRes.ok) tenantInvitations = tenantInvitesRes.value;
-  }
-
-  // Section rail (Admin appears only for privileged roles).
   const sections = [
     { id: "workspace", label: "Workspace" },
     { id: "intelligence", label: "Intelligence" },
-    { id: "invitations", label: "Invitations" },
+    { id: "referral", label: "Referral" },
     { id: "security", label: "Security & privacy" },
     { id: "tools", label: "Tool access & trust" },
-    ...(privileged ? [{ id: "admin", label: "Admin" }] : []),
   ];
 
   return (
@@ -268,15 +208,22 @@ export default async function SettingsPage() {
           </div>
         </SectionCard>
 
-        {/* ===== Invitations ============================================== */}
-        <GroupHeading id="invitations">Invitations</GroupHeading>
+        {/* ===== Referral ================================================= */}
+        <GroupHeading id="referral">Referral</GroupHeading>
 
         <SectionCard
-          label="Beta invitations"
+          label="Referral"
           title="Invite people to Paylo.one"
           tag="active"
         >
-          <InvitationsCard allowance={allowance} invitations={myInvitations} />
+          {referral ? (
+            <ReferralCard overview={referral} usages={referralUsages} />
+          ) : (
+            <p className="action-card__rationale">
+              Your reference will be ready in a moment. Refresh to see your
+              invitation link.
+            </p>
+          )}
         </SectionCard>
 
         {/* ===== Security & privacy ======================================= */}
@@ -378,121 +325,6 @@ export default async function SettingsPage() {
           </div>
         </SectionCard>
 
-        {/* ===== Admin (privileged roles only) ============================ */}
-        {privileged ? (
-          <>
-            <GroupHeading id="admin">Admin</GroupHeading>
-
-            <SectionCard
-              label="Access requests"
-              title="People asking for access"
-              tag="read-only"
-            >
-              <p
-                className="action-card__rationale"
-                style={{ marginBottom: "var(--space-md)" }}
-              >
-                Requests submitted from the website. Review them and reach out by
-                email. Approving and inviting from here is coming soon.
-              </p>
-              {accessRequests.length === 0 ? (
-                <div className="empty">
-                  <p className="empty__title">No requests yet</p>
-                  <p className="empty__body">
-                    When someone asks for access from the website, it will appear
-                    here for review.
-                  </p>
-                </div>
-              ) : (
-                <div className="stack" style={{ gap: 0 }}>
-                  {accessRequests.map((req) => (
-                    <div className="meta-row" key={req.id}>
-                      <span className="meta-row__key" style={{ minWidth: 0 }}>
-                        <span style={{ color: "var(--colour-text-primary)" }}>
-                          {req.name}
-                        </span>
-                        <span
-                          className="mono"
-                          style={{
-                            display: "block",
-                            fontSize: "var(--text-label)",
-                            color: "var(--colour-text-tertiary)",
-                          }}
-                        >
-                          {req.email}
-                          {req.companyOrRole ? ` · ${req.companyOrRole}` : ""}
-                        </span>
-                        {req.reason ? (
-                          <span
-                            style={{
-                              display: "block",
-                              fontSize: "var(--text-small)",
-                              color: "var(--colour-text-secondary)",
-                              marginTop: "var(--space-xs)",
-                            }}
-                          >
-                            {req.reason}
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="meta-row__value">
-                        <span
-                          className={`status status--${REQUEST_STATUS_TONE[req.status]}`}
-                        >
-                          {REQUEST_STATUS_LABELS[req.status]}
-                        </span>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </SectionCard>
-
-            <SectionCard
-              label="Invitations"
-              title="All workspace invitations"
-              tag="read-only"
-            >
-              {tenantInvitations.length === 0 ? (
-                <div className="empty">
-                  <p className="empty__title">No invitations sent</p>
-                  <p className="empty__body">
-                    Invitations sent by anyone in this workspace will appear here.
-                  </p>
-                </div>
-              ) : (
-                <div className="stack" style={{ gap: 0 }}>
-                  {tenantInvitations.map((inv) => (
-                    <div className="meta-row" key={inv.id}>
-                      <span className="meta-row__key" style={{ minWidth: 0 }}>
-                        <span style={{ color: "var(--colour-text-primary)" }}>
-                          {inv.email}
-                        </span>
-                        <span
-                          className="mono"
-                          style={{
-                            display: "block",
-                            fontSize: "var(--text-label)",
-                            color: "var(--colour-text-tertiary)",
-                          }}
-                        >
-                          Sent by {inv.inviterName}
-                        </span>
-                      </span>
-                      <span className="meta-row__value">
-                        <span
-                          className={`status status--${INVITATION_STATUS_TONE[inv.status]}`}
-                        >
-                          {INVITATION_STATUS_LABELS[inv.status]}
-                        </span>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </SectionCard>
-          </>
-        ) : null}
         </div>
       </div>
     </main>

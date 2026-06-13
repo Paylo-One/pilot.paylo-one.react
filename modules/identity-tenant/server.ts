@@ -26,6 +26,7 @@ import { createSupabaseSecretClient } from "@/lib/supabase/secret";
 import { appHostBaseUrl, tenantBaseUrl } from "@/lib/config";
 import { isSelectableSubdomain } from "@/lib/tenant/host";
 import { seedTenantPrompts } from "@/modules/prompt-versioning/server";
+import { referralService } from "@/modules/referral";
 
 /** Header set by proxy.ts for a valid tenant subdomain (untrusted hint). */
 const TENANT_SLUG_HEADER = "x-paylo-tenant-slug";
@@ -198,6 +199,8 @@ export async function provisionTenantForUser(input: {
   desiredSubdomain: string;
   tenantName?: string;
   displayName?: string;
+  /** Referral code captured from a /join link, if this signup used one. */
+  referralCode?: string;
 }): Promise<ProvisionResult> {
   const slug = input.desiredSubdomain.toLowerCase().trim();
   if (!isSelectableSubdomain(slug)) {
@@ -275,6 +278,29 @@ export async function provisionTenantForUser(input: {
     target: slug,
     metadata: { via: "onboarding" },
   });
+
+  // Every new owner gets their own referral code. Best-effort: Settings also
+  // lazily creates it on first read, so a failure here must not block signup.
+  try {
+    await referralService.getOrCreateForOwner(input.userId, tenant.id as string);
+  } catch {
+    /* non-fatal: created lazily on first Settings read */
+  }
+
+  // If this signup arrived through someone's referral link, credit it now.
+  // Referral bookkeeping must never block the new user's own workspace.
+  if (input.referralCode) {
+    try {
+      await referralService.consume({
+        code: input.referralCode,
+        referredUserId: input.userId,
+        referredEmail: input.email,
+        referredTenantId: tenant.id as string,
+      });
+    } catch {
+      /* non-fatal */
+    }
+  }
 
   return { slug: tenant.slug as string, redirectTo: tenantBaseUrl(tenant.slug as string) };
 }

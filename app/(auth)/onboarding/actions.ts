@@ -12,7 +12,7 @@
  * appends another acceptance row to the immutable log.
  */
 
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
@@ -20,7 +20,11 @@ import {
   provisionTenantForUser,
 } from "@/modules/identity-tenant/server";
 import { recordLegalAcceptances } from "@/modules/legal/server";
+import { supabaseCookieOptions } from "@/lib/supabase/cookies";
 import { isSelectableSubdomain } from "@/lib/tenant/host";
+
+/** Apex-scoped cookie that carries a referral code from /join to onboarding. */
+const REFERRAL_COOKIE = "paylo_ref";
 
 export interface OnboardingState {
   error: string | null;
@@ -79,6 +83,11 @@ export async function createWorkspace(
     return { error: "Could not record your acceptance. Please try again." };
   }
 
+  // A referral link (if any) was captured as an apex-scoped cookie by the
+  // /join handler; credit it during provisioning, then clear it below.
+  const cookieStore = await cookies();
+  const referralCode = cookieStore.get(REFERRAL_COOKIE)?.value;
+
   let redirectTo: string;
   try {
     const result = await provisionTenantForUser({
@@ -86,6 +95,7 @@ export async function createWorkspace(
       email: user.email,
       desiredSubdomain: parsed.data.subdomain,
       tenantName: parsed.data.workspaceName,
+      referralCode,
     });
     redirectTo = result.redirectTo;
   } catch (err) {
@@ -97,6 +107,19 @@ export async function createWorkspace(
       return { error: "Choose 3–32 letters, numbers, or hyphens." };
     }
     return { error: "Could not create your workspace. Please try again." };
+  }
+
+  // Clear the referral cookie so a later signup in the same browser can't
+  // accidentally re-credit a stale code. Match the apex scope it was set with.
+  if (referralCode) {
+    const options = supabaseCookieOptions();
+    cookieStore.set(REFERRAL_COOKIE, "", {
+      domain: options.domain,
+      path: options.path,
+      sameSite: options.sameSite,
+      secure: options.secure,
+      maxAge: 0,
+    });
   }
 
   redirect(redirectTo);
