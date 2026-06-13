@@ -16,6 +16,7 @@ import {
   activatePromptVersionAction,
   archivePromptVersionAction,
   createPromptVersionAction,
+  resetPromptToDefaultAction,
   restorePromptVersionAction,
 } from "@/app/(app)/prompts/actions";
 import { VersionCompare } from "./version-compare";
@@ -51,6 +52,7 @@ export function VersionHistory({ prompt }: { prompt: TenantPromptDetail }) {
   const [changeNote, setChangeNote] = useState("");
   const [temperature, setTemperature] = useState<string>("");
   const [maxTokens, setMaxTokens] = useState<string>("");
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const versions = prompt.versions;
   const latest = versions[0] ?? null;
@@ -103,6 +105,16 @@ export function VersionHistory({ prompt }: { prompt: TenantPromptDetail }) {
     });
   }
 
+  function resetToDefault() {
+    setMessage(null);
+    startTransition(async () => {
+      const res = await resetPromptToDefaultAction({ promptId: prompt.id });
+      setConfirmReset(false);
+      if (res.ok) router.refresh();
+      else setMessage(res.error);
+    });
+  }
+
   function toggleCompare(id: string) {
     setCompareIds((prev) =>
       prev.includes(id)
@@ -117,19 +129,52 @@ export function VersionHistory({ prompt }: { prompt: TenantPromptDetail }) {
     <section className="card">
       <div className="card-head">
         <h2 className="card__title">Versions</h2>
-        <button
-          type="button"
-          className="btn btn--secondary btn--sm"
-          onClick={() => openEditor()}
-          disabled={pending}
-        >
-          New version
-        </button>
+        <div style={{ display: "flex", gap: "var(--space-sm)", flexWrap: "wrap" }}>
+          {confirmReset ? (
+            <>
+              <button
+                type="button"
+                className="btn btn--secondary btn--sm"
+                onClick={resetToDefault}
+                disabled={pending}
+              >
+                {pending ? "Resetting…" : "Confirm reset"}
+              </button>
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                onClick={() => setConfirmReset(false)}
+                disabled={pending}
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={() => setConfirmReset(true)}
+              disabled={pending}
+              title="Restore the built-in default prompt as a new active version"
+            >
+              Reset to default
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn--secondary btn--sm"
+            onClick={() => openEditor()}
+            disabled={pending}
+          >
+            New version
+          </button>
+        </div>
       </div>
 
       <p className="scaffold-note" style={{ marginBottom: "var(--space-md)" }}>
-        Editing never overwrites: changes are saved as a new draft version you
-        can test below and then activate. Select two versions to compare them.
+        {confirmReset
+          ? "Reset appends the built-in default prompt as a new active version and restores the default name, description, and settings. Your existing versions stay in the history below — nothing is deleted."
+          : "Editing never overwrites: changes are saved as a new draft version you can test below and then activate. Select two versions to compare them."}
       </p>
 
       {/* --- New version editor ---------------------------------------------- */}

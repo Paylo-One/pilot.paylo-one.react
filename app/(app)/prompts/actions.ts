@@ -25,6 +25,7 @@ import {
   getPromptVersion,
   getTenantPrompt,
   recordTestRun,
+  resetPromptToDefault,
   setPromptArchived,
   updatePromptMeta,
 } from "@/modules/prompt-versioning/server";
@@ -190,6 +191,34 @@ export async function restorePromptVersionAction(input: {
   });
   revalidatePrompts(v.tenantPromptId);
   return { ok: true, error: null, ...result.value };
+}
+
+/**
+ * Reset a prompt to its shipped default: appends a new active version carrying
+ * the default catalogue content + settings and restores the default metadata.
+ * Append-only — the prior versions stay in history; this is reversible via the
+ * version list. The new active version number is returned for the UI.
+ */
+export async function resetPromptToDefaultAction(input: {
+  promptId: string;
+}): Promise<ActionResponse & { versionNumber?: number }> {
+  const ctx = await requireTenantContext();
+  if (!input?.promptId) return failure("Missing prompt id.");
+
+  const result = await resetPromptToDefault(ctx, input.promptId);
+  if (!result.ok) return failure(result.error.message);
+
+  await auditService.record(ctx, {
+    action: "prompt.defaults.reset",
+    target: input.promptId,
+    metadata: {
+      templateKey: result.value.templateKey,
+      versionId: result.value.versionId,
+      versionNumber: result.value.versionNumber,
+    },
+  });
+  revalidatePrompts(input.promptId);
+  return { ok: true, error: null, versionNumber: result.value.versionNumber };
 }
 
 // --- Prompt metadata ------------------------------------------------------------

@@ -50,6 +50,7 @@ const AUDIT_LABELS: Record<string, string> = {
   "prompt.unarchived": "Prompt unarchived",
   "prompt.test.run": "Test run",
   "prompt.defaults.seeded": "Defaults seeded",
+  "prompt.defaults.reset": "Reset to default",
 };
 
 export default async function PromptDetailPage({

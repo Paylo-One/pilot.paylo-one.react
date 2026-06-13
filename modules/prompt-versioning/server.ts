@@ -35,7 +35,7 @@ import {
   type TenantPromptDetail,
   type TenantPromptSummary,
 } from "./index";
-import { DEFAULT_PROMPT_CATALOGUE } from "./defaults";
+import { DEFAULT_PROMPT_CATALOGUE, getPromptDefault } from "./defaults";
 
 // --- Row mapping --------------------------------------------------------------
 
@@ -529,6 +529,69 @@ export async function activatePromptVersion(
   });
   if (error) return err(new ValidationError(error.message));
   return ok(undefined);
+}
+
+/**
+ * Reset a prompt to its in-code default: append a new version carrying the
+ * shipped default content/variables/output/settings, activate it (archiving the
+ * previously active one), and restore the default name/description/catalogue
+ * version, unarchiving the prompt. History is preserved — reset never deletes;
+ * it adds a new active version identical to a fresh seed, so a customised prompt
+ * can always return to the thoughtful default without losing its audit trail.
+ */
+export async function resetPromptToDefault(
+  ctx: TenantContext,
+  tenantPromptId: string,
+): Promise<Result<{ versionId: string; versionNumber: number; templateKey: PromptTemplateKey }>> {
+  const secret = createSupabaseSecretClient();
+
+  // Ownership check + the template key the default catalogue is keyed by.
+  const { data: prompt, error: promptError } = await secret
+    .from("tenant_prompts")
+    .select("template_key")
+    .eq("id", tenantPromptId)
+    .eq("tenant_id", ctx.tenantId)
+    .maybeSingle();
+  if (promptError) return err(new ValidationError(promptError.message));
+  if (!prompt) return err(new ValidationError("prompt not found for tenant"));
+
+  const templateKey = prompt.template_key as PromptTemplateKey;
+  let def;
+  try {
+    def = getPromptDefault(templateKey);
+  } catch (cause) {
+    return err(new ValidationError(cause instanceof Error ? cause.message : "unknown prompt template"));
+  }
+
+  // Append the default as a new version (append-only — never overwrites).
+  const created = await createPromptVersion(ctx, {
+    tenantPromptId,
+    content: def.content,
+    inputVariables: def.inputVariables,
+    outputFormat: def.outputFormat,
+    modelSettings: def.modelSettings,
+    changeNote: `Reset to the default catalogue (v${def.catalogueVersion}).`,
+  });
+  if (!created.ok) return created;
+
+  // Activate it (atomically archives the previously active version).
+  const activated = await activatePromptVersion(ctx, created.value.versionId);
+  if (!activated.ok) return activated;
+
+  // Restore the default metadata + catalogue version and unarchive the prompt.
+  const { error: metaError } = await secret
+    .from("tenant_prompts")
+    .update({
+      name: def.name,
+      description: def.description,
+      catalogue_version: def.catalogueVersion,
+      archived_at: null,
+    })
+    .eq("id", tenantPromptId)
+    .eq("tenant_id", ctx.tenantId);
+  if (metaError) return err(new ValidationError(metaError.message));
+
+  return ok({ ...created.value, templateKey });
 }
 
 /** Archive a version (allowed for active versions too — resolve then falls back). */
