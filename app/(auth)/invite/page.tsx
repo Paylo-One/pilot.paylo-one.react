@@ -73,7 +73,7 @@ export default function InviteAcceptancePage() {
             type="button"
             className="btn btn--primary"
             disabled
-            title="Passkey registration is designed, not yet wired in this scaffold"
+            title="Setting up your passkey from an invite is coming soon."
           >
             Create my passkey
           </button>
@@ -81,9 +81,9 @@ export default function InviteAcceptancePage() {
       </div>
 
       <p className="scaffold-note" style={{ marginTop: "var(--space-lg)" }}>
-        Scaffold: this screen is a static placeholder. Invite-token validation,
-        passkey registration / attestation verification, and tenant provisioning
-        are documented but not yet implemented.
+        Accepting an invitation and setting up your passkey here is coming soon.
+        If you have an invite link, keep it handy and we will guide you through
+        the rest.
       </p>
     </>
   );

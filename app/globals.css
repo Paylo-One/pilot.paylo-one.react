@@ -2682,4 +2682,92 @@ button {
   background: var(--colour-danger-tint);
   color: var(--colour-danger);
 }
+
+/* ============================================================================
+   FEATURE AVAILABILITY — Available / Planned / Coming soon
+   Planned and coming-soon surfaces stay visible but read as intentional
+   roadmap: muted and non-interactive, never broken or half-built.
+   ========================================================================== */
+/* A navigation entry for a feature that is not open yet: visible, labelled,
+   and clearly non-interactive (rendered as a non-link element). */
+.nav__item--planned {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.nav__item--planned:hover {
+  background: transparent;
+  color: var(--colour-command-text-muted);
+}
+/* A card describing a planned surface: hairline becomes a dashed outline so it
+   reads as a roadmap placeholder, not a live panel. */
+.card--planned {
+  border-style: dashed;
+  background: var(--colour-surface-sunken);
+}
+
+/* ============================================================================
+   SETTINGS — section navigation rail
+   A sticky left rail of in-page links (desktop) that collapses to a scrollable
+   bar above the content on narrow screens. Keeps a long settings page easy to
+   scan and jump around.
+   ========================================================================== */
+.settings-layout {
+  display: grid;
+  grid-template-columns: 188px minmax(0, 1fr);
+  gap: var(--space-xl);
+  align-items: start;
+}
+.settings-toc {
+  position: sticky;
+  top: 76px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-toc__link {
+  padding: var(--space-sm);
+  border-left: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-small);
+  font-weight: 500;
+  color: var(--colour-text-tertiary);
+  transition: color var(--speed) var(--ease-standard),
+    background var(--speed) var(--ease-standard);
+}
+.settings-toc__link:hover {
+  color: var(--colour-text-primary);
+  background: var(--colour-surface-sunken);
+}
+.settings-toc__link--active {
+  color: var(--colour-text-primary);
+  border-left-color: var(--colour-accent);
+}
+/* Clears the sticky topbar when jumping to a section via its anchor. */
+.settings-group-heading {
+  scroll-margin-top: 84px;
+}
+@media (max-width: 960px) {
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .settings-toc {
+    position: static;
+    flex-direction: row;
+    gap: var(--space-xs);
+    overflow-x: auto;
+    padding-bottom: var(--space-sm);
+    margin-bottom: var(--space-xs);
+    border-bottom: 1px solid var(--colour-border);
+  }
+  .settings-toc__link {
+    white-space: nowrap;
+    border-left: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+  }
+  .settings-toc__link--active {
+    border-left-color: transparent;
+    border-bottom-color: var(--colour-accent);
+  }
+}
 } /* end @layer components */

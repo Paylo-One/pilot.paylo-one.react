@@ -1,171 +1,89 @@
 /**
- * Tenant Tool Layer (MCP) — system surface. Presents the tenant-scoped MCP tool
- * layer in product language, not developer jargon. Governance:
- * architecture/mcp-tool-architecture.md, services/tool-gateway-service.md,
- * services/mcp-server-registry-service.md.
- *
- * Server Component: reads the tenant-visible, active MCP servers + tools from
- * the in-memory registry (mcpRegistryService). The registry only DESCRIBES
- * servers; nothing is invoked here. Read-only tools are allowed (and audited);
- * write/dangerous tools require recorded human approval before execution.
+ * Tool Layer — a planned surface. When it is switched on, Paylo.one will be able
+ * to use a small set of approved tools to gather context for you, under clear
+ * rules. It is not open yet, so this page explains what is coming rather than
+ * exposing an unfinished flow. The navigation entry for it is disabled until it
+ * is available. Governance: governance/docs/product/release-readiness.md.
  */
 
-import { requireTenantContext } from "@/modules/identity-tenant/server";
-import {
-  mcpRegistryService,
-  type McpServer,
-  type RiskClass,
-} from "@/modules/mcp-registry";
+import { AVAILABILITY_LABELS } from "@/modules/shared/availability";
 
-const RISK_LABELS: Record<RiskClass, { label: string; tone: string }> = {
-  read_only: { label: "Read-only", tone: "ok" },
-  write: { label: "Write", tone: "warn" },
-  dangerous: { label: "Dangerous", tone: "risk" },
-};
+const CAPABILITIES = [
+  {
+    title: "Read-only by default",
+    body: "Tools that only look things up run quietly in the background and are always logged, so you can see exactly what was used and when.",
+  },
+  {
+    title: "Your approval before any change",
+    body: "Anything that would send, post, or change something is held for your explicit approval. Nothing acts on your behalf without you.",
+  },
+  {
+    title: "Private to your workspace",
+    body: "Tools are limited to your workspace, and anything they return is treated as information to consider, never as instructions to follow.",
+  },
+];
 
-const OWNER_LABELS: Record<McpServer["ownerScope"], string> = {
-  paylo: "Paylo-hosted",
-  tenant: "Tenant-owned",
-  third_party: "Third-party",
-};
-
-export default async function McpPage() {
-  const ctx = await requireTenantContext();
-  const servers = await mcpRegistryService.listServers(ctx.tenantId);
-  const tools = servers.flatMap((server) =>
-    server.tools.map((tool) => ({ server, tool })),
-  );
-
+export default function ToolLayerPage() {
   return (
     <main className="workspace__content">
       <div className="page-head">
-        <p className="eyebrow">Tenant Tool Layer · MCP</p>
-        <h1 className="page-head__title">Tenant Tool Layer</h1>
-        <p className="page-head__lead">
-          Approved tenant-specific tools and resources exposed to Paylo.one
-          agents through a controlled, permissioned, auditable MCP layer. Agents
-          ask the gateway to run a named tool; it enforces policy, requires human
-          approval for anything that changes the world, and records every call.
-        </p>
-      </div>
-
-      {/* Isolation + audit markers */}
-      <div
-        style={{
-          display: "flex",
-          gap: "var(--space-sm)",
-          flexWrap: "wrap",
-          marginBottom: "var(--space-lg)",
-        }}
-      >
-        <span className="status status--ok">Tenant-isolated</span>
-        <span className="status status--info">Audited</span>
-        <span className="status status--neutral">
-          {ctx.tenantSlug}.paylo.one
-        </span>
-        <span className="badge">read-only · MVP</span>
-      </div>
-
-      {/* Registered tools */}
-      <section style={{ marginBottom: "var(--space-xl)" }}>
-        <div className="card">
-          <div className="card-head">
-            <div>
-              <p className="eyebrow">Registered tools</p>
-              <h2 className="card__title">What agents may call</h2>
-            </div>
-            <span className="badge">{tools.length}</span>
-          </div>
-
-          {tools.length === 0 ? (
-            <div className="empty">
-              <p className="empty__title">No tools registered</p>
-              <p className="empty__body">
-                When tools are approved for this workspace they appear here with
-                their risk class and approval requirement.
-              </p>
-            </div>
-          ) : (
-            <div>
-              {tools.map(({ server, tool }) => {
-                const risk = RISK_LABELS[tool.riskClass];
-                return (
-                  <div className="tool-row" key={`${server.id}.${tool.name}`}>
-                    <div className="tool-row__main">
-                      <p className="tool-row__name">{tool.name}</p>
-                      <p className="tool-row__desc">{tool.description}</p>
-                      <div className="source-ref-row">
-                        <span className="badge badge--plain">
-                          {OWNER_LABELS[server.ownerScope]}
-                        </span>
-                        <span className="badge badge--plain">{server.name}</span>
-                        <span className="badge badge--plain">
-                          {tool.supportedTasks.join(", ")}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="tool-row__tags">
-                      <span className={`status status--${risk.tone}`}>
-                        {risk.label}
-                      </span>
-                      <span
-                        className={`status ${
-                          tool.requiresApproval
-                            ? "status--warn"
-                            : "status--neutral"
-                        }`}
-                      >
-                        {tool.requiresApproval ? "Approval required" : "No approval"}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* Registered resources */}
-      <section style={{ marginBottom: "var(--space-xl)" }}>
-        <div className="card">
-          <div className="card-head">
-            <p className="eyebrow">Registered resources</p>
-            <span className="badge">future</span>
-          </div>
-          <div className="empty">
-            <p className="empty__title">No resources exposed yet</p>
-            <p className="empty__body">
-              Tenant-scoped resources (documents, datasets) will surface here
-              once registered, under the same permission and audit contract.
+        <div className="page-head__row">
+          <div>
+            <p className="eyebrow">Tool Layer</p>
+            <h1 className="page-head__title">Tool Layer</h1>
+            <p className="page-head__lead">
+              A safe, approved way for Paylo.one to use outside tools to gather
+              context for you, always under your control. This is on our roadmap
+              and will be switched on with help during onboarding, not before.
             </p>
           </div>
+          <span className="status status--info">
+            {AVAILABILITY_LABELS.planned}
+          </span>
         </div>
-      </section>
+      </div>
 
-      {/* Invocation log */}
-      <section style={{ marginBottom: "var(--space-xl)" }}>
-        <div className="card">
-          <div className="card-head">
-            <p className="eyebrow">Invocation log</p>
-            <span className="badge">audit</span>
+      <div className="card card--planned">
+        <div className="card-head">
+          <div>
+            <p className="eyebrow">What to expect</p>
+            <h2 className="card__title">How the Tool Layer will work</h2>
           </div>
-          <div className="empty">
-            <p className="empty__title">No tool invocations recorded</p>
-            <p className="empty__body">
-              Every call — initiator, tool, server, approval reference, and
-              result — is written to the tenant audit log and listed here.
-            </p>
-          </div>
+          <span className="status status--info">
+            {AVAILABILITY_LABELS.planned}
+          </span>
         </div>
-      </section>
+        <div className="stack" style={{ gap: "var(--space-md)" }}>
+          {CAPABILITIES.map((capability) => (
+            <div className="meta-row" key={capability.title}>
+              <span className="meta-row__key" style={{ minWidth: 0 }}>
+                <span
+                  style={{
+                    color: "var(--colour-text-primary)",
+                    fontWeight: 600,
+                  }}
+                >
+                  {capability.title}
+                </span>
+                <span
+                  style={{
+                    display: "block",
+                    color: "var(--colour-text-secondary)",
+                    fontSize: "var(--text-small)",
+                    marginTop: "var(--space-xs)",
+                  }}
+                >
+                  {capability.body}
+                </span>
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
 
-      <p className="scaffold-note">
-        Read-only tools are allowed and audited; write and dangerous tools are
-        approval-gated and surface as suggested actions before they ever run.
-        Nothing is callable unless it is registered and active. Servers and
-        invocation routing are scaffolded — no MCP server is contacted in this
-        build.
+      <p className="scaffold-note" style={{ marginTop: "var(--space-lg)" }}>
+        We will let you know when the Tool Layer is ready for your workspace.
+        Until then, nothing here is active.
       </p>
     </main>
   );

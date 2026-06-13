@@ -207,8 +207,8 @@ export default async function ActionsPage() {
       )}
 
       <p className="scaffold-note" style={{ marginTop: "var(--space-lg)" }}>
-        No autonomous external actions. Decisions change status only — nothing
-        leaves the system. Every transition is recorded to the tenant audit log.
+        Nothing is ever sent for you. Approving, deferring, or dismissing only
+        changes an item&rsquo;s status here, and every change is recorded.
       </p>
     </main>
   );

@@ -24,9 +24,9 @@ export default async function PromptsPage() {
         <h1 className="page-head__title">Prompt library</h1>
         <p className="page-head__lead">
           The instructions that decide how your workspace classifies, ranks,
-          triages, and briefs. Each prompt is tenant-scoped and versioned:
-          edits never overwrite, every change is audited, and you can test a
-          draft against real signals before activating it.
+          triages, and briefs. Each prompt is private to your workspace and
+          versioned: edits never overwrite, every change is kept on record, and
+          you can test a draft against real signals before activating it.
         </p>
       </div>
 

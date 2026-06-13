@@ -32,12 +32,12 @@ export default async function PeoplePage() {
       <PeopleBrowser people={people} suggestions={suggestions} />
 
       <p className="scaffold-note" style={{ marginTop: "var(--space-xl)" }}>
-        People, their cross-source identities, and correlation are persisted and
-        tenant-scoped. “Run correlation” resolves recent ingested items to people
-        by their verified identities: confident matches become signals; uncertain
-        ones become confirmable “same person?” suggestions. The system never
-        silently merges people — every link is confirmable, and confirming locks
-        a verified identity so future items resolve automatically.
+        People, and the way their accounts across different tools are linked, stay
+        private to your workspace. “Run correlation” looks at your recent items and
+        matches them to the right person: confident matches become signals, and
+        anything uncertain becomes a “same person?” suggestion for you to confirm.
+        Nothing is ever merged for you — you confirm every link, and once you do,
+        future items match automatically.
       </p>
     </main>
   );

@@ -39,9 +39,9 @@ export default async function SignInPage() {
       <SignInForm />
 
       <p className="scaffold-note" style={{ marginTop: "var(--space-lg)" }}>
-        Passkeys are the primary credential (RP ID = paylo.one, one passkey
-        across every &lt;slug&gt;.paylo.one). No passkey on this device yet?
-        Use the magic link, then enrol one under Settings → Security.
+        Passkeys are the main way to sign in, and one passkey works across your
+        whole workspace. No passkey on this device yet? Use the email magic
+        link, then add one under Settings → Security.
       </p>
     </>
   );

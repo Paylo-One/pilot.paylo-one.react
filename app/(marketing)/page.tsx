@@ -45,37 +45,41 @@ export default async function AppApexLanding() {
 
       <p className="eyebrow">A private management operating system</p>
       <h1 style={{ fontSize: "var(--text-h1)", margin: "var(--space-sm) 0 var(--space-md)" }}>
-        Run your operating context from one calm management layer.
+        Run your whole leadership context from one calm place.
       </h1>
       <p className="text-secondary measure" style={{ fontSize: "var(--text-body)" }}>
-        Every morning, know what matters, what changed, what needs approval, and
-        what cannot slip. Source-referenced briefings for leaders managing
-        decisions, actions, signals, and context across fragmented channels.
+        Paylo.one pulls together the email, messages, calendar, and documents you
+        already work across, then gives you one short brief each morning: what
+        matters today, what changed, what needs a decision, and what cannot slip.
+        Built for leaders who carry a lot of context and cannot afford to lose
+        any of it.
       </p>
 
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "var(--space-sm)",
-          margin: "var(--space-lg) 0",
-        }}
-      >
-        <span className="badge badge--plain">Daily Memo</span>
-        <span className="badge badge--plain">Suggested actions · your approval</span>
-        <span className="badge badge--plain">Private diary</span>
-        <span className="badge badge--plain">Source-referenced</span>
-      </div>
+      <ul className="stack" style={{ gap: "var(--space-sm)", margin: "var(--space-lg) 0" }}>
+        <li className="text-secondary" style={{ fontSize: "var(--text-small)" }}>
+          A clear daily brief, with every point traceable to where it came from
+        </li>
+        <li className="text-secondary" style={{ fontSize: "var(--text-small)" }}>
+          Suggested next steps that wait for your approval — nothing is sent for you
+        </li>
+        <li className="text-secondary" style={{ fontSize: "var(--text-small)" }}>
+          A private space to keep your decisions and the thinking behind them
+        </li>
+      </ul>
 
       <p className="text-tertiary" style={{ fontSize: "var(--text-small)", marginBottom: "var(--space-lg)" }}>
-        Each operator works inside their own isolated workspace at{" "}
-        <span className="mono">&lt;slug&gt;.paylo.one</span>. Access is
-        invite-only.
+        Your workspace is private to you. Access is invite-only while we are in
+        private beta.
       </p>
 
-      <Link href="/sign-in" className="btn btn--primary">
-        Sign in
-      </Link>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-sm)" }}>
+        <Link href="/request-access" className="btn btn--primary">
+          Request access
+        </Link>
+        <Link href="/sign-in" className="btn btn--secondary">
+          Sign in
+        </Link>
+      </div>
 
       <footer className="landing__footer">
         <Link href="/terms">Terms and Conditions</Link>

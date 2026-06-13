@@ -6,18 +6,25 @@
  * Primary navigation for the workspace command layer. Client component only so
  * it can resolve the active surface from the pathname; it holds no other state.
  *
- * Wording follows product/screen-map.md and the task's product-language rule:
- * the MCP surface is presented to operators as the "Tenant Tool Layer", with
- * MCP kept as a quiet technical marker.
+ * Wording is plain operator language: the tool-access surface is presented as
+ * the "Tool Layer". Features that are not open yet carry an availability state
+ * (Planned / Coming soon) and render as non-interactive entries rather than
+ * links, so the roadmap is visible without exposing unfinished flows.
  */
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  type Availability,
+  AVAILABILITY_LABELS,
+} from "@/modules/shared/availability";
 
 interface NavItem {
   href: string;
   label: string;
   tag?: string;
+  /** Defaults to "available". Non-available items render disabled. */
+  availability?: Availability;
   icon: React.ReactNode;
 }
 
@@ -108,8 +115,8 @@ const GROUPS: NavGroup[] = [
       },
       {
         href: "/mcp",
-        label: "Tenant Tool Layer",
-        tag: "MCP",
+        label: "Tool Layer",
+        availability: "planned",
         icon: (
           <svg {...ICON_PROPS}>
             <path d="M12 2 3 7v10l9 5 9-5V7l-9-5Z" />
@@ -152,6 +159,29 @@ export function WorkspaceNav({
         <div key={group.label} className="nav__group">
           <span className="nav__group-label">{group.label}</span>
           {group.items.map((item) => {
+            const planned =
+              item.availability && item.availability !== "available";
+
+            // Planned / coming-soon surfaces are visible but non-interactive:
+            // a non-link element carrying the roadmap label, so users can see
+            // what is coming without clicking into an unfinished flow.
+            if (planned) {
+              return (
+                <div
+                  key={item.href}
+                  className="nav__item nav__item--planned"
+                  aria-disabled="true"
+                  title={`${AVAILABILITY_LABELS[item.availability!]} — not yet open`}
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                  <span className="nav__item-tag">
+                    {AVAILABILITY_LABELS[item.availability!]}
+                  </span>
+                </div>
+              );
+            }
+
             const active =
               pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (

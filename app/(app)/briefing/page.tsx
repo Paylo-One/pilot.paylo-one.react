@@ -417,8 +417,8 @@ export default async function BriefingPage() {
       )}
 
       <p className="scaffold-note" style={{ marginTop: "var(--space-lg)" }}>
-        Generation runs through agent orchestration and the governed Model
-        Gateway. The system prepares; nothing is sent on your behalf.
+        Your memo is assembled privately from the sources you have connected.
+        Nothing is sent or shared on your behalf.
       </p>
     </main>
   );

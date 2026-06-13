@@ -89,7 +89,7 @@ export function DiaryComposer() {
           type="button"
           className="btn btn--ghost"
           disabled
-          title="Voice capture + transcription — designed, not yet wired in this scaffold"
+          title="Voice capture is coming soon."
         >
           <svg
             width="15"
