@@ -21,6 +21,9 @@
  */
 
 import { NextResponse } from "next/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/secret";
+import { resolveTenantContext } from "@/modules/identity-tenant/server";
+import { resolveEntitlements, requireWithinLimit } from "@/modules/billing";
 
 /** Shared 501 response for every method on this not-yet-built boundary. */
 function notImplemented() {
@@ -36,10 +39,84 @@ function notImplemented() {
   );
 }
 
-export function GET() {
+async function runBillingChecks(tenantId: string) {
+  try {
+    const resolved = await resolveEntitlements({ tenantId });
+    if (!resolved.ok) {
+      console.warn(
+        "[billing][observe] Model gateway checks: entitlement resolution failed; allowing (fail-open)",
+        { tenantId, error: resolved.error.code },
+      );
+      return;
+    }
+
+    const entitlements = resolved.value;
+
+    // 1. check canUseBYOApiKeys capability (observe-only)
+    if (!entitlements.canUseBYOApiKeys) {
+      console.warn(
+        "[billing][observe] canUseBYOApiKeys: WOULD block API gateway request (observe-only; allowing)",
+        { tenantId }
+      );
+    }
+
+    // 2. check monthlyAiTokenAllowance limit (observe-only)
+    const startOfMonth = new Date();
+    startOfMonth.setUTCDate(1);
+    startOfMonth.setUTCHours(0, 0, 0, 0);
+    const startOfMonthStr = startOfMonth.toISOString();
+
+    const secret = createSupabaseSecretClient();
+    const { data: usageRows, error: usageError } = await secret
+      .from("model_usage")
+      .select("total_tokens")
+      .eq("tenant_id", tenantId)
+      .gte("created_at", startOfMonthStr);
+
+    if (usageError) {
+      console.warn(
+        "[billing][observe] monthlyAiTokenAllowance: failed to count token usage; allowing (fail-open)",
+        { tenantId, error: usageError.message }
+      );
+      return;
+    }
+
+    const currentTokens = (usageRows ?? []).reduce((sum, row) => sum + (row.total_tokens ?? 0), 0);
+    const decision = requireWithinLimit(entitlements, "monthlyAiTokenAllowance", currentTokens, 1);
+    if (!decision.ok) {
+      const detail = decision.error.detail ?? {};
+      console.warn(
+        "[billing][observe] monthlyAiTokenAllowance: WOULD block API gateway request (observe-only; allowing)",
+        {
+          tenantId,
+          currentTokens,
+          ...detail,
+        }
+      );
+    }
+  } catch (cause) {
+    console.warn(
+      "[billing][observe] Model gateway checks: check errored; allowing (fail-open)",
+      {
+        tenantId,
+        error: cause instanceof Error ? cause.message : String(cause),
+      },
+    );
+  }
+}
+
+export async function GET() {
+  const resolution = await resolveTenantContext();
+  if (resolution.kind === "ok") {
+    await runBillingChecks(resolution.context.tenantId);
+  }
   return notImplemented();
 }
 
-export function POST() {
+export async function POST() {
+  const resolution = await resolveTenantContext();
+  if (resolution.kind === "ok") {
+    await runBillingChecks(resolution.context.tenantId);
+  }
   return notImplemented();
 }

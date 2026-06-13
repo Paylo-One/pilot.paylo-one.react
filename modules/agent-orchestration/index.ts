@@ -32,6 +32,7 @@ import { listMemoSourceItems, type StoredSourceItem } from "@/modules/knowledge-
 import { auditService } from "@/modules/audit";
 import { modelGateway, type GatewayRequest, type RetrievalContextItem } from "@/modules/model-gateway";
 import { appendExternalSignalsToBriefing } from "@/modules/news/briefing";
+import { checkBriefingLimit } from "@/modules/briefing/server";
 
 export type AgentKind =
   | "daily_memo"
@@ -320,6 +321,9 @@ async function persistMemo(
 /** The Daily Memo agent: retrieve -> Gateway -> validate -> persist. */
 async function runDailyMemo(ctx: TenantContext): Promise<Result<AgentRunResult>> {
   const agentRunId = randomUUID();
+
+  // Billing capability check (observe-only)
+  await checkBriefingLimit(ctx.tenantId);
 
   const items = await listMemoSourceItems(ctx.tenantId, MEMO_ITEM_LIMIT);
   if (items.length === 0) {

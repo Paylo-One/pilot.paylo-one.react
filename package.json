@@ -15,6 +15,7 @@
   "dependencies": {
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.47.10",
+    "inngest": "^4.5.1",
     "next": "16.2.9",
     "openai": "^4.77.0",
     "react": "19.2.7",

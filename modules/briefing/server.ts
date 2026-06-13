@@ -14,11 +14,81 @@ import "server-only";
  */
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseSecretClient } from "@/lib/supabase/secret";
 import { listPeople } from "@/modules/people/people-server";
 import type { PersonImportanceLevel, PersonSignal } from "@/modules/people/people.types";
 import type { ExternalSignalView } from "@/modules/news";
 import { getBriefingExternalSignals } from "@/modules/news/briefing";
 import type { TenantContext } from "@/modules/shared";
+import { resolveEntitlements, requireWithinLimit } from "@/modules/billing";
+
+/**
+ * Count the tenant's generated briefings for today (UTC calendar day) and check against `maxBriefingsPerDay`.
+ * This is an observe-only check: it logs a warning if the limit is exceeded but lets the action proceed.
+ */
+export async function checkBriefingLimit(tenantId: string): Promise<boolean> {
+  try {
+    const resolved = await resolveEntitlements({ tenantId });
+    if (!resolved.ok) {
+      console.warn(
+        "[billing][observe] maxBriefingsPerDay: entitlement resolution failed; allowing (fail-open)",
+        { tenantId, error: resolved.error.code },
+      );
+      return true;
+    }
+
+    const secret = createSupabaseSecretClient();
+    const startOfToday = new Date();
+    startOfToday.setUTCHours(0, 0, 0, 0);
+    const startOfTodayStr = startOfToday.toISOString();
+
+    const { count, error } = await secret
+      .from("briefings")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", tenantId)
+      .gte("generated_at", startOfTodayStr);
+
+    if (error) {
+      console.warn(
+        "[billing][observe] maxBriefingsPerDay: failed to count briefings; allowing (fail-open)",
+        { tenantId, error: error.message },
+      );
+      return true;
+    }
+
+    const current = count ?? 0;
+    const decision = requireWithinLimit(
+      resolved.value,
+      "maxBriefingsPerDay",
+      current,
+      1,
+    );
+
+    if (decision.ok) return true;
+
+    // Denied by the plan limit.
+    const detail = decision.error.detail ?? {};
+    console.warn(
+      "[billing][observe] maxBriefingsPerDay: WOULD block briefing generation (observe-only; allowing)",
+      {
+        tenantId,
+        current,
+        ...detail,
+      },
+    );
+    return true;
+  } catch (cause) {
+    console.warn(
+      "[billing][observe] maxBriefingsPerDay: check errored; allowing (fail-open)",
+      {
+        tenantId,
+        error: cause instanceof Error ? cause.message : String(cause),
+      },
+    );
+    return true;
+  }
+}
+
 
 export interface BriefingSourceReference {
   readonly id: string;
