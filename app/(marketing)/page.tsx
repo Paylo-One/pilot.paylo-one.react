@@ -51,8 +51,9 @@ export default async function AppApexLanding() {
         Paylo.one pulls together the email, messages, calendar, and documents you
         already work across, then gives you one short brief each morning: what
         matters today, what changed, what needs a decision, and what cannot slip.
-        Built for leaders who carry a lot of context and cannot afford to lose
-        any of it.
+        Source-backed Actions keeps the commitments, people, and context behind
+        the next move together. Built for leaders who carry a lot of context and
+        cannot afford to lose any of it.
       </p>
 
       <ul className="stack" style={{ gap: "var(--space-sm)", margin: "var(--space-lg) 0" }}>
@@ -60,7 +61,7 @@ export default async function AppApexLanding() {
           A clear daily brief, with every point traceable to where it came from
         </li>
         <li className="text-secondary" style={{ fontSize: "var(--text-small)" }}>
-          Suggested next steps that wait for your approval — nothing is sent for you
+          Actions with their rationale and source, held for your approval
         </li>
         <li className="text-secondary" style={{ fontSize: "var(--text-small)" }}>
           A private space to keep your decisions and the thinking behind them
