@@ -40,6 +40,7 @@ export interface SuggestedActionView {
   readonly topics: string[];
   readonly snoozeMetadata: any;
   readonly completionMetadata: any;
+  readonly documents: any[];
   readonly references: ActionSourceReference[];
 }
 
@@ -61,6 +62,7 @@ interface ActionRow {
   topics: string[];
   snooze_metadata: any;
   completion_metadata: any;
+  documents: any[];
 }
 
 interface SourceReferenceRow {
@@ -95,7 +97,8 @@ export async function listSuggestedActions(tenantId: string): Promise<SuggestedA
       created_from,
       topics,
       snooze_metadata,
-      completion_metadata
+      completion_metadata,
+      documents
     `)
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false });
@@ -142,6 +145,7 @@ export async function listSuggestedActions(tenantId: string): Promise<SuggestedA
     topics: a.topics ?? [],
     snoozeMetadata: a.snooze_metadata,
     completionMetadata: a.completion_metadata,
+    documents: a.documents ?? [],
     references: referencesByAction.get(a.id) ?? [],
   }));
 }

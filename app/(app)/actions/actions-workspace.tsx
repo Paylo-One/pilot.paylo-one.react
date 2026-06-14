@@ -1,26 +1,10 @@
 "use client";
 
 import { useMemo, useState, useEffect, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { SuggestedActionView, ActionStatus, ActionPriority } from "@/modules/action-extraction/server";
-import { ActionControls } from "./action-controls";
-import {
-  PersonLinkControl,
-  type PersonLinkOption,
-} from "@/components/refinement/person-link-control";
-import { RefinementActions } from "@/components/refinement/refinement-actions";
-import { createAction, updateAction, snoozeAction, completeAction, deleteAction, linkActionPerson } from "./actions";
-
-type LiveView =
-  | "inbox"
-  | "planned"
-  | "in_progress"
-  | "waiting"
-  | "follow_ups"
-  | "deadlines"
-  | "topics"
-  | "people"
-  | "completed"
-  | "all";
+import { createAction, suggestActionMetadata } from "./actions";
+import type { PersonLinkOption } from "@/components/refinement/person-link-control";
 
 const STATUS_META: Record<
   ActionStatus,
@@ -35,13 +19,6 @@ const STATUS_META: Record<
   cancelled: { label: "Cancelled", tone: "neutral" },
 };
 
-function confidenceFor(action: SuggestedActionView): number | null {
-  const values = action.references
-    .map((reference) => reference.confidence)
-    .filter((confidence): confidence is number => typeof confidence === "number");
-  return values.length > 0 ? Math.max(...values) : null;
-}
-
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat(undefined, {
     day: "numeric",
@@ -50,29 +27,28 @@ function formatDate(value: string): string {
   }).format(new Date(value));
 }
 
-function sourceLabel(value: string): string {
-  return value.replaceAll("_", " ");
-}
-
+// Single Action Row Component
 function ActionRow({
   action,
-  selected,
-  onSelect,
+  people,
+  onClick,
 }: {
-  action: SuggestedActionView;
-  selected: boolean;
-  onSelect: () => void;
+  readonly action: SuggestedActionView;
+  readonly people: readonly PersonLinkOption[];
+  readonly onClick: () => void;
 }) {
-  const confidence = confidenceFor(action);
   const status = STATUS_META[action.status] ?? {
     label: action.status,
     tone: "neutral" as const,
   };
 
-  // Compute a live, high-context attention light based on status, priority and due dates
-  let attentionTone: "ok" | "info" | "warn" | "risk" | "neutral" = status.tone;
-  const isOverdue = action.dueAt && new Date(action.dueAt) < new Date() && action.status !== "completed" && action.status !== "cancelled";
+  const isOverdue =
+    action.dueAt &&
+    new Date(action.dueAt) < new Date() &&
+    action.status !== "completed" &&
+    action.status !== "cancelled";
 
+  let attentionTone: "ok" | "info" | "warn" | "risk" | "neutral" = status.tone;
   if (action.status !== "completed" && action.status !== "cancelled") {
     if (isOverdue) {
       attentionTone = "risk";
@@ -82,747 +58,743 @@ function ActionRow({
       attentionTone = "warn";
     } else if (action.status === "in_progress") {
       attentionTone = "ok";
-    } else if (action.status === "waiting") {
-      attentionTone = "neutral";
     }
   }
 
-  const priorityLabel = action.priority ? action.priority.toUpperCase() : "NORMAL";
+  const linkedPerson = people.find((p) => p.id === action.personId);
 
   return (
-    <article className={`action-row${selected ? " action-row--selected" : ""}`}>
-      <span
-        className={`action-row__attention action-row__attention--${attentionTone}`}
-        aria-hidden="true"
-      />
-      <button type="button" className="action-row__select" onClick={onSelect}>
-        <span className="action-row__title" style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-          <span>{action.title}</span>
-          {action.priority && action.priority !== "normal" && (
-            <span className={`status status--${action.priority === "critical" ? "risk" : "warn"}`} style={{ fontSize: "10px", padding: "1px 6px", textTransform: "uppercase" }}>
-              {action.priority}
+    <article className="action-row" style={{ cursor: "pointer" }} onClick={onClick}>
+      <span className={`action-row__attention action-row__attention--${attentionTone}`} aria-hidden="true" />
+      <div className="action-row__select" style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", background: "transparent", border: 0, padding: 0, textAlign: "left" }}>
+        <div style={{ flex: 1, minWidth: 0, paddingRight: "var(--space-md)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "4px" }}>
+            <span className="action-row__title" style={{ fontSize: "14px", fontWeight: 500, color: "var(--colour-text-primary)" }}>{action.title}</span>
+            {action.priority && action.priority !== "normal" && (
+              <span className={`status status--${action.priority === "critical" ? "risk" : "warn"}`} style={{ fontSize: "10px", padding: "1px 6px", textTransform: "uppercase" }}>
+                {action.priority}
+              </span>
+            )}
+            {isOverdue && (
+              <span className="status status--risk" style={{ fontSize: "10px", padding: "1px 6px", textTransform: "uppercase" }}>
+                Overdue
+              </span>
+            )}
+          </div>
+          <p className="action-row__context" style={{ fontSize: "12px", color: "var(--colour-text-secondary)", margin: 0, display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            <span>{status.label}</span>
+            {action.dueAt ? <span style={{ color: isOverdue ? "var(--colour-danger)" : "inherit" }}>Due {formatDate(action.dueAt)}</span> : null}
+            {action.followUpAt ? <span>Follow-up {formatDate(action.followUpAt)}</span> : null}
+            {linkedPerson ? <span>Contact: {linkedPerson.displayName}</span> : null}
+            {action.topics && action.topics.length > 0 ? (
+              <span style={{ display: "flex", gap: "4px" }}>
+                {action.topics.map((t) => (
+                  <strong key={t} style={{ color: "var(--colour-accent-primary)" }}>#{t}</strong>
+                ))}
+              </span>
+            ) : null}
+          </p>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          {action.documents && action.documents.length > 0 && (
+            <span title={`${action.documents.length} Attachment(s)`} style={{ color: "var(--colour-text-muted)", display: "flex", alignItems: "center" }}>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+              </svg>
             </span>
           )}
-          {isOverdue && (
-            <span className="status status--risk" style={{ fontSize: "10px", padding: "1px 6px", textTransform: "uppercase" }}>
-              Overdue
-            </span>
-          )}
-        </span>
-        <span className="action-row__context">
-          <span>{priorityLabel}</span>
-          <span>{status.label}</span>
-          {action.dueAt ? <span style={{ color: isOverdue ? "var(--colour-danger)" : "inherit" }}>Due {formatDate(action.dueAt)}</span> : null}
-          {action.followUpAt ? <span>Follow-up {formatDate(action.followUpAt)}</span> : null}
-          {action.references.length > 0 ? (
-            <span>
-              {action.references.length}{" "}
-              {action.references.length === 1 ? "source" : "sources"}
-            </span>
-          ) : null}
-          {confidence !== null ? (
-            <span>{Math.round(confidence * 100)}% confidence</span>
-          ) : null}
-        </span>
-        {action.rationale ? (
-          <span className="action-row__rationale">{action.rationale}</span>
-        ) : null}
-      </button>
-      <span className={`status status--${status.tone}`}>{status.label}</span>
+          <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ color: "var(--colour-text-muted)" }}>
+            <path d="M7 3.5 L13.5 10 L7 16.5" />
+          </svg>
+        </div>
+      </div>
     </article>
   );
 }
 
-function ActionInspector({
-  action,
+// Quick Capture Modal Component
+function QuickCaptureModal({
+  isOpen,
+  onClose,
   people,
-  onRefresh,
+  existingTopics,
 }: {
-  action: SuggestedActionView | null;
-  people: readonly PersonLinkOption[];
-  onRefresh?: () => void;
+  readonly isOpen: boolean;
+  readonly onClose: () => void;
+  readonly people: readonly PersonLinkOption[];
+  readonly existingTopics: readonly string[];
 }) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [isDeletePending, startDeleteTransition] = useTransition();
-  const [isSnoozePending, startSnoozeTransition] = useTransition();
-  const [isCompletePending, startCompleteTransition] = useTransition();
-
+  const [isSuggesting, setIsSuggesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
 
-  // Form inputs
+  // Form Fields
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<ActionPriority>("normal");
   const [status, setStatus] = useState<ActionStatus>("inbox");
   const [dueAt, setDueAt] = useState("");
   const [followUpAt, setFollowUpAt] = useState("");
+  const [selectedPersonId, setSelectedPersonId] = useState("");
   const [topics, setTopics] = useState<string[]>([]);
   const [newTopic, setNewTopic] = useState("");
+  const [rationale, setRationale] = useState("");
 
-  // Snooze inputs
-  const [snoozeUntil, setSnoozeUntil] = useState("");
-  const [snoozeReason, setSnoozeReason] = useState("");
+  // AI Suggestions State
+  const [suggestions, setSuggestions] = useState<{
+    topics: string[];
+    people: { id: string; displayName: string }[];
+    dueAt: string | null;
+    followUpAt: string | null;
+    priority: ActionPriority;
+    waitingOnSomeone: boolean;
+  } | null>(null);
 
-  // Complete feedback
-  const [completionFeedback, setCompletionFeedback] = useState("");
-
-  // Sync state with selected action
+  // Esc key close
   useEffect(() => {
-    if (action) {
-      setTitle(action.title);
-      setDescription(action.description ?? "");
-      setPriority(action.priority ?? "normal");
-      setStatus(action.status ?? "inbox");
-      setDueAt(action.dueAt ? action.dueAt.substring(0, 10) : "");
-      setFollowUpAt(action.followUpAt ? action.followUpAt.substring(0, 10) : "");
-      setTopics(action.topics || []);
-      setNewTopic("");
-      setSnoozeUntil("");
-      setSnoozeReason("");
-      setCompletionFeedback("");
-      setError(null);
-      setSuccess(false);
+    function handleEsc(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
     }
-  }, [action]);
-
-  if (!action) {
-    return (
-      <aside className="actions-inspector">
-        <div className="actions-inspector__empty">
-          <p className="eyebrow">Action context</p>
-          <h2>Select an action</h2>
-          <p>
-            Its rationale, details, people, sources, and full lifecycle controls
-            will appear here.
-          </p>
-        </div>
-      </aside>
-    );
-  }
-
-  const activeAction = action;
-
-  function handleAddTopic(e: React.FormEvent) {
-    e.preventDefault();
-    const clean = newTopic.trim();
-    if (clean && !topics.includes(clean)) {
-      setTopics([...topics, clean]);
-      setNewTopic("");
+    if (isOpen) {
+      window.addEventListener("keydown", handleEsc);
     }
-  }
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, [isOpen, onClose]);
 
-  function handleRemoveTopic(tag: string) {
-    setTopics(topics.filter((t) => t !== tag));
+  if (!isOpen) return null;
+
+  async function handleSuggest() {
+    if (!title.trim()) {
+      setError("Please enter an action title before requesting suggestions.");
+      return;
+    }
+    setError(null);
+    setIsSuggesting(true);
+
+    try {
+      const res = await suggestActionMetadata(title, description || undefined);
+      if (res.ok && res.suggestions) {
+        setSuggestions(res.suggestions);
+      } else {
+        setError(res.error ?? "Failed to parse context.");
+      }
+    } catch (err: any) {
+      setError(err.message || "AI Suggestion engine encountered an error.");
+    } finally {
+      setIsSuggesting(false);
+    }
   }
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
-    setSuccess(false);
+    if (!title.trim()) {
+      setError("Action title is required.");
+      return;
+    }
 
+    setError(null);
     startTransition(async () => {
-      const res = await updateAction(activeAction.id, {
-        title,
-        description: description || null,
+      const res = await createAction({
+        title: title.trim(),
+        description: description.trim() || undefined,
         priority,
         status,
         dueAt: dueAt || null,
         followUpAt: followUpAt || null,
         topics,
+        personId: selectedPersonId || null,
+        rationale: rationale.trim() || null,
       });
 
       if (!res.ok) {
-        setError(res.error ?? "Failed to save changes.");
+        setError(res.error ?? "Failed to save action.");
       } else {
-        setSuccess(true);
-        if (onRefresh) onRefresh();
+        // Reset and close
+        setTitle("");
+        setDescription("");
+        setPriority("normal");
+        setStatus("inbox");
+        setDueAt("");
+        setFollowUpAt("");
+        setSelectedPersonId("");
+        setTopics([]);
+        setNewTopic("");
+        setRationale("");
+        setSuggestions(null);
+        onClose();
+        router.refresh();
       }
     });
   }
 
-  function handleSnooze(e: React.FormEvent) {
-    e.preventDefault();
-    if (!snoozeUntil) {
-      setError("Please select a date to snooze until.");
-      return;
+  function addTopicTag(tag: string) {
+    const clean = tag.trim();
+    if (clean && !topics.includes(clean)) {
+      setTopics([...topics, clean]);
     }
-    setError(null);
-    setSuccess(false);
-
-    startSnoozeTransition(async () => {
-      const res = await snoozeAction(activeAction.id, snoozeUntil, snoozeReason);
-      if (!res.ok) {
-        setError(res.error ?? "Failed to snooze action.");
-      } else {
-        setSuccess(true);
-        setSnoozeUntil("");
-        setSnoozeReason("");
-        if (onRefresh) onRefresh();
-      }
-    });
+    setNewTopic("");
   }
-
-  function handleUn_snooze() {
-    setError(null);
-    setSuccess(false);
-
-    startSnoozeTransition(async () => {
-      const res = await snoozeAction(activeAction.id, null);
-      if (!res.ok) {
-        setError(res.error ?? "Failed to clear snooze.");
-      } else {
-        setSuccess(true);
-        if (onRefresh) onRefresh();
-      }
-    });
-  }
-
-  function handleComplete(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setSuccess(false);
-
-    startCompleteTransition(async () => {
-      const res = await completeAction(activeAction.id, completionFeedback);
-      if (!res.ok) {
-        setError(res.error ?? "Failed to complete action.");
-      } else {
-        setSuccess(true);
-        setCompletionFeedback("");
-        if (onRefresh) onRefresh();
-      }
-    });
-  }
-
-  function handleDelete() {
-    if (!window.confirm("Are you sure you want to permanently delete this action?")) return;
-    setError(null);
-    setSuccess(false);
-
-    startDeleteTransition(async () => {
-      const res = await deleteAction(activeAction.id);
-      if (!res.ok) {
-        setError(res.error ?? "Failed to delete action.");
-      } else {
-        setSuccess(true);
-        if (onRefresh) onRefresh();
-      }
-    });
-  }
-
-  const isSnoozed = activeAction.snoozedUntil && new Date(activeAction.snoozedUntil) > new Date();
 
   return (
-    <aside className="actions-inspector" aria-label="Selected action details" style={{ display: "flex", flexDirection: "column", gap: "var(--space-md)", paddingBottom: "var(--space-xl)" }}>
-      <div className="actions-inspector__head" style={{ borderBottom: "1px solid var(--colour-border)", padding: "var(--space-lg)" }}>
-        <p className="eyebrow">Action Details</p>
-        <h2 style={{ fontSize: "var(--text-h3)", fontWeight: 600, color: "var(--colour-text-primary)" }}>{activeAction.title}</h2>
-        <div style={{ marginTop: "var(--space-sm)" }}>
-          <ActionControls actionId={activeAction.id} status={activeAction.status} onStatusChange={() => { if (onRefresh) onRefresh(); }} />
-        </div>
-      </div>
-
-      <div style={{ padding: "0 var(--space-lg)" }}>
-        {error ? <p className="form-message form-message--error" style={{ margin: "var(--space-xs) 0" }}>{error}</p> : null}
-        {success ? <p className="form-message form-message--ok" style={{ margin: "var(--space-xs) 0" }}>Changes saved successfully.</p> : null}
-      </div>
-
-      {isSnoozed && (
-        <div className="alert alert--accent" style={{ margin: "0 var(--space-lg)", padding: "var(--space-md)" }}>
-          <h4 style={{ fontWeight: "bold", fontSize: "13px" }}>Action Snoozed</h4>
-          <p style={{ fontSize: "12px", margin: "var(--space-xs) 0" }}>
-            This commitment is snoozed until <strong>{formatDate(activeAction.snoozedUntil!)}</strong>.
-          </p>
-          {activeAction.snoozeMetadata?.last_snooze?.reason && (
-            <p style={{ fontSize: "11px", fontStyle: "italic", color: "var(--colour-text-secondary)" }}>
-              &ldquo;{activeAction.snoozeMetadata.last_snooze.reason}&rdquo;
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={handleUn_snooze}
-            disabled={isSnoozePending}
-            className="btn btn--secondary btn--sm"
-            style={{ marginTop: "var(--space-xs)" }}
-          >
-            {isSnoozePending ? "Clearing..." : "Un-snooze action"}
-          </button>
-        </div>
-      )}
-
-      <form onSubmit={handleSave} className="stack" style={{ gap: "var(--space-md)", padding: "0 var(--space-lg)" }}>
-        <div className="field">
-          <label htmlFor="inspector-title" className="field__label">Title</label>
-          <input
-            id="inspector-title"
-            type="text"
-            className="input"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            disabled={isPending}
-            required
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor="inspector-desc" className="field__label">Description</label>
-          <textarea
-            id="inspector-desc"
-            className="input"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            disabled={isPending}
-            rows={3}
-            placeholder="Add context, sub-tasks, or expectations…"
-            style={{ resize: "vertical", fontFamily: "inherit" }}
-          />
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-md)" }}>
-          <div className="field">
-            <label htmlFor="inspector-priority" className="field__label">Priority</label>
-            <select
-              id="inspector-priority"
-              className="input"
-              value={priority}
-              onChange={(e) => setPriority(e.target.value as ActionPriority)}
-              disabled={isPending}
-            >
-              <option value="low">Low</option>
-              <option value="normal">Normal</option>
-              <option value="high">High</option>
-              <option value="critical">Critical</option>
-            </select>
+    <div className="modal-backdrop" style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0, 0, 0, 0.75)", backdropFilter: "blur(4px)", padding: "var(--space-md)" }} onClick={onClose}>
+      <div className="panel" style={{ width: "100%", maxWidth: "600px", maxHeight: "90vh", overflowY: "auto", background: "var(--colour-surface-secondary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-md)", padding: "var(--space-lg)", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.5)" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--colour-border)", paddingBottom: "var(--space-md)", marginBottom: "var(--space-md)" }}>
+          <div>
+            <p className="eyebrow" style={{ color: "var(--colour-accent-primary)" }}>Executive Workspace</p>
+            <h2 style={{ fontSize: "18px", fontWeight: 600, color: "var(--colour-text-primary)", margin: 0 }}>Quick Capture Commitment</h2>
           </div>
-
-          <div className="field">
-            <label htmlFor="inspector-status" className="field__label">Status</label>
-            <select
-              id="inspector-status"
-              className="input"
-              value={status}
-              onChange={(e) => setStatus(e.target.value as ActionStatus)}
-              disabled={isPending}
-            >
-              <option value="inbox">Inbox</option>
-              <option value="planned">Planned</option>
-              <option value="in_progress">In Progress</option>
-              <option value="waiting">Waiting On</option>
-              <option value="follow_up">Follow-up</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </div>
+          <button type="button" onClick={onClose} style={{ border: 0, background: "transparent", color: "var(--colour-text-muted)", fontSize: "20px", cursor: "pointer", padding: "4px" }} title="Close dialog">×</button>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-md)" }}>
-          <div className="field">
-            <label htmlFor="inspector-due" className="field__label">Due Date</label>
-            <input
-              id="inspector-due"
-              type="date"
-              className="input"
-              value={dueAt}
-              onChange={(e) => setDueAt(e.target.value)}
-              disabled={isPending}
-            />
+        {error && (
+          <div className="alert alert--danger" style={{ padding: "10px 14px", borderRadius: "var(--radius-sm)", background: "rgba(224, 86, 36, 0.1)", color: "var(--colour-text-primary)", fontSize: "13px", marginBottom: "var(--space-md)" }}>
+            {error}
           </div>
+        )}
 
+        <form onSubmit={handleSave} className="stack" style={{ gap: "var(--space-md)" }}>
+          {/* Title and AI Suggest row */}
           <div className="field">
-            <label htmlFor="inspector-followup" className="field__label">Follow-up Date</label>
-            <input
-              id="inspector-followup"
-              type="date"
-              className="input"
-              value={followUpAt}
-              onChange={(e) => setFollowUpAt(e.target.value)}
-              disabled={isPending}
-            />
-          </div>
-        </div>
-
-        <div className="field">
-          <label className="field__label">Topics & Strategic Areas</label>
-          <div className="stack" style={{ gap: "var(--space-xs)" }}>
-            {topics.length > 0 ? (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "4px" }}>
-                {topics.map((tag) => (
-                  <span key={tag} className="chip chip--accent" style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "2px 8px" }}>
-                    {tag}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTopic(tag)}
-                      disabled={isPending}
-                      style={{ border: 0, background: "transparent", color: "inherit", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}
-                      title={`Remove topic ${tag}`}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p style={{ fontSize: "11px", color: "var(--colour-text-muted)", margin: "2px 0" }}>No topics linked.</p>
-            )}
-            
-            <div style={{ display: "flex", gap: "6px" }}>
-              <input
-                type="text"
-                className="input"
-                placeholder="e.g. Q3 Hiring, Security"
-                value={newTopic}
-                onChange={(e) => setNewTopic(e.target.value)}
-                disabled={isPending}
-                style={{ flex: 1, padding: "4px 8px", fontSize: "12px" }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    const clean = newTopic.trim();
-                    if (clean && !topics.includes(clean)) {
-                      setTopics([...topics, clean]);
-                      setNewTopic("");
-                    }
-                  }
-                }}
-              />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+              <label htmlFor="modal-title" className="field__label" style={{ margin: 0 }}>Title <span style={{ color: "var(--colour-danger)" }}>*</span></label>
               <button
                 type="button"
+                onClick={handleSuggest}
+                disabled={isSuggesting || !title.trim()}
                 className="btn btn--secondary"
-                style={{ fontSize: "12px", padding: "4px 10px" }}
-                disabled={isPending || !newTopic.trim()}
-                onClick={(e) => {
-                  const clean = newTopic.trim();
-                  if (clean && !topics.includes(clean)) {
-                    setTopics([...topics, clean]);
-                    setNewTopic("");
-                  }
-                }}
+                style={{ fontSize: "11px", padding: "3px 8px", background: "rgba(100, 116, 139, 0.1)", borderColor: "var(--colour-border)", display: "flex", alignItems: "center", gap: "4px" }}
               >
-                + Add
+                {isSuggesting ? (
+                  <>AI Analyzing...</>
+                ) : (
+                  <>
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <polygon points="12 2 2 22 22 22" />
+                    </svg>
+                    Suggest Context
+                  </>
+                )}
               </button>
             </div>
+            <input
+              id="modal-title"
+              type="text"
+              className="input"
+              style={{ width: "100%", background: "var(--colour-surface-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", padding: "10px 14px", fontSize: "14px" }}
+              placeholder="e.g. Align with Maria on Q3 goals..."
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              disabled={isPending}
+              required
+              autoFocus
+            />
           </div>
-        </div>
 
-        <button type="submit" className="btn btn--primary" disabled={isPending} style={{ width: "100%", marginTop: "var(--space-xs)" }}>
-          {isPending ? "Saving..." : "Save Changes"}
-        </button>
-      </form>
-
-      {/* Linked People Section */}
-      <section className="actions-inspector__section" style={{ borderTop: "1px solid var(--colour-border)" }}>
-        <p className="actions-inspector__label">Associated Person</p>
-        <div style={{ marginTop: "var(--space-sm)" }}>
-          <PersonLinkControl
-            key={activeAction.id}
-            targetId={activeAction.id}
-            people={people}
-            initialPersonId={activeAction.personId}
-            onChange={async (personId) => {
-              const res = await linkActionPerson(activeAction.id, personId);
-              if (res.ok && onRefresh) {
-                onRefresh();
-              }
-              return res;
-            }}
-          />
-        </div>
-      </section>
-
-      {/* Snooze Action Section */}
-      {!isSnoozed && activeAction.status !== "completed" && activeAction.status !== "cancelled" && (
-        <section className="actions-inspector__section" style={{ borderTop: "1px solid var(--colour-border)" }}>
-          <p className="actions-inspector__label">Snooze Commitment</p>
-          <form onSubmit={handleSnooze} className="stack" style={{ gap: "var(--space-sm)", marginTop: "var(--space-sm)" }}>
-            <div className="field">
-              <label htmlFor="snooze-date" className="field__label">Snooze until</label>
-              <input
-                id="snooze-date"
-                type="date"
-                className="input"
-                value={snoozeUntil}
-                onChange={(e) => setSnoozeUntil(e.target.value)}
-                disabled={isSnoozePending}
-                required
-              />
-              {/* Quick snooze triggers */}
-              <div style={{ display: "flex", gap: "4px", marginTop: "4px" }}>
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--sm"
-                  style={{ fontSize: "11px", padding: "2px 6px" }}
-                  disabled={isSnoozePending}
-                  onClick={() => {
-                    const tomorrow = new Date();
-                    tomorrow.setDate(tomorrow.getDate() + 1);
-                    setSnoozeUntil(tomorrow.toISOString().substring(0, 10));
-                  }}
-                >
-                  +1 Day
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--sm"
-                  style={{ fontSize: "11px", padding: "2px 6px" }}
-                  disabled={isSnoozePending}
-                  onClick={() => {
-                    const nextWeek = new Date();
-                    nextWeek.setDate(nextWeek.getDate() + 7);
-                    setSnoozeUntil(nextWeek.toISOString().substring(0, 10));
-                  }}
-                >
-                  +1 Week
-                </button>
-              </div>
-            </div>
-            <div className="field">
-              <label htmlFor="snooze-reason" className="field__label">Snooze Reason</label>
-              <input
-                id="snooze-reason"
-                type="text"
-                className="input"
-                placeholder="e.g. Waiting on partner feedback..."
-                value={snoozeReason}
-                onChange={(e) => setSnoozeReason(e.target.value)}
-                disabled={isSnoozePending}
-              />
-            </div>
-            <button type="submit" className="btn btn--secondary" disabled={isSnoozePending || !snoozeUntil}>
-              {isSnoozePending ? "Snoozing..." : "Snooze Action"}
-            </button>
-          </form>
-        </section>
-      )}
-
-      {/* Complete with Feedback Section */}
-      {activeAction.status !== "completed" && (
-        <section className="actions-inspector__section" style={{ borderTop: "1px solid var(--colour-border)" }}>
-          <p className="actions-inspector__label">Complete Action</p>
-          <form onSubmit={handleComplete} className="stack" style={{ gap: "var(--space-sm)", marginTop: "var(--space-sm)" }}>
-            <div className="field">
-              <label htmlFor="complete-feedback" className="field__label">Completion Note (Optional)</label>
-              <input
-                id="complete-feedback"
-                type="text"
-                className="input"
-                placeholder="e.g. Budget signed off"
-                value={completionFeedback}
-                onChange={(e) => setCompletionFeedback(e.target.value)}
-                disabled={isCompletePending}
-              />
-            </div>
-            <button type="submit" className="btn btn--accent-outline" disabled={isCompletePending}>
-              {isCompletePending ? "Completing..." : "✓ Mark as Completed"}
-            </button>
-          </form>
-        </section>
-      )}
-
-      {/* Danger Zone Section */}
-      <section className="actions-inspector__section" style={{ borderTop: "1px solid var(--colour-border)" }}>
-        <p className="actions-inspector__label">Danger Zone</p>
-        <div style={{ marginTop: "var(--space-sm)" }}>
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={isDeletePending}
-            className="btn btn--danger"
-            style={{ width: "100%", fontSize: "12px" }}
-          >
-            {isDeletePending ? "Deleting..." : "Permanently Delete Action"}
-          </button>
-        </div>
-      </section>
-
-      {/* Sources list */}
-      {activeAction.references && activeAction.references.length > 0 && (
-        <section className="actions-inspector__section" style={{ borderTop: "1px solid var(--colour-border)" }}>
-          <div className="actions-inspector__section-head">
-            <p className="actions-inspector__label">Sources & Traceability</p>
-            <span className="mono actions-inspector__confidence" style={{ fontSize: "11px", color: "var(--colour-text-muted)" }}>
-              {activeAction.references.length} source{activeAction.references.length === 1 ? "" : "s"}
-            </span>
+          {/* Description */}
+          <div className="field">
+            <label htmlFor="modal-description" className="field__label">Description / Notes</label>
+            <textarea
+              id="modal-description"
+              className="input"
+              style={{ width: "100%", background: "var(--colour-surface-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", padding: "10px 14px", fontSize: "13px", resize: "vertical", minHeight: "80px", fontFamily: "inherit" }}
+              placeholder="Add optional notes, deliverables, context..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              disabled={isPending}
+              rows={3}
+            />
           </div>
-          <div className="action-source-list" style={{ marginTop: "var(--space-sm)", display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
-            {activeAction.references.map((reference) => (
-              <div className="action-source" key={reference.id} style={{ border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "var(--space-sm)", background: "var(--colour-surface-secondary)" }}>
-                <div className="action-source__head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px", fontSize: "11px", color: "var(--colour-text-secondary)", fontFamily: "var(--font-mono)" }}>
-                  <span className="source-ref__system">
-                    {sourceLabel(reference.sourceSystem)}
-                  </span>
-                  {reference.itemTimestamp ? (
-                    <time dateTime={reference.itemTimestamp}>
-                      {formatDate(reference.itemTimestamp)}
-                    </time>
-                  ) : null}
-                </div>
-                {reference.excerptOrPointer ? (
-                  <p style={{ fontSize: "12px", color: "var(--colour-text-primary)", whiteSpace: "pre-wrap" }}>{reference.excerptOrPointer}</p>
-                ) : (
-                  <p style={{ fontSize: "12px", color: "var(--colour-text-muted)" }}>Source pointer retained for traceability.</p>
+
+          {/* Inline AI suggestions box if returned */}
+          {suggestions && (
+            <div className="alert alert--accent" style={{ padding: "14px", background: "rgba(100, 116, 139, 0.05)", border: "1px dashed var(--colour-border)", borderRadius: "var(--radius-sm)", fontSize: "12px" }}>
+              <h4 style={{ fontWeight: 600, color: "var(--colour-accent-primary)", marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+                <span>🤖</span> AI Extracted Proposals (Click to apply)
+              </h4>
+
+              <div className="stack" style={{ gap: "8px" }}>
+                {/* Topic suggestions */}
+                {suggestions.topics && suggestions.topics.length > 0 && (
+                  <div>
+                    <span style={{ color: "var(--colour-text-muted)", marginRight: "8px" }}>Topics:</span>
+                    <span style={{ display: "inline-flex", flexWrap: "wrap", gap: "4px" }}>
+                      {suggestions.topics.map((t) => {
+                        const isSelected = topics.includes(t);
+                        const isExisting = existingTopics.includes(t);
+                        return (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => addTopicTag(t)}
+                            disabled={isSelected}
+                            className="chip chip--accent"
+                            style={{ padding: "1px 6px", fontSize: "11px", opacity: isSelected ? 0.5 : 1, cursor: isSelected ? "default" : "pointer", border: isExisting ? "1px solid var(--colour-accent-primary)" : "1px dashed var(--colour-border)", background: "transparent" }}
+                          >
+                            + {t} {isExisting ? "" : "(New)"}
+                          </button>
+                        );
+                      })}
+                    </span>
+                  </div>
+                )}
+
+                {/* People suggestions */}
+                {suggestions.people && suggestions.people.length > 0 && (
+                  <div>
+                    <span style={{ color: "var(--colour-text-muted)", marginRight: "8px" }}>People:</span>
+                    <span style={{ display: "inline-flex", flexWrap: "wrap", gap: "4px" }}>
+                      {suggestions.people.map((p) => {
+                        const isSelected = selectedPersonId === p.id;
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => setSelectedPersonId(p.id)}
+                            disabled={isSelected}
+                            className="chip"
+                            style={{ padding: "1px 6px", fontSize: "11px", opacity: isSelected ? 0.5 : 1, cursor: isSelected ? "default" : "pointer" }}
+                          >
+                            + Link {p.displayName}
+                          </button>
+                        );
+                      })}
+                    </span>
+                  </div>
+                )}
+
+                {/* Priority suggestion */}
+                {suggestions.priority && (
+                  <div>
+                    <span style={{ color: "var(--colour-text-muted)", marginRight: "8px" }}>Priority:</span>
+                    <button
+                      type="button"
+                      onClick={() => setPriority(suggestions.priority)}
+                      disabled={priority === suggestions.priority}
+                      className="chip"
+                      style={{ padding: "1px 6px", fontSize: "11px" }}
+                    >
+                      Set to {suggestions.priority.toUpperCase()}
+                    </button>
+                  </div>
+                )}
+
+                {/* Date suggestions */}
+                {(suggestions.dueAt || suggestions.followUpAt) && (
+                  <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                    {suggestions.dueAt && (
+                      <div>
+                        <span style={{ color: "var(--colour-text-muted)", marginRight: "8px" }}>Due:</span>
+                        <button
+                          type="button"
+                          onClick={() => setDueAt(suggestions.dueAt!)}
+                          disabled={dueAt === suggestions.dueAt}
+                          className="chip"
+                          style={{ padding: "1px 6px", fontSize: "11px" }}
+                        >
+                          Due {formatDate(suggestions.dueAt)}
+                        </button>
+                      </div>
+                    )}
+                    {suggestions.followUpAt && (
+                      <div>
+                        <span style={{ color: "var(--colour-text-muted)", marginRight: "8px" }}>Follow-up:</span>
+                        <button
+                          type="button"
+                          onClick={() => setFollowUpAt(suggestions.followUpAt!)}
+                          disabled={followUpAt === suggestions.followUpAt}
+                          className="chip"
+                          style={{ padding: "1px 6px", fontSize: "11px" }}
+                        >
+                          Follow-up {formatDate(suggestions.followUpAt)}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {suggestions.waitingOnSomeone && (
+                  <div>
+                    <span style={{ color: "var(--colour-text-muted)", marginRight: "8px" }}>Status:</span>
+                    <button
+                      type="button"
+                      onClick={() => setStatus("waiting")}
+                      disabled={status === "waiting"}
+                      className="chip"
+                      style={{ padding: "1px 6px", fontSize: "11px" }}
+                    >
+                      Mark Waiting On Someone
+                    </button>
+                  </div>
                 )}
               </div>
-            ))}
-          </div>
-        </section>
-      )}
+            </div>
+          )}
 
-      {/* RLS private notice */}
-      <p className="actions-inspector__audit" style={{ fontSize: "11px", color: "var(--colour-text-muted)", textAlign: "center", margin: "var(--space-sm) var(--space-lg)" }}>
-        All edits are private and secure inside your tenant workspace.
-      </p>
-    </aside>
+          {/* Status & Priority Row */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-md)" }}>
+            <div className="field">
+              <label htmlFor="modal-status" className="field__label">Status</label>
+              <select
+                id="modal-status"
+                className="input"
+                style={{ width: "100%", background: "var(--colour-surface-primary)", color: "var(--colour-text-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "8px 12px" }}
+                value={status}
+                onChange={(e) => setStatus(e.target.value as ActionStatus)}
+                disabled={isPending}
+              >
+                <option value="inbox">Inbox</option>
+                <option value="planned">Planned</option>
+                <option value="in_progress">In Progress</option>
+                <option value="waiting">Waiting On</option>
+                <option value="follow_up">Follow-up</option>
+              </select>
+            </div>
+
+            <div className="field">
+              <label htmlFor="modal-priority" className="field__label">Priority</label>
+              <select
+                id="modal-priority"
+                className="input"
+                style={{ width: "100%", background: "var(--colour-surface-primary)", color: "var(--colour-text-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "8px 12px" }}
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as ActionPriority)}
+                disabled={isPending}
+              >
+                <option value="low">Low</option>
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Dates Row */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-md)" }}>
+            <div className="field">
+              <label htmlFor="modal-due" className="field__label">Due Date</label>
+              <input
+                id="modal-due"
+                type="date"
+                className="input"
+                style={{ width: "100%", background: "var(--colour-surface-primary)", color: "var(--colour-text-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "8px 12px" }}
+                value={dueAt}
+                onChange={(e) => setDueAt(e.target.value)}
+                disabled={isPending}
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="modal-followup" className="field__label">Follow-up Date</label>
+              <input
+                id="modal-followup"
+                type="date"
+                className="input"
+                style={{ width: "100%", background: "var(--colour-surface-primary)", color: "var(--colour-text-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "8px 12px" }}
+                value={followUpAt}
+                onChange={(e) => setFollowUpAt(e.target.value)}
+                disabled={isPending}
+              />
+            </div>
+          </div>
+
+          {/* Associated Person */}
+          <div className="field">
+            <label htmlFor="modal-person" className="field__label">Accountability / Person Link</label>
+            <select
+              id="modal-person"
+              className="input"
+              style={{ width: "100%", background: "var(--colour-surface-primary)", color: "var(--colour-text-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "8px 12px" }}
+              value={selectedPersonId}
+              onChange={(e) => setSelectedPersonId(e.target.value)}
+              disabled={isPending}
+            >
+              <option value="">Unassigned / No Contact Link</option>
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.displayName} {p.organisation ? `(${p.organisation})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Source / Context Note */}
+          <div className="field">
+            <label htmlFor="modal-rationale" className="field__label">Source / Context Note</label>
+            <input
+              id="modal-rationale"
+              type="text"
+              className="input"
+              style={{ width: "100%", background: "var(--colour-surface-primary)", color: "var(--colour-text-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "8px 12px", fontSize: "13px" }}
+              placeholder="e.g. Discussed in 1:1, or Slack thread link..."
+              value={rationale}
+              onChange={(e) => setRationale(e.target.value)}
+              disabled={isPending}
+            />
+          </div>
+
+          {/* Topics input */}
+          <div className="field">
+            <label className="field__label">Topics & strategic tags</label>
+            <div className="stack" style={{ gap: "var(--space-xs)" }}>
+              {topics.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "4px" }}>
+                  {topics.map((t) => (
+                    <span key={t} className="chip chip--accent" style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "2px 8px" }}>
+                      {t}
+                      <button
+                        type="button"
+                        onClick={() => setTopics(topics.filter((top) => top !== t))}
+                        style={{ border: 0, background: "transparent", color: "inherit", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Existing Topics Autocomplete dropdown */}
+              {newTopic.trim() && (
+                <div style={{ background: "var(--colour-surface-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", maxHeight: "120px", overflowY: "auto" }}>
+                  {existingTopics
+                    .filter((t) => t.toLowerCase().includes(newTopic.toLowerCase()) && !topics.includes(t))
+                    .map((matched) => (
+                      <button
+                        key={matched}
+                        type="button"
+                        onClick={() => addTopicTag(matched)}
+                        style={{ display: "block", width: "100%", padding: "6px 12px", textAlign: "left", fontSize: "12px", color: "var(--colour-text-primary)", background: "transparent", border: 0, cursor: "pointer", borderBottom: "1px solid var(--colour-border)" }}
+                      >
+                        Use existing: <strong>{matched}</strong>
+                      </button>
+                    ))}
+                  {!topics.includes(newTopic.trim()) && (
+                    <button
+                      type="button"
+                      onClick={() => addTopicTag(newTopic)}
+                      style={{ display: "block", width: "100%", padding: "6px 12px", textAlign: "left", fontSize: "12px", color: "var(--colour-accent-primary)", background: "transparent", border: 0, cursor: "pointer" }}
+                    >
+                      + Confirm creating new topic: <strong>&ldquo;{newTopic.trim()}&rdquo;</strong>
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: "6px" }}>
+                <input
+                  type="text"
+                  className="input"
+                  style={{ flex: 1, padding: "4px 8px", fontSize: "12px" }}
+                  placeholder="e.g. Budget, Q3 Hiring"
+                  value={newTopic}
+                  onChange={(e) => setNewTopic(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addTopicTag(newTopic);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  style={{ fontSize: "12px", padding: "4px 10px" }}
+                  disabled={!newTopic.trim()}
+                  onClick={() => addTopicTag(newTopic)}
+                >
+                  Add Tag
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Form Actions */}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "var(--space-sm)", borderTop: "1px solid var(--colour-border)", paddingTop: "var(--space-md)", marginTop: "var(--space-sm)" }}>
+            <button type="button" className="btn btn--secondary" onClick={onClose} disabled={isPending}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn--primary" disabled={isPending || !title.trim()} style={{ minWidth: "100px" }}>
+              {isPending ? "Saving..." : "Save Action"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 
+// MAIN ACTIONS WORKSPACE COMPONENT
 export function ActionsWorkspace({
   actions,
   people,
 }: {
-  actions: readonly SuggestedActionView[];
-  people: readonly PersonLinkOption[];
+  readonly actions: readonly SuggestedActionView[];
+  readonly people: readonly PersonLinkOption[];
 }) {
-  const [view, setView] = useState<LiveView>("inbox");
-  const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const router = useRouter();
+  const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false);
 
-  // Fast capture form inputs
-  const [captureTitle, setCaptureTitle] = useState("");
-  const [captureError, setCaptureError] = useState<string | null>(null);
-  const [isCapturePending, startCaptureTransition] = useTransition();
+  // Search and Filtering states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterStatus, setFilterStatus] = useState<string>("all_active");
+  const [filterTopic, setFilterTopic] = useState<string>("all");
+  const [filterPerson, setFilterPerson] = useState<string>("all");
+  const [filterPriority, setFilterPriority] = useState<string>("all");
+  const [filterDate, setFilterDate] = useState<string>("all");
 
-  // Dynamically calculate view counts
-  const views: { id: LiveView; label: string; count: number }[] = useMemo(() => {
-    return [
-      { id: "inbox", label: "Inbox", count: actions.filter((a) => a.status === "inbox").length },
-      { id: "planned", label: "Planned", count: actions.filter((a) => a.status === "planned").length },
-      { id: "in_progress", label: "In Progress", count: actions.filter((a) => a.status === "in_progress").length },
-      { id: "waiting", label: "Waiting On", count: actions.filter((a) => a.status === "waiting").length },
-      {
-        id: "follow_ups",
-        label: "Follow-ups",
-        count: actions.filter((a) => (a.status === "follow_up" || !!a.followUpAt) && a.status !== "completed" && a.status !== "cancelled").length,
-      },
-      {
-        id: "deadlines",
-        label: "Deadlines",
-        count: actions.filter((a) => !!a.dueAt && a.status !== "completed" && a.status !== "cancelled").length,
-      },
-      {
-        id: "topics",
-        label: "By Topic",
-        count: actions.filter((a) => a.status !== "completed" && a.status !== "cancelled").length,
-      },
-      {
-        id: "people",
-        label: "By Person",
-        count: actions.filter((a) => a.status !== "completed" && a.status !== "cancelled").length,
-      },
-      {
-        id: "completed",
-        label: "Completed",
-        count: actions.filter((a) => a.status === "completed" || a.status === "cancelled").length,
-      },
-      { id: "all", label: "All", count: actions.length },
-    ];
+  // Fetch unique topic tags from actions data for filter selector
+  const availableTopics = useMemo(() => {
+    const set = new Set<string>();
+    actions.forEach((a) => {
+      if (a.topics) {
+        a.topics.forEach((t) => {
+          if (t && t.trim()) set.add(t.trim());
+        });
+      }
+    });
+    return Array.from(set).sort();
   }, [actions]);
 
-  // Compute list of actions that fit in the selected view and match the search query
-  const visibleActions = useMemo(() => {
-    const q = query.trim().toLowerCase();
+  // Map of views
+  const viewsList = [
+    { id: "all_active", label: "Attention Centre (Default)" },
+    { id: "inbox", label: "Inbox" },
+    { id: "planned", label: "Planned" },
+    { id: "in_progress", label: "In Progress" },
+    { id: "waiting", label: "Waiting On" },
+    { id: "follow_up", label: "Follow-ups" },
+    { id: "completed_cancelled", label: "Completed & Cancelled Logs" },
+    { id: "by_topic", label: "Grouped by Topic" },
+    { id: "by_person", label: "Grouped by Person" },
+    { id: "all", label: "All Items Flat List" },
+  ];
+
+  // Helper date references
+  const { todayStart, todayEnd, nextSevenDaysEnd } = useMemo(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const sevenDays = new Date(end);
+    sevenDays.setDate(sevenDays.getDate() + 7);
+    return { todayStart: start, todayEnd: end, nextSevenDaysEnd: sevenDays };
+  }, []);
+
+  // Filter and Search visible actions first
+  const filteredActions = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+
     return actions.filter((action) => {
-      let inView = false;
-      if (view === "all") {
-        inView = true;
-      } else if (view === "inbox") {
-        inView = action.status === "inbox";
-      } else if (view === "planned") {
-        inView = action.status === "planned";
-      } else if (view === "in_progress") {
-        inView = action.status === "in_progress";
-      } else if (view === "waiting") {
-        inView = action.status === "waiting";
-      } else if (view === "follow_ups") {
-        inView = (action.status === "follow_up" || !!action.followUpAt) && action.status !== "completed" && action.status !== "cancelled";
-      } else if (view === "deadlines") {
-        inView = !!action.dueAt && action.status !== "completed" && action.status !== "cancelled";
-      } else if (view === "topics" || view === "people") {
-        inView = action.status !== "completed" && action.status !== "cancelled";
-      } else if (view === "completed") {
-        inView = action.status === "completed" || action.status === "cancelled";
-      }
+      // 1. Text Search matching
+      if (q) {
+        const matchesTitle = action.title.toLowerCase().includes(q);
+        const matchesDesc = (action.description ?? "").toLowerCase().includes(q);
+        const matchesTopics = (action.topics || []).some((t) => t.toLowerCase().includes(q));
+        const matchedPerson = people.find((p) => p.id === action.personId);
+        const matchesPerson = matchedPerson ? matchedPerson.displayName.toLowerCase().includes(q) : false;
+        const matchesSources = action.references?.some((r) => r.sourceSystem.toLowerCase().includes(q) || (r.excerptOrPointer ?? "").toLowerCase().includes(q)) ?? false;
 
-      if (!inView) return false;
-      if (!q) return true;
-
-      const sourceText = action.references
-        .map(
-          (reference) =>
-            `${reference.sourceSystem} ${reference.excerptOrPointer ?? ""}`,
-        )
-        .join(" ");
-      const topicsText = (action.topics || []).join(" ");
-      const personObj = people.find((p) => p.id === action.personId);
-      const personText = personObj ? personObj.displayName : "";
-
-      return `${action.title} ${action.description ?? ""} ${action.rationale ?? ""} ${topicsText} ${personText} ${sourceText}`
-        .toLowerCase()
-        .includes(q);
-    });
-  }, [actions, query, view, people]);
-
-  // Auto-select the first action in the view if none is selected
-  const selected = useMemo(() => {
-    if (selectedId) {
-      const match = visibleActions.find((a) => a.id === selectedId);
-      if (match) return match;
-    }
-    return visibleActions[0] ?? null;
-  }, [visibleActions, selectedId]);
-
-  // Update selectedId if it changes
-  useEffect(() => {
-    if (selected && selected.id !== selectedId) {
-      setSelectedId(selected.id);
-    }
-  }, [selected, selectedId]);
-
-  // Fast capture submission
-  function handleCapture(e: React.FormEvent) {
-    e.preventDefault();
-    const titleText = captureTitle.trim();
-    if (!titleText) return;
-
-    setCaptureError(null);
-    startCaptureTransition(async () => {
-      const res = await createAction({
-        title: titleText,
-        status: "inbox",
-        priority: "normal",
-      });
-
-      if (!res.ok) {
-        setCaptureError(res.error ?? "Failed to capture action.");
-      } else {
-        setCaptureTitle("");
-        if (res.data?.id) {
-          setSelectedId(res.data.id);
-          setView("inbox");
+        if (!matchesTitle && !matchesDesc && !matchesTopics && !matchesPerson && !matchesSources) {
+          return false;
         }
       }
-    });
-  }
 
-  // Grouped actions for "topics" and "people" views
+      // 2. Status filtering
+      if (filterStatus === "all_active") {
+        if (action.status === "completed" || action.status === "cancelled") return false;
+      } else if (filterStatus === "completed_cancelled") {
+        if (action.status !== "completed" && action.status !== "cancelled") return false;
+      } else if (filterStatus === "by_topic" || filterStatus === "by_person" || filterStatus === "all") {
+        // keep active only for grouping views
+        if (action.status === "completed" || action.status === "cancelled") return false;
+      } else {
+        if (action.status !== filterStatus) return false;
+      }
+
+      // 3. Metadata Dropdown filters
+      if (filterTopic !== "all") {
+        if (!action.topics || !action.topics.includes(filterTopic)) return false;
+      }
+
+      if (filterPerson !== "all") {
+        if (action.personId !== filterPerson) return false;
+      }
+
+      if (filterPriority !== "all") {
+        if (action.priority !== filterPriority) return false;
+      }
+
+      if (filterDate !== "all") {
+        if (!action.dueAt) return false;
+        const dueTime = new Date(action.dueAt);
+        if (filterDate === "overdue") {
+          if (dueTime >= todayStart) return false;
+        } else if (filterDate === "today") {
+          if (dueTime < todayStart || dueTime > todayEnd) return false;
+        } else if (filterDate === "week") {
+          if (dueTime < todayStart || dueTime > nextSevenDaysEnd) return false;
+        }
+      }
+
+      return true;
+    });
+  }, [actions, searchQuery, filterStatus, filterTopic, filterPerson, filterPriority, filterDate, todayStart, todayEnd, nextSevenDaysEnd, people]);
+
+  // Construct target segmented focus blocks for Attention Centre view
+  const attentionSections = useMemo(() => {
+    if (filterStatus !== "all_active") return [];
+
+    const overdue: SuggestedActionView[] = [];
+    const dueToday: SuggestedActionView[] = [];
+    const followUps: SuggestedActionView[] = [];
+    const waiting: SuggestedActionView[] = [];
+    const upcoming: SuggestedActionView[] = [];
+    const inboxPlanned: SuggestedActionView[] = [];
+
+    filteredActions.forEach((a) => {
+      const isOver = a.dueAt && new Date(a.dueAt) < todayStart;
+      const isToday = a.dueAt && new Date(a.dueAt) >= todayStart && new Date(a.dueAt) <= todayEnd;
+      const isFollow = (a.followUpAt && new Date(a.followUpAt) <= todayEnd) || a.status === "follow_up";
+      const isWait = a.status === "waiting";
+      const isUp = a.dueAt && new Date(a.dueAt) > todayEnd;
+
+      if (isOver) {
+        overdue.push(a);
+      } else if (isToday) {
+        dueToday.push(a);
+      } else if (isFollow) {
+        followUps.push(a);
+      } else if (isWait) {
+        waiting.push(a);
+      } else if (isUp) {
+        upcoming.push(a);
+      } else {
+        inboxPlanned.push(a);
+      }
+    });
+
+    return [
+      { id: "overdue", label: "🚨 Overdue Deadlines", items: overdue, tone: "risk" },
+      { id: "due_today", label: "📅 Due Today", items: dueToday, tone: "warn" },
+      { id: "follow_ups", label: "🔔 Touch Base & Follow-ups", items: followUps, tone: "info" },
+      { id: "waiting", label: "⏳ Blocked / Waiting On", items: waiting, tone: "neutral" },
+      { id: "upcoming", label: "🗓️ Upcoming Deliverables", items: upcoming, tone: "info" },
+      { id: "inbox_planned", label: "📥 Inbox & General Backlog", items: inboxPlanned, tone: "neutral" },
+    ].filter((s) => s.items.length > 0);
+  }, [filteredActions, filterStatus, todayStart, todayEnd]);
+
+  // Grouping for "by_topic" or "by_person" views
   const groupedSections = useMemo(() => {
+    if (filterStatus !== "by_topic" && filterStatus !== "by_person") return [];
+
     const list: { name: string; items: SuggestedActionView[] }[] = [];
 
-    if (view === "topics") {
+    if (filterStatus === "by_topic") {
       const topicMap = new Map<string, SuggestedActionView[]>();
       const untagged: SuggestedActionView[] = [];
 
-      visibleActions.forEach((action) => {
+      filteredActions.forEach((action) => {
         if (action.topics && action.topics.length > 0) {
           action.topics.forEach((topic) => {
             const arr = topicMap.get(topic) || [];
@@ -834,21 +806,20 @@ export function ActionsWorkspace({
         }
       });
 
-      // Sort alphabetically
       Array.from(topicMap.keys())
         .sort()
         .forEach((topic) => {
-          list.push({ name: topic, items: topicMap.get(topic)! });
+          list.push({ name: `# ${topic}`, items: topicMap.get(topic)! });
         });
 
       if (untagged.length > 0) {
         list.push({ name: "Untagged Commitments", items: untagged });
       }
-    } else if (view === "people") {
+    } else if (filterStatus === "by_person") {
       const personMap = new Map<string, { name: string; items: SuggestedActionView[] }>();
       const unassigned: SuggestedActionView[] = [];
 
-      visibleActions.forEach((action) => {
+      filteredActions.forEach((action) => {
         if (action.personId) {
           const pObj = people.find((p) => p.id === action.personId);
           if (pObj) {
@@ -863,11 +834,10 @@ export function ActionsWorkspace({
         }
       });
 
-      // Sort alphabetically by person name
       Array.from(personMap.values())
         .sort((a, b) => a.name.localeCompare(b.name))
         .forEach((group) => {
-          list.push({ name: group.name, items: group.items });
+          list.push({ name: `👤 ${group.name}`, items: group.items });
         });
 
       if (unassigned.length > 0) {
@@ -876,157 +846,253 @@ export function ActionsWorkspace({
     }
 
     return list;
-  }, [visibleActions, view, people]);
-
-  const viewHeading = useMemo(() => {
-    const matched = views.find((v) => v.id === view);
-    return matched ? `${matched.label} Section` : "Action Command Centre";
-  }, [view, views]);
+  }, [filteredActions, filterStatus, people]);
 
   return (
     <>
-      <div className="page-head actions-page__head">
-        <div>
+      {/* Dynamic Modal */}
+      <QuickCaptureModal
+        isOpen={isQuickCaptureOpen}
+        onClose={() => setIsQuickCaptureOpen(false)}
+        people={people}
+        existingTopics={availableTopics}
+      />
+
+      {/* Main Header Panel */}
+      <div className="page-head actions-page__head" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "var(--space-md)", flexWrap: "wrap", borderBottom: "1px solid var(--colour-border)", paddingBottom: "var(--space-md)" }}>
+        <div style={{ flex: 1, minWidth: "300px" }}>
           <p className="eyebrow">Action Command Centre</p>
-          <h1 className="page-head__title">Commitments & accountability</h1>
-          <p className="page-head__lead">
-            Review and capture what needs follow-through, link topics and people,
-            set critical priorities, and establish a bulletproof memory of execution.
+          <h1 className="page-head__title" style={{ margin: "4px 0" }}>Commitments & Accountability</h1>
+          <p className="page-head__lead" style={{ margin: 0 }}>
+            Executive-grade execution memory. Track deliverables, set strict priorities, prevent timeline slips, and avoid information-hoarding clutter.
           </p>
         </div>
-        <span className="status status--ok">Active Command Centre</span>
+        <button
+          type="button"
+          onClick={() => setIsQuickCaptureOpen(true)}
+          className="btn btn--primary"
+          style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 18px", fontSize: "14px", fontWeight: 600, borderRadius: "var(--radius-sm)" }}
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          Quick Capture
+        </button>
       </div>
 
-      <section className="action-capture" aria-labelledby="capture-title">
-        <div className="action-capture__prompt">
-          <span className="action-capture__plus" aria-hidden="true">
-            +
+      {/* Filter and Search Bar Rail */}
+      <section aria-label="Filters and Search" style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)", background: "var(--colour-surface-secondary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "var(--space-md)", margin: "var(--space-md) 0" }}>
+        {/* Row 1: Search Text */}
+        <div className="source-search actions-search" style={{ margin: 0, width: "100%", display: "flex", alignItems: "center", background: "var(--colour-surface-primary)" }}>
+          <span className="source-search__icon" aria-hidden="true" style={{ top: "13px" }}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.2-3.2" />
+            </svg>
           </span>
-          <div>
-            <h2 id="capture-title">Quick capture commitment</h2>
-            <p>Type what you or others committed to. Set dates, priorities and tags in the inspector.</p>
-          </div>
-        </div>
-        <form onSubmit={handleCapture} className="action-capture__control">
           <input
-            className="input"
-            type="text"
-            value={captureTitle}
-            onChange={(e) => setCaptureTitle(e.target.value)}
-            disabled={isCapturePending}
-            aria-describedby="capture-status"
-            placeholder="e.g. Align with Maria on Q3 goals by next Thursday…"
-            required
+            type="search"
+            className="input source-search__input"
+            style={{ width: "100%", height: "42px", paddingLeft: "40px", fontSize: "14px", border: "1px solid var(--colour-border)", background: "transparent" }}
+            placeholder="Search action details, topics, people, sources..."
+            aria-label="Search actions"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
           />
-          <button className="btn btn--primary" type="submit" disabled={isCapturePending || !captureTitle.trim()}>
-            {isCapturePending ? "Capturing..." : "Capture"}
-          </button>
-        </form>
-        {captureError && (
-          <p className="form-message form-message--error" style={{ margin: "var(--space-xs) var(--space-lg)" }}>
-            {captureError}
-          </p>
-        )}
-        <span id="capture-status" className="action-capture__status mono">
-          Manual capture active · entries arrive in your Inbox instantly
-        </span>
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              style={{ background: "transparent", border: 0, color: "var(--colour-text-muted)", cursor: "pointer", marginRight: "12px", fontSize: "12px" }}
+            >
+              Clear
+            </button>
+          )}
+          <span className="source-search__count mono" style={{ marginRight: "16px", fontSize: "12px" }}>
+            {filteredActions.length} matches
+          </span>
+        </div>
+
+        {/* Row 2: Metadata Dropdown selectors */}
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+          {/* Topic Filter */}
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <span style={{ fontSize: "11px", color: "var(--colour-text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>Topic:</span>
+            <select
+              className="input"
+              style={{ height: "30px", padding: "0 8px", fontSize: "12px", background: "var(--colour-surface-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", minWidth: "120px" }}
+              value={filterTopic}
+              onChange={(e) => setFilterTopic(e.target.value)}
+            >
+              <option value="all">All Topics</option>
+              {availableTopics.map((t) => (
+                <option key={t} value={t}>#{t}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Person Filter */}
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <span style={{ fontSize: "11px", color: "var(--colour-text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>Person:</span>
+            <select
+              className="input"
+              style={{ height: "30px", padding: "0 8px", fontSize: "12px", background: "var(--colour-surface-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", minWidth: "120px" }}
+              value={filterPerson}
+              onChange={(e) => setFilterPerson(e.target.value)}
+            >
+              <option value="all">Everyone</option>
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>{p.displayName}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Priority Filter */}
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <span style={{ fontSize: "11px", color: "var(--colour-text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>Priority:</span>
+            <select
+              className="input"
+              style={{ height: "30px", padding: "0 8px", fontSize: "12px", background: "var(--colour-surface-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", minWidth: "100px" }}
+              value={filterPriority}
+              onChange={(e) => setFilterPriority(e.target.value)}
+            >
+              <option value="all">All Priorities</option>
+              <option value="low">Low</option>
+              <option value="normal">Normal</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+          </div>
+
+          {/* Due Date Range Filter */}
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <span style={{ fontSize: "11px", color: "var(--colour-text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>Date:</span>
+            <select
+              className="input"
+              style={{ height: "30px", padding: "0 8px", fontSize: "12px", background: "var(--colour-surface-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", minWidth: "120px" }}
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+            >
+              <option value="all">Any Due Date</option>
+              <option value="overdue">Overdue</option>
+              <option value="today">Due Today</option>
+              <option value="week">Due Next 7 Days</option>
+            </select>
+          </div>
+
+          {/* Reset Filters button */}
+          {(filterTopic !== "all" || filterPerson !== "all" || filterPriority !== "all" || filterDate !== "all") && (
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              onClick={() => {
+                setFilterTopic("all");
+                setFilterPerson("all");
+                setFilterPriority("all");
+                setFilterDate("all");
+              }}
+              style={{ height: "30px", padding: "0 10px", fontSize: "11px" }}
+            >
+              Reset Filters
+            </button>
+          )}
+        </div>
       </section>
 
-      <div className="actions-shell">
-        <nav className="actions-views" aria-label="Action views">
-          <p className="actions-views__label">Command Centre Navigation</p>
-          {views.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={`actions-view${view === item.id ? " actions-view--active" : ""}`}
-              aria-pressed={view === item.id}
-              onClick={() => setView(item.id)}
-            >
-              <span>{item.label}</span>
-              <span className="actions-view__count mono">{item.count}</span>
-            </button>
-          ))}
+      {/* Main Workspace Layout Shell */}
+      <div className="actions-shell" style={{ display: "grid", gridTemplateColumns: "1fr", gap: "var(--space-md)" }}>
+        {/* Nav tabs Left / Top */}
+        <nav className="actions-views" aria-label="Action views" style={{ display: "flex", flexWrap: "wrap", gap: "4px", background: "transparent", borderBottom: "1px solid var(--colour-border)", paddingBottom: "8px", width: "100%", overflowX: "auto" }}>
+          {viewsList.map((item) => {
+            const isActive = filterStatus === item.id;
+            let badgeCount = 0;
+
+            if (item.id === "all") {
+              badgeCount = actions.length;
+            } else if (item.id === "all_active") {
+              badgeCount = actions.filter((a) => a.status !== "completed" && a.status !== "cancelled").length;
+            } else if (item.id === "completed_cancelled") {
+              badgeCount = actions.filter((a) => a.status === "completed" || a.status === "cancelled").length;
+            } else if (item.id === "by_topic" || item.id === "by_person") {
+              badgeCount = actions.filter((a) => a.status !== "completed" && a.status !== "cancelled").length;
+            } else {
+              badgeCount = actions.filter((a) => a.status === item.id).length;
+            }
+
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={`actions-view${isActive ? " actions-view--active" : ""}`}
+                style={{ padding: "6px 12px", borderRadius: "var(--radius-sm)", border: "1px solid transparent", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: isActive ? 600 : 400, background: isActive ? "var(--colour-border)" : "transparent", color: isActive ? "var(--colour-text-primary)" : "var(--colour-text-secondary)" }}
+                aria-pressed={isActive}
+                onClick={() => setFilterStatus(item.id)}
+              >
+                <span>{item.label}</span>
+                <span className="actions-view__count mono" style={{ fontSize: "10px", padding: "1px 5px", background: isActive ? "var(--colour-surface-secondary)" : "var(--colour-border)", color: "var(--colour-text-primary)", borderRadius: "3px" }}>{badgeCount}</span>
+              </button>
+            );
+          })}
         </nav>
 
-        <section className="actions-working-set" aria-labelledby="working-set-title">
-          <div className="actions-working-set__head">
-            <div>
-              <p className="eyebrow">Working set</p>
-              <h2 id="working-set-title">{viewHeading}</h2>
-            </div>
-            <span className="badge">{visibleActions.length}</span>
-          </div>
-
-          <div className="source-search actions-search">
-            <span className="source-search__icon" aria-hidden="true">
-              <svg
-                viewBox="0 0 24 24"
-                width="16"
-                height="16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="11" cy="11" r="7" />
-                <path d="m20 20-3.2-3.2" />
-              </svg>
-            </span>
-            <input
-              type="search"
-              className="input source-search__input"
-              placeholder="Search actions, people, topics, or sources…"
-              aria-label="Search actions"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            <span className="source-search__count mono" aria-live="polite">
-              {visibleActions.length} shown
-            </span>
-          </div>
-
-          <div className="actions-working-set__summary">
-            <span>
-              {view === "inbox"
-                ? "Items captured manually or extracted by AI requiring initial organizing."
-                : view === "deadlines"
-                  ? "Track active, time-bound deliverables and prevent slips."
-                  : view === "follow_ups"
-                    ? "Commitments marked for follow-up or check-ins."
-                    : "Grounded execution memory scoped to your active tenant."}
-            </span>
-          </div>
-
-          {visibleActions.length === 0 ? (
-            <div className="empty actions-empty">
-              <p className="empty__title">
-                {query ? "No actions match your search" : "No commitments in this view"}
+        {/* Dense List Work Area */}
+        <section className="actions-working-set" aria-labelledby="working-set-title" style={{ padding: 0 }}>
+          {filteredActions.length === 0 ? (
+            <div className="empty actions-empty" style={{ margin: "var(--space-lg) 0", padding: "48px 16px", background: "var(--colour-surface-secondary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-md)", textAlign: "center" }}>
+              <p className="empty__title" style={{ fontSize: "16px", fontWeight: 600, color: "var(--colour-text-primary)", margin: 0 }}>
+                {searchQuery || filterTopic !== "all" || filterPerson !== "all" || filterPriority !== "all" || filterDate !== "all"
+                  ? "No commitments match your active filters"
+                  : "No active commitments in this category"}
               </p>
-              <p className="empty__body">
-                {query
-                  ? "Try adjusting your query or filters."
-                  : "Captured commitments or AI suggested extractions will list here."}
+              <p className="empty__body" style={{ fontSize: "13px", color: "var(--colour-text-secondary)", marginTop: "4px" }}>
+                {searchQuery || filterTopic !== "all" || filterPerson !== "all" || filterPriority !== "all" || filterDate !== "all"
+                  ? "Try resetting filters or adjusting search queries."
+                  : "Click '+ Quick Capture' to log a new commitment."}
               </p>
             </div>
-          ) : view === "topics" || view === "people" ? (
-            <div className="grouped-actions-wrapper" style={{ display: "flex", flexDirection: "column", gap: "var(--space-md)" }}>
-              {groupedSections.map((group) => (
-                <div key={group.name} style={{ border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
-                  <div style={{ background: "var(--colour-surface-secondary)", padding: "var(--space-sm) var(--space-lg)", borderBottom: "1px solid var(--colour-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <h3 style={{ fontSize: "var(--text-small)", fontWeight: 600, textTransform: "uppercase", color: "var(--colour-text-secondary)", fontFamily: "var(--font-mono)" }}>
-                      {group.name}
+          ) : filterStatus === "all_active" ? (
+            // Focused Attention Centre View (Segmented Focus sections)
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-md)", marginTop: "var(--space-sm)" }}>
+              {attentionSections.map((sec) => (
+                <div key={sec.id} style={{ border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", overflow: "hidden", background: "var(--colour-surface-secondary)" }}>
+                  <div style={{ background: "rgba(255, 255, 255, 0.02)", padding: "10px 16px", borderBottom: "1px solid var(--colour-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <h3 style={{ fontSize: "12px", fontWeight: 600, textTransform: "uppercase", color: "var(--colour-text-secondary)", fontFamily: "var(--font-mono)", margin: 0 }}>
+                      {sec.label}
                     </h3>
-                    <span className="badge" style={{ fontSize: "11px", padding: "1px 6px" }}>{group.items.length}</span>
+                    <span className="badge" style={{ fontSize: "11px", padding: "1px 6px", background: "var(--colour-border)", borderRadius: "10px" }}>{sec.items.length}</span>
                   </div>
                   <div className="action-list">
-                    {group.items.map((action) => (
+                    {sec.items.map((item) => (
                       <ActionRow
-                        key={`${group.name}-${action.id}`}
-                        action={action}
-                        selected={action.id === selected?.id}
-                        onSelect={() => setSelectedId(action.id)}
+                        key={`${sec.id}-${item.id}`}
+                        action={item}
+                        people={people}
+                        onClick={() => router.push(`/actions/${item.id}`)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filterStatus === "by_topic" || filterStatus === "by_person" ? (
+            // Grouped Section Views
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-md)", marginTop: "var(--space-sm)" }}>
+              {groupedSections.map((group) => (
+                <div key={group.name} style={{ border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", overflow: "hidden", background: "var(--colour-surface-secondary)" }}>
+                  <div style={{ background: "rgba(255, 255, 255, 0.02)", padding: "10px 16px", borderBottom: "1px solid var(--colour-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <h3 style={{ fontSize: "12px", fontWeight: 600, color: "var(--colour-text-secondary)", fontFamily: "var(--font-mono)", margin: 0 }}>
+                      {group.name}
+                    </h3>
+                    <span className="badge" style={{ fontSize: "11px", padding: "1px 6px", background: "var(--colour-border)", borderRadius: "10px" }}>{group.items.length}</span>
+                  </div>
+                  <div className="action-list">
+                    {group.items.map((item) => (
+                      <ActionRow
+                        key={`${group.name}-${item.id}`}
+                        action={item}
+                        people={people}
+                        onClick={() => router.push(`/actions/${item.id}`)}
                       />
                     ))}
                   </div>
@@ -1034,20 +1100,19 @@ export function ActionsWorkspace({
               ))}
             </div>
           ) : (
-            <div className="action-list" style={{ border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
-              {visibleActions.map((action) => (
+            // Flat Categorized Views
+            <div className="action-list" style={{ border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", overflow: "hidden", background: "var(--colour-surface-secondary)", marginTop: "var(--space-sm)" }}>
+              {filteredActions.map((item) => (
                 <ActionRow
-                  key={action.id}
-                  action={action}
-                  selected={action.id === selected?.id}
-                  onSelect={() => setSelectedId(action.id)}
+                  key={item.id}
+                  action={item}
+                  people={people}
+                  onClick={() => router.push(`/actions/${item.id}`)}
                 />
               ))}
             </div>
           )}
         </section>
-
-        <ActionInspector action={selected} people={people} />
       </div>
     </>
   );

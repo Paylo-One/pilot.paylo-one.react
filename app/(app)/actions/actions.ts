@@ -11,6 +11,17 @@ import { requireTenantContext } from "@/modules/identity-tenant/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { auditService } from "@/modules/audit";
 import { ActionStatus, ActionPriority, ActionCreatedFrom } from "@/modules/action-extraction/server";
+import OpenAI from "openai";
+
+export interface ActionDocument {
+  readonly id: string;
+  readonly name: string;
+  readonly path: string;
+  readonly type: string;
+  readonly size: number;
+  readonly uploadedAt: string;
+  readonly uploadedBy: string;
+}
 
 export type ActionDecision = "approve" | "defer" | "dismiss";
 
@@ -35,6 +46,7 @@ export async function createAction(input: {
   followUpAt?: string | null;
   topics?: string[];
   personId?: string | null;
+  rationale?: string | null;
 }): Promise<ActionResponse> {
   try {
     if (!input.title || !input.title.trim()) {
@@ -62,6 +74,7 @@ export async function createAction(input: {
         follow_up_at: input.followUpAt || null,
         topics: input.topics || [],
         person_id: input.personId || null,
+        rationale: input.rationale?.trim() || null,
         created_by: user.id,
         created_from: "manual" as ActionCreatedFrom,
       })
@@ -97,6 +110,7 @@ export async function updateAction(
     followUpAt?: string | null;
     topics?: string[];
     personId?: string | null;
+    rationale?: string | null;
   },
 ): Promise<ActionResponse> {
   try {
@@ -124,6 +138,7 @@ export async function updateAction(
     if (input.followUpAt !== undefined) updatePayload.follow_up_at = input.followUpAt || null;
     if (input.topics !== undefined) updatePayload.topics = input.topics;
     if (input.personId !== undefined) updatePayload.person_id = input.personId || null;
+    if (input.rationale !== undefined) updatePayload.rationale = input.rationale?.trim() || null;
 
     const { data, error } = await supabase
       .from("suggested_actions")
@@ -384,4 +399,298 @@ export async function decideAction(
   revalidatePath("/actions");
   revalidatePath("/briefing");
   return { ok: true };
+}
+
+export async function suggestActionMetadata(
+  title: string,
+  description?: string,
+): Promise<{
+  ok: boolean;
+  error?: string;
+  suggestions?: {
+    topics: string[];
+    people: { id: string; displayName: string }[];
+    dueAt: string | null;
+    followUpAt: string | null;
+    priority: ActionPriority;
+    waitingOnSomeone: boolean;
+  };
+}> {
+  try {
+    if (!title || !title.trim()) {
+      return { ok: false, error: "Title is required for metadata suggestions." };
+    }
+
+    const ctx = await requireTenantContext();
+    const supabase = await createSupabaseServerClient();
+
+    // 1. Fetch distinct existing topics
+    const { data: actionsData } = await supabase
+      .from("suggested_actions")
+      .select("topics")
+      .eq("tenant_id", ctx.tenantId);
+
+    const existingTopicsSet = new Set<string>();
+    if (actionsData) {
+      for (const row of actionsData) {
+        if (row.topics) {
+          for (const t of row.topics) {
+            if (t && t.trim()) {
+              existingTopicsSet.add(t.trim());
+            }
+          }
+        }
+      }
+    }
+    const existingTopics = Array.from(existingTopicsSet);
+
+    // 2. Fetch directory people
+    const { data: peopleData } = await supabase
+      .from("people")
+      .select("id, display_name")
+      .eq("tenant_id", ctx.tenantId);
+    
+    const peopleList = (peopleData ?? []).map((p) => ({
+      id: p.id,
+      displayName: p.display_name,
+    }));
+
+    const combinedText = `${title} ${description || ""}`;
+
+    // 3. Fallback heuristic parsing function
+    const getFallback = () => {
+      const lower = combinedText.toLowerCase();
+      
+      // Topics suggestion based on existing topics
+      const topics = existingTopics.filter((topic) =>
+        lower.includes(topic.toLowerCase())
+      );
+
+      // People suggestion based on exact display name match
+      const people = peopleList.filter((person) =>
+        lower.includes(person.displayName.toLowerCase())
+      );
+
+      // Priority determination
+      let priority: ActionPriority = "normal";
+      if (/\b(urgent|asap|critical|blocker|emergency|immediate|high-priority|milestone)\b/i.test(lower)) {
+        priority = "high";
+      } else if (/\b(low|whenever|backlog|trivial|idle|non-urgent|someday)\b/i.test(lower)) {
+        priority = "low";
+      }
+
+      // Dates parsing
+      let dueAt: string | null = null;
+      let followUpAt: string | null = null;
+      const today = new Date();
+
+      if (/\b(today|eod)\b/i.test(lower)) {
+        dueAt = today.toISOString().split("T")[0] || null;
+      } else if (/\b(tomorrow)\b/i.test(lower)) {
+        const tomorrow = new Date(today);
+        tomorrow.setDate(today.getDate() + 1);
+        dueAt = tomorrow.toISOString().split("T")[0] || null;
+      } else if (/\b(next week|by next week)\b/i.test(lower)) {
+        const nextWeek = new Date(today);
+        nextWeek.setDate(today.getDate() + 7);
+        dueAt = nextWeek.toISOString().split("T")[0] || null;
+      }
+
+      if (/\b(follow up|follow-up|check in|revisit|touch base|ping)\b/i.test(lower)) {
+        const inThreeDays = new Date(today);
+        inThreeDays.setDate(today.getDate() + 3);
+        followUpAt = inThreeDays.toISOString().split("T")[0] || null;
+      }
+
+      const waitingOnSomeone = /\b(wait for|waiting on|waiting for|blocked by|depends on|ping)\b/i.test(lower);
+
+      return {
+        topics,
+        people,
+        dueAt,
+        followUpAt,
+        priority,
+        waitingOnSomeone,
+      };
+    };
+
+    // 4. Try OpenAI if API Key is configured
+    const apiKey = process.env.OPENAI_API_KEY?.trim();
+    if (!apiKey) {
+      return { ok: true, suggestions: getFallback() };
+    }
+
+    try {
+      const client = new OpenAI({ apiKey });
+      const systemPrompt = `You are an AI assistant in Antigravity Management OS. Your task is to analyze an action's title and description to extract and suggest structured metadata.
+We want to keep metadata minimal and avoid information hoarding and tag clutter. Suggest only what is highly relevant and high-value.
+
+Context of this workspace:
+- Existing topics in use: ${JSON.stringify(existingTopics)}
+- Directory of people (id and name): ${JSON.stringify(peopleList)}
+
+Please prioritize existing topics over creating new ones. Only suggest a topic if it matches closely or is highly relevant.
+Only match people from the provided Directory of people. Map their names to their IDs. If none match, return an empty array for people.
+Determine the priority ("critical", "high", "normal", "low") based on the language.
+Determine if the action is waiting on someone else ("waitingOnSomeone": true/false).
+Suggest "dueAt" (due date) or "followUpAt" (follow-up date) in "YYYY-MM-DD" format if mentioned or implied. (Assume today is ${new Date().toISOString().split('T')[0]}).
+
+You must respond with a JSON object in this exact schema:
+{
+  "topics": string[], // suggested topics (prefer existing)
+  "peopleIds": string[], // IDs of matched people from the Directory
+  "dueAt": string | null, // YYYY-MM-DD
+  "followUpAt": string | null, // YYYY-MM-DD
+  "priority": "critical" | "high" | "normal" | "low",
+  "waitingOnSomeone": boolean
+}`;
+
+      const response = await client.chat.completions.create({
+        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+        temperature: 0,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Action Title: "${title}"\nDescription: "${description || ""}"` },
+        ],
+      });
+
+      const resText = response.choices[0]?.message?.content;
+      if (!resText) {
+        return { ok: true, suggestions: getFallback() };
+      }
+
+      const parsed = JSON.parse(resText);
+      const suggestedPeople = peopleList.filter((p) =>
+        (parsed.peopleIds || []).includes(p.id)
+      );
+
+      return {
+        ok: true,
+        suggestions: {
+          topics: parsed.topics || [],
+          people: suggestedPeople,
+          dueAt: parsed.dueAt || null,
+          followUpAt: parsed.followUpAt || null,
+          priority: parsed.priority || "normal",
+          waitingOnSomeone: !!parsed.waitingOnSomeone,
+        },
+      };
+    } catch (llmErr) {
+      console.warn("LLM metadata extraction failed, falling back to heuristics:", llmErr);
+      return { ok: true, suggestions: getFallback() };
+    }
+  } catch (err: any) {
+    return { ok: false, error: err.message || "An unexpected error occurred." };
+  }
+}
+
+export async function registerActionDocument(
+  actionId: string,
+  doc: ActionDocument,
+): Promise<ActionResponse> {
+  try {
+    if (!actionId) {
+      return { ok: false, error: "Action ID is required." };
+    }
+
+    const ctx = await requireTenantContext();
+    const supabase = await createSupabaseServerClient();
+
+    // Fetch existing documents array
+    const { data: existing, error: fetchErr } = await supabase
+      .from("suggested_actions")
+      .select("documents")
+      .eq("id", actionId)
+      .eq("tenant_id", ctx.tenantId)
+      .maybeSingle();
+
+    if (fetchErr) return { ok: false, error: fetchErr.message };
+    if (!existing) return { ok: false, error: "Action not found." };
+
+    const currentDocs = Array.isArray(existing.documents) ? existing.documents : [];
+    const updatedDocs = [...currentDocs, doc];
+
+    const { error: updateErr } = await supabase
+      .from("suggested_actions")
+      .update({ documents: updatedDocs })
+      .eq("id", actionId)
+      .eq("tenant_id", ctx.tenantId);
+
+    if (updateErr) return { ok: false, error: updateErr.message };
+
+    await auditService.record(ctx, {
+      action: "action.document.uploaded",
+      target: actionId,
+      metadata: { documentId: doc.id, documentName: doc.name },
+    });
+
+    revalidatePath("/actions");
+    revalidatePath(`/actions/${actionId}`);
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err.message || "An unexpected error occurred." };
+  }
+}
+
+export async function removeActionDocument(
+  actionId: string,
+  documentId: string,
+): Promise<ActionResponse> {
+  try {
+    if (!actionId || !documentId) {
+      return { ok: false, error: "Action ID and Document ID are required." };
+    }
+
+    const ctx = await requireTenantContext();
+    const supabase = await createSupabaseServerClient();
+
+    // Fetch existing documents array
+    const { data: existing, error: fetchErr } = await supabase
+      .from("suggested_actions")
+      .select("documents")
+      .eq("id", actionId)
+      .eq("tenant_id", ctx.tenantId)
+      .maybeSingle();
+
+    if (fetchErr) return { ok: false, error: fetchErr.message };
+    if (!existing) return { ok: false, error: "Action not found." };
+
+    const currentDocs = Array.isArray(existing.documents) ? existing.documents : [];
+    const docToRemove = currentDocs.find((d: any) => d.id === documentId);
+    if (!docToRemove) {
+      return { ok: false, error: "Document not found on this action." };
+    }
+
+    const updatedDocs = currentDocs.filter((d: any) => d.id !== documentId);
+
+    const { error: updateErr } = await supabase
+      .from("suggested_actions")
+      .update({ documents: updatedDocs })
+      .eq("id", actionId)
+      .eq("tenant_id", ctx.tenantId);
+
+    if (updateErr) return { ok: false, error: updateErr.message };
+
+    // Delete the file from the storage bucket as well
+    const { error: storageErr } = await supabase.storage
+      .from("uploads")
+      .remove([docToRemove.path]);
+
+    if (storageErr) {
+      console.warn("Could not delete from storage bucket:", storageErr.message);
+    }
+
+    await auditService.record(ctx, {
+      action: "action.document.removed",
+      target: actionId,
+      metadata: { documentId, documentName: docToRemove.name },
+    });
+
+    revalidatePath("/actions");
+    revalidatePath(`/actions/${actionId}`);
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err.message || "An unexpected error occurred." };
+  }
 }
