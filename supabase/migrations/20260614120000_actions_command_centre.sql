@@ -10,6 +10,8 @@
 
 -- Temporary disable check constraint by dropping it first (we will replace it with the new constraint)
 alter table public.suggested_actions drop constraint if exists suggested_actions_status_check;
+alter table public.suggested_actions drop constraint if exists suggested_actions_priority_check;
+alter table public.suggested_actions drop constraint if exists suggested_actions_created_from_check;
 
 -- Perform status data migration
 update public.suggested_actions set status = 'inbox' where status = 'suggested';
@@ -42,10 +44,12 @@ alter table public.suggested_actions
 -- 4. Enable inserts and deletes for authenticated users on suggested_actions (since users can now capture and manage)
 grant insert, delete on table public.suggested_actions to authenticated;
 
+drop policy if exists actions_insert on public.suggested_actions;
 create policy actions_insert on public.suggested_actions
   for insert to authenticated
   with check ( tenant_id in (select public.auth_tenant_ids()) );
 
+drop policy if exists actions_delete on public.suggested_actions;
 create policy actions_delete on public.suggested_actions
   for delete to authenticated
   using ( tenant_id in (select public.auth_tenant_ids()) );
