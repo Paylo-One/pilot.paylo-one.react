@@ -9,12 +9,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { appHostBaseUrl, tenantBaseUrl } from "@/lib/config";
+import { safeNextPath } from "@/lib/auth-redirect";
 import { findPrimaryTenantSlug } from "@/modules/identity-tenant/server";
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const next = url.searchParams.get("next") ?? "/onboarding";
+  const next = safeNextPath(url.searchParams.get("next") ?? "/onboarding");
 
   if (!code) {
     return NextResponse.redirect(`${appHostBaseUrl()}/sign-in?error=missing_code`);
@@ -29,6 +30,10 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  if (next.startsWith("/activate/")) {
+    return NextResponse.redirect(`${appHostBaseUrl()}${next}`);
+  }
+
   // If the user already owns a workspace, skip onboarding and go straight to it.
   // We use the userId from the exchange response directly — no cookie round-trip.
   const userId = data.user?.id;
@@ -40,6 +45,5 @@ export async function GET(request: NextRequest) {
   }
 
   // New user: send to onboarding to claim a subdomain.
-  const target = next.startsWith("/") ? `${appHostBaseUrl()}${next}` : next;
-  return NextResponse.redirect(target);
+  return NextResponse.redirect(`${appHostBaseUrl()}${next}`);
 }

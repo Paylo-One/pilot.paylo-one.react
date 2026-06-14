@@ -9,7 +9,7 @@
  *     (challenge → navigator.credentials.get() → verify → session) entirely on
  *     the Auth server; the user picks their account from the authenticator UI,
  *     so no email is needed up front.
- *   - signInWithOtp() emails a magic link back to /auth/callback. Existing-user
+ *   - signInWithOtp() emails a magic link back to /auth/confirm. Existing-user
  *     sign-in disables account creation; the referral-only registration page
  *     opts into it after server-side validation.
  *
@@ -19,6 +19,7 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { magicLinkRedirectUrl, safeNextPath } from "@/lib/auth-redirect";
 
 /** WebAuthn support never changes within a page lifetime — no updates to push. */
 function subscribeNever(): () => void {
@@ -31,8 +32,10 @@ function passkeySupported(): boolean {
 
 export function SignInForm({
   mode = "sign-in",
+  nextPath = "/onboarding",
 }: {
   mode?: "sign-in" | "registration";
+  nextPath?: string;
 }) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(
@@ -51,7 +54,7 @@ export function SignInForm({
       const supabase = createSupabaseBrowserClient();
       const { error } = await supabase.auth.signInWithPasskey();
       if (error) throw error;
-      window.location.assign("/onboarding");
+      window.location.assign(safeNextPath(nextPath));
     } catch (err) {
       const name = err instanceof Error ? err.name : "";
       setError(
@@ -72,7 +75,10 @@ export function SignInForm({
     setError(null);
     try {
       const supabase = createSupabaseBrowserClient();
-      const emailRedirectTo = `${window.location.origin}/auth/callback?next=/onboarding`;
+      const emailRedirectTo = magicLinkRedirectUrl(
+        window.location.origin,
+        nextPath,
+      );
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {

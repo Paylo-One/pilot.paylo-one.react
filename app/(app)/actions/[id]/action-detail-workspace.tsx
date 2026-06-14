@@ -354,12 +354,12 @@ export function ActionDetailWorkspace({
 
       {/* Notifications */}
       {error && (
-        <div className="alert alert--danger" style={{ padding: "12px 16px", borderRadius: "var(--radius-sm)", borderLeft: "4px solid var(--colour-danger)", background: "rgba(224, 86, 36, 0.1)", color: "var(--colour-text-primary)", fontSize: "14px" }}>
+        <div className="alert alert--risk" style={{ padding: "12px 16px", borderRadius: "var(--radius-sm)", fontSize: "14px" }}>
           <strong>Error:</strong> {error}
         </div>
       )}
       {success && (
-        <div className="alert alert--ok" style={{ padding: "12px 16px", borderRadius: "var(--radius-sm)", borderLeft: "4px solid var(--colour-success)", background: "rgba(36, 172, 108, 0.1)", color: "var(--colour-text-primary)", fontSize: "14px" }}>
+        <div className="alert alert--ok" style={{ padding: "12px 16px", borderRadius: "var(--radius-sm)", fontSize: "14px" }}>
           <strong>Success:</strong> {success}
         </div>
       )}
@@ -527,7 +527,7 @@ export function ActionDetailWorkspace({
                   <span className="mono" style={{ fontSize: "12px", color: "var(--colour-text-secondary)" }}>{uploadProgress}%</span>
                 </div>
                 <div style={{ width: "100%", height: "4px", background: "var(--colour-border)", borderRadius: "2px", overflow: "hidden" }}>
-                  <div style={{ width: `${uploadProgress}%`, height: "100%", background: "var(--colour-accent-primary)", transition: "width 0.2s ease" }} />
+                  <div style={{ width: "100%", height: "100%", background: "var(--colour-accent-primary)", transform: `scaleX(${uploadProgress / 100})`, transformOrigin: "left", transition: "transform 0.2s ease" }} />
                 </div>
               </div>
             )}
@@ -916,7 +916,7 @@ export function ActionDetailWorkspace({
 
           {/* Complete Action Section */}
           {status !== "completed" && (
-            <div className="panel" style={{ background: "var(--colour-surface-secondary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-md)", padding: "var(--space-lg)", borderLeft: "4px solid var(--colour-success)" }}>
+            <div className="panel" style={{ background: "var(--colour-surface-secondary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-md)", padding: "var(--space-lg)" }}>
               <h3 style={{ fontSize: "14px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--colour-text-secondary)", marginBottom: "var(--space-md)" }}>
                 Complete Action
               </h3>

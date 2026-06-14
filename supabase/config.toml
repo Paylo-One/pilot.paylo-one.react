@@ -255,15 +255,15 @@ otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 3600
 
-# Custom magic-link email: link to the server /auth/confirm route with a
-# token_hash query param (SSR pattern) instead of the default hash-fragment
-# implicit flow, so the session is established server-side.
+# Custom magic-link email: append the token_hash to the caller-provided
+# RedirectTo, which points at /auth/confirm with the intended next path. This
+# preserves activation links while establishing the session server-side.
 [auth.email.template.magic_link]
 subject = "Your Paylo.one sign-in link"
 content_path = "./supabase/templates/magic_link.html"
 
-# Custom signup confirmation email: same token_hash/SSR pattern as magic_link,
-# but type=signup so /auth/confirm verifies the signup OTP server-side.
+# Custom signup confirmation email: same RedirectTo/token_hash pattern as
+# magic_link, but type=signup so /auth/confirm verifies the signup OTP.
 [auth.email.template.confirmation]
 subject = "Confirm your email · Paylo.one"
 content_path = "./supabase/templates/confirmation.html"

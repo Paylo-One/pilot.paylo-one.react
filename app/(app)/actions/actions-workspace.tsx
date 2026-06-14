@@ -239,7 +239,7 @@ function QuickCaptureModal({
 
   return (
     <div className="modal-backdrop" style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0, 0, 0, 0.75)", backdropFilter: "blur(4px)", padding: "var(--space-md)" }} onClick={onClose}>
-      <div className="panel" style={{ width: "100%", maxWidth: "600px", maxHeight: "90vh", overflowY: "auto", background: "var(--colour-surface-secondary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-md)", padding: "var(--space-lg)", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.5)" }} onClick={(e) => e.stopPropagation()}>
+      <div className="panel" style={{ width: "100%", maxWidth: "600px", maxHeight: "90vh", overflowY: "auto", background: "var(--colour-surface-elevated)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-md)", padding: "var(--space-lg)", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.5)" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--colour-border)", paddingBottom: "var(--space-md)", marginBottom: "var(--space-md)" }}>
           <div>
             <p className="eyebrow" style={{ color: "var(--colour-accent-primary)" }}>Executive Workspace</p>
