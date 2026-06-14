@@ -1071,9 +1071,10 @@ export function ActionsWorkspace({
       </section>
 
       {/* Main Workspace Layout Shell */}
-      <div className="actions-shell" style={{ display: "grid", gridTemplateColumns: "1fr", gap: "var(--space-md)" }}>
+      <div className="actions-shell">
         {/* Nav tabs Left / Top */}
-        <nav className="actions-views" aria-label="Action views" style={{ display: "flex", flexWrap: "wrap", gap: "4px", background: "transparent", borderBottom: "1px solid var(--colour-border)", paddingBottom: "8px", width: "100%", overflowX: "auto" }}>
+        <nav className="actions-views" aria-label="Action views">
+          <div className="actions-views__label">Views</div>
           {viewsList.map((item) => {
             const isActive = filterStatus === item.id;
             let badgeCount = 0;
@@ -1095,12 +1096,11 @@ export function ActionsWorkspace({
                 key={item.id}
                 type="button"
                 className={`actions-view${isActive ? " actions-view--active" : ""}`}
-                style={{ padding: "6px 12px", borderRadius: "var(--radius-sm)", border: "1px solid transparent", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: isActive ? 600 : 400, background: isActive ? "var(--colour-border)" : "transparent", color: isActive ? "var(--colour-text-primary)" : "var(--colour-text-secondary)" }}
                 aria-pressed={isActive}
                 onClick={() => setFilterStatus(item.id)}
               >
                 <span>{item.label}</span>
-                <span className="actions-view__count mono" style={{ fontSize: "10px", padding: "1px 5px", background: isActive ? "var(--colour-surface-secondary)" : "var(--colour-border)", color: "var(--colour-text-primary)", borderRadius: "3px" }}>{badgeCount}</span>
+                <span className="actions-view__count mono">{badgeCount}</span>
               </button>
             );
           })}
