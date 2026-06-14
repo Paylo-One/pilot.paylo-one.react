@@ -643,6 +643,7 @@ export function ActionsWorkspace({
   const [filterPerson, setFilterPerson] = useState<string>("all");
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [filterDate, setFilterDate] = useState<string>("all");
+  const [showFilters, setShowFilters] = useState(false);
 
   // Fetch unique topic tags from actions data for filter selector
   const availableTopics = useMemo(() => {
@@ -882,122 +883,191 @@ export function ActionsWorkspace({
       </div>
 
       {/* Filter and Search Bar Rail */}
-      <section aria-label="Filters and Search" style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)", background: "var(--colour-surface-secondary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "var(--space-md)", margin: "var(--space-md) 0" }}>
-        {/* Row 1: Search Text */}
-        <div className="source-search actions-search" style={{ margin: 0, width: "100%", display: "flex", alignItems: "center", background: "var(--colour-surface-primary)" }}>
-          <span className="source-search__icon" aria-hidden="true" style={{ top: "13px" }}>
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-3.2-3.2" />
+      <section
+        aria-label="Filters and Search"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          background: showFilters ? "var(--colour-surface-secondary)" : "transparent",
+          border: showFilters ? "1px solid var(--colour-border)" : "none",
+          borderRadius: "var(--radius-sm)",
+          padding: showFilters ? "var(--space-md)" : "0",
+          margin: "var(--space-md) 0",
+          gap: showFilters ? "var(--space-md)" : "0"
+        }}
+      >
+        {/* Row 1: Search Text & Filters Toggle */}
+        <div style={{ display: "flex", gap: "12px", width: "100%", alignItems: "center", flexWrap: "wrap" }}>
+          <div
+            className="source-search actions-search"
+            style={{
+              margin: 0,
+              flex: 1,
+              minWidth: "280px",
+              display: "flex",
+              alignItems: "center",
+              background: "var(--colour-surface-sunken)",
+              border: "1px solid var(--colour-border)",
+              borderRadius: "var(--radius-sm)"
+            }}
+          >
+            <span className="source-search__icon" aria-hidden="true" style={{ top: "13px" }}>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.2-3.2" />
+              </svg>
+            </span>
+            <input
+              type="search"
+              className="input source-search__input"
+              style={{ width: "100%", height: "40px", paddingLeft: "40px", fontSize: "14px", border: "none", background: "transparent" }}
+              placeholder="Search action details, topics, people, sources..."
+              aria-label="Search actions"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                style={{ background: "transparent", border: 0, color: "var(--colour-text-muted)", cursor: "pointer", marginRight: "12px", fontSize: "12px" }}
+              >
+                Clear
+              </button>
+            )}
+            <span className="source-search__count mono" style={{ marginRight: "16px", fontSize: "12px", position: "static", pointerEvents: "auto", whiteSpace: "nowrap" }}>
+              {filteredActions.length} matches
+            </span>
+          </div>
+
+          {/* Collapsible Filters Toggle Button */}
+          <button
+            type="button"
+            className={`btn btn--secondary btn--sm`}
+            style={{
+              height: "42px",
+              padding: "0 var(--space-md)",
+              fontSize: "13px",
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              borderRadius: "var(--radius-sm)",
+              border: "1px solid var(--colour-border)",
+              background: showFilters ? "var(--colour-border)" : "var(--colour-surface-secondary)",
+              color: "var(--colour-text-primary)",
+              cursor: "pointer"
+            }}
+            onClick={() => setShowFilters(!showFilters)}
+            aria-expanded={showFilters}
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: showFilters ? "var(--colour-accent-primary)" : "var(--colour-text-secondary)" }}>
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
             </svg>
-          </span>
-          <input
-            type="search"
-            className="input source-search__input"
-            style={{ width: "100%", height: "42px", paddingLeft: "40px", fontSize: "14px", border: "1px solid var(--colour-border)", background: "transparent" }}
-            placeholder="Search action details, topics, people, sources..."
-            aria-label="Search actions"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery("")}
-              style={{ background: "transparent", border: 0, color: "var(--colour-text-muted)", cursor: "pointer", marginRight: "12px", fontSize: "12px" }}
-            >
-              Clear
-            </button>
-          )}
-          <span className="source-search__count mono" style={{ marginRight: "16px", fontSize: "12px" }}>
-            {filteredActions.length} matches
-          </span>
+            <span>Filters</span>
+            {/* Active filters count badge */}
+            {(filterTopic !== "all" || filterPerson !== "all" || filterPriority !== "all" || filterDate !== "all") && (
+              <span className="mono" style={{
+                background: "var(--colour-accent-primary)",
+                color: "#ffffff",
+                borderRadius: "10px",
+                padding: "2px 6px",
+                fontSize: "10px",
+                fontWeight: "bold",
+                lineHeight: 1
+              }}>
+                {[filterTopic, filterPerson, filterPriority, filterDate].filter(f => f !== "all").length}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Row 2: Metadata Dropdown selectors */}
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
-          {/* Topic Filter */}
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <span style={{ fontSize: "11px", color: "var(--colour-text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>Topic:</span>
-            <select
-              className="input"
-              style={{ height: "30px", padding: "0 8px", fontSize: "12px", background: "var(--colour-surface-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", minWidth: "120px" }}
-              value={filterTopic}
-              onChange={(e) => setFilterTopic(e.target.value)}
-            >
-              <option value="all">All Topics</option>
-              {availableTopics.map((t) => (
-                <option key={t} value={t}>#{t}</option>
-              ))}
-            </select>
-          </div>
+        {showFilters && (
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center", width: "100%" }}>
+            {/* Topic Filter */}
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ fontSize: "11px", color: "var(--colour-text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>Topic:</span>
+              <select
+                className="input"
+                style={{ height: "32px", padding: "0 8px", fontSize: "12px", background: "var(--colour-surface-sunken)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", minWidth: "120px" }}
+                value={filterTopic}
+                onChange={(e) => setFilterTopic(e.target.value)}
+              >
+                <option value="all">All Topics</option>
+                {availableTopics.map((t) => (
+                  <option key={t} value={t}>#{t}</option>
+                ))}
+              </select>
+            </div>
 
-          {/* Person Filter */}
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <span style={{ fontSize: "11px", color: "var(--colour-text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>Person:</span>
-            <select
-              className="input"
-              style={{ height: "30px", padding: "0 8px", fontSize: "12px", background: "var(--colour-surface-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", minWidth: "120px" }}
-              value={filterPerson}
-              onChange={(e) => setFilterPerson(e.target.value)}
-            >
-              <option value="all">Everyone</option>
-              {people.map((p) => (
-                <option key={p.id} value={p.id}>{p.displayName}</option>
-              ))}
-            </select>
-          </div>
+            {/* Person Filter */}
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ fontSize: "11px", color: "var(--colour-text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>Person:</span>
+              <select
+                className="input"
+                style={{ height: "32px", padding: "0 8px", fontSize: "12px", background: "var(--colour-surface-sunken)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", minWidth: "120px" }}
+                value={filterPerson}
+                onChange={(e) => setFilterPerson(e.target.value)}
+              >
+                <option value="all">Everyone</option>
+                {people.map((p) => (
+                  <option key={p.id} value={p.id}>{p.displayName}</option>
+                ))}
+              </select>
+            </div>
 
-          {/* Priority Filter */}
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <span style={{ fontSize: "11px", color: "var(--colour-text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>Priority:</span>
-            <select
-              className="input"
-              style={{ height: "30px", padding: "0 8px", fontSize: "12px", background: "var(--colour-surface-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", minWidth: "100px" }}
-              value={filterPriority}
-              onChange={(e) => setFilterPriority(e.target.value)}
-            >
-              <option value="all">All Priorities</option>
-              <option value="low">Low</option>
-              <option value="normal">Normal</option>
-              <option value="high">High</option>
-              <option value="critical">Critical</option>
-            </select>
-          </div>
+            {/* Priority Filter */}
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ fontSize: "11px", color: "var(--colour-text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>Priority:</span>
+              <select
+                className="input"
+                style={{ height: "32px", padding: "0 8px", fontSize: "12px", background: "var(--colour-surface-sunken)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", minWidth: "100px" }}
+                value={filterPriority}
+                onChange={(e) => setFilterPriority(e.target.value)}
+              >
+                <option value="all">All Priorities</option>
+                <option value="low">Low</option>
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+              </select>
+            </div>
 
-          {/* Due Date Range Filter */}
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <span style={{ fontSize: "11px", color: "var(--colour-text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>Date:</span>
-            <select
-              className="input"
-              style={{ height: "30px", padding: "0 8px", fontSize: "12px", background: "var(--colour-surface-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", minWidth: "120px" }}
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
-            >
-              <option value="all">Any Due Date</option>
-              <option value="overdue">Overdue</option>
-              <option value="today">Due Today</option>
-              <option value="week">Due Next 7 Days</option>
-            </select>
-          </div>
+            {/* Due Date Range Filter */}
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ fontSize: "11px", color: "var(--colour-text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>Date:</span>
+              <select
+                className="input"
+                style={{ height: "32px", padding: "0 8px", fontSize: "12px", background: "var(--colour-surface-sunken)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", minWidth: "120px" }}
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+              >
+                <option value="all">Any Due Date</option>
+                <option value="overdue">Overdue</option>
+                <option value="today">Due Today</option>
+                <option value="week">Due Next 7 Days</option>
+              </select>
+            </div>
 
-          {/* Reset Filters button */}
-          {(filterTopic !== "all" || filterPerson !== "all" || filterPriority !== "all" || filterDate !== "all") && (
-            <button
-              type="button"
-              className="btn btn--secondary btn--sm"
-              onClick={() => {
-                setFilterTopic("all");
-                setFilterPerson("all");
-                setFilterPriority("all");
-                setFilterDate("all");
-              }}
-              style={{ height: "30px", padding: "0 10px", fontSize: "11px" }}
-            >
-              Reset Filters
-            </button>
-          )}
-        </div>
+            {/* Reset Filters button */}
+            {(filterTopic !== "all" || filterPerson !== "all" || filterPriority !== "all" || filterDate !== "all") && (
+              <button
+                type="button"
+                className="btn btn--secondary btn--sm"
+                onClick={() => {
+                  setFilterTopic("all");
+                  setFilterPerson("all");
+                  setFilterPriority("all");
+                  setFilterDate("all");
+                }}
+                style={{ height: "32px", padding: "0 12px", fontSize: "11px" }}
+              >
+                Reset Filters
+              </button>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Main Workspace Layout Shell */}

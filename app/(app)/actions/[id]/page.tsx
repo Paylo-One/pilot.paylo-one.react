@@ -4,8 +4,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { listPeopleDirectory } from "@/modules/people/people-server";
 import { ActionDetailWorkspace } from "./action-detail-workspace";
 
-export default async function ActionDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default async function ActionDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const ctx = await requireTenantContext();
   const supabase = await createSupabaseServerClient();
 
