@@ -1,94 +1,108 @@
 "use client";
 
 /**
- * Client controls for an operator decision on a suggested action. The
- * governance model is approve / edit / dismiss / defer (product/actions.md):
- * approve, defer, and dismiss are wired to the `decideAction` server action
- * (status changes only — nothing is ever sent externally). Edit (adjust title /
- * notes / due before confirming) is part of the designed flow but not yet wired,
- * so it is presented as a clearly-disabled affordance.
- *
- * Resolved actions show their status instead of controls.
+ * Client controls for actions, allowing quick state transitions
+ * within the Action Command Centre.
  */
 
 import { useState, useTransition } from "react";
-import { decideAction, type ActionDecision } from "./actions";
-
-const RESOLVED: Record<string, { label: string; tone: string }> = {
-  approved: { label: "Confirmed", tone: "ok" },
-  edited: { label: "Edited", tone: "ok" },
-  deferred: { label: "Deferred", tone: "info" },
-  dismissed: { label: "Dismissed", tone: "neutral" },
-};
+import { updateAction, completeAction } from "./actions";
+import { ActionStatus } from "@/modules/action-extraction/server";
 
 export function ActionControls({
   actionId,
   status,
+  onStatusChange,
 }: {
   actionId: string;
-  status: string;
+  status: ActionStatus;
+  onStatusChange?: (status: ActionStatus) => void;
 }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  if (status !== "suggested") {
-    const resolved = RESOLVED[status] ?? { label: status, tone: "neutral" };
-    return (
-      <span className={`status status--${resolved.tone}`}>{resolved.label}</span>
-    );
-  }
-
-  function decide(decision: ActionDecision) {
+  function transitionTo(nextStatus: ActionStatus) {
     setError(null);
     startTransition(async () => {
-      const response = await decideAction(actionId, decision);
-      if (!response.ok) {
-        setError(response.error ?? "Could not update this action.");
+      let res;
+      if (nextStatus === "completed") {
+        res = await completeAction(actionId);
+      } else {
+        res = await updateAction(actionId, { status: nextStatus });
+      }
+
+      if (!res.ok) {
+        setError(res.error ?? "Failed to update action status.");
+      } else if (onStatusChange) {
+        onStatusChange(nextStatus);
       }
     });
   }
 
   return (
     <div className="action-controls-wrap">
-      <div className="action-controls">
-        <button
-          type="button"
-          onClick={() => decide("approve")}
-          disabled={isPending}
-          className="btn btn--accent-outline"
-        >
-          {isPending ? "Updating…" : "Confirm"}
-        </button>
-        <button
-          type="button"
-          className="btn btn--ghost"
-          disabled
-          title="Edit before confirming is planned"
-        >
-          Edit
-        </button>
-        <button
-          type="button"
-          onClick={() => decide("defer")}
-          disabled={isPending}
-          className="btn btn--ghost"
-        >
-          Defer
-        </button>
-        <button
-          type="button"
-          onClick={() => decide("dismiss")}
-          disabled={isPending}
-          className="btn btn--ghost"
-        >
-          Dismiss
-        </button>
+      <div className="action-controls" style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+        {status !== "completed" && (
+          <button
+            type="button"
+            onClick={() => transitionTo("completed")}
+            disabled={isPending}
+            className="btn btn--accent-outline"
+            style={{ fontSize: "12px", padding: "4px 8px" }}
+          >
+            ✓ Complete
+          </button>
+        )}
+        
+        {status !== "in_progress" && status !== "completed" && status !== "cancelled" && (
+          <button
+            type="button"
+            onClick={() => transitionTo("in_progress")}
+            disabled={isPending}
+            className="btn btn--ghost"
+            style={{ fontSize: "12px", padding: "4px 8px" }}
+          >
+            ⚡ Start
+          </button>
+        )}
+
+        {status !== "waiting" && status !== "completed" && status !== "cancelled" && (
+          <button
+            type="button"
+            onClick={() => transitionTo("waiting")}
+            disabled={isPending}
+            className="btn btn--ghost"
+            style={{ fontSize: "12px", padding: "4px 8px" }}
+          >
+            ⏳ Wait
+          </button>
+        )}
+
+        {status !== "cancelled" && status !== "completed" && (
+          <button
+            type="button"
+            onClick={() => transitionTo("cancelled")}
+            disabled={isPending}
+            className="btn btn--ghost"
+            style={{ fontSize: "12px", padding: "4px 8px", color: "var(--color-text-muted)" }}
+          >
+            Dismiss
+          </button>
+        )}
+        
+        {status === "completed" && (
+          <span className="status status--ok">Completed</span>
+        )}
+        {status === "cancelled" && (
+          <span className="status status--neutral">Cancelled</span>
+        )}
       </div>
       {error ? (
         <p
           className="form-message form-message--error"
           role="alert"
           aria-live="polite"
+          style={{ marginTop: "4px", fontSize: "11px" }}
         >
           {error}
         </p>

@@ -19,6 +19,7 @@ import {
   type BriefingSectionView,
   type PersonInFocus,
 } from "@/modules/briefing/server";
+import { listSuggestedActions } from "@/modules/action-extraction/server";
 import { SOURCE_SYSTEM_LABELS } from "@/modules/source-connection";
 import { IMPORTANCE_LABELS, IMPORTANCE_TONE } from "@/modules/people/people.types";
 import { GenerateMemoButton } from "./generate-button";
@@ -303,11 +304,163 @@ function SampleSectionBlock({
   );
 }
 
+function ActionsAttentionSection({ actions }: { actions: any[] }) {
+  const now = new Date();
+  
+  const isPast = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return d < now && d.toDateString() !== now.toDateString();
+  };
+  
+  const isTodayDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return d.toDateString() === now.toDateString();
+  };
+
+  const overdue = actions.filter(
+    (a) =>
+      (a.status === "planned" || a.status === "in_progress") &&
+      a.dueAt &&
+      isPast(a.dueAt)
+  );
+
+  const dueToday = actions.filter(
+    (a) =>
+      a.status !== "completed" &&
+      a.status !== "cancelled" &&
+      a.dueAt &&
+      isTodayDate(a.dueAt)
+  );
+
+  const followUpToday = actions.filter(
+    (a) =>
+      a.status !== "completed" &&
+      a.status !== "cancelled" &&
+      (a.status === "follow_up" || (a.followUpAt && (isPast(a.followUpAt) || isTodayDate(a.followUpAt))))
+  );
+
+  const waitingOn = actions.filter((a) => a.status === "waiting");
+
+  const totalAttentionCount = overdue.length + dueToday.length + followUpToday.length + waitingOn.length;
+
+  if (totalAttentionCount === 0) return null;
+
+  return (
+    <div className="card" style={{ marginBottom: "var(--space-lg)" }}>
+      <div className="card-head">
+        <div>
+          <p className="eyebrow">Commitments & Attention</p>
+          <h2 className="card__title">Actions requiring your attention today</h2>
+        </div>
+        <Link href="/actions" className="btn btn--ghost btn--sm">
+          Open Command Centre
+        </Link>
+      </div>
+      <p className="action-card__rationale" style={{ marginTop: 0, marginBottom: "var(--space-md)" }}>
+        Real-time commitments requiring follow-through, escalations, or attention, synchronized directly with your execution memory.
+      </p>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "var(--space-md)" }}>
+        {/* Overdue column */}
+        {overdue.length > 0 && (
+          <div style={{ border: "1px solid var(--colour-danger)", borderRadius: "var(--radius-sm)", padding: "var(--space-md)", background: "rgba(224, 32, 32, 0.04)" }}>
+            <h3 style={{ fontSize: "var(--text-small)", fontWeight: 600, color: "var(--colour-danger)", textTransform: "uppercase", fontFamily: "var(--font-mono)", marginBottom: "var(--space-sm)" }}>
+              ⚠️ Overdue ({overdue.length})
+            </h3>
+            <ul className="stack" style={{ gap: "var(--space-xs)", listStyle: "none", padding: 0, margin: 0 }}>
+              {overdue.map((a) => (
+                <li key={a.id} style={{ fontSize: "var(--text-body)" }}>
+                  <Link href="/actions" style={{ textDecoration: "none", color: "var(--colour-text-primary)", fontWeight: 600 }}>
+                    {a.title}
+                  </Link>
+                  <div style={{ fontSize: "var(--text-label)", color: "var(--colour-danger)", marginTop: "2px" }}>
+                    Due {new Date(a.dueAt!).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Due Today column */}
+        {dueToday.length > 0 && (
+          <div style={{ border: "1px solid var(--colour-info)", borderRadius: "var(--radius-sm)", padding: "var(--space-md)", background: "rgba(32, 128, 224, 0.04)" }}>
+            <h3 style={{ fontSize: "var(--text-small)", fontWeight: 600, color: "var(--colour-info)", textTransform: "uppercase", fontFamily: "var(--font-mono)", marginBottom: "var(--space-sm)" }}>
+              ⚡ Due Today ({dueToday.length})
+            </h3>
+            <ul className="stack" style={{ gap: "var(--space-xs)", listStyle: "none", padding: 0, margin: 0 }}>
+              {dueToday.map((a) => (
+                <li key={a.id} style={{ fontSize: "var(--text-body)" }}>
+                  <Link href="/actions" style={{ textDecoration: "none", color: "var(--colour-text-primary)", fontWeight: 600 }}>
+                    {a.title}
+                  </Link>
+                  {a.priority && a.priority !== "normal" && (
+                    <span className={`status status--${a.priority === "critical" ? "risk" : "warn"}`} style={{ fontSize: "9px", padding: "1px 4px", marginLeft: "6px", textTransform: "uppercase" }}>
+                      {a.priority}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Followups Due Today column */}
+        {followUpToday.length > 0 && (
+          <div style={{ border: "1px solid var(--colour-warning)", borderRadius: "var(--radius-sm)", padding: "var(--space-md)", background: "rgba(224, 160, 32, 0.04)" }}>
+            <h3 style={{ fontSize: "var(--text-small)", fontWeight: 600, color: "var(--colour-warning)", textTransform: "uppercase", fontFamily: "var(--font-mono)", marginBottom: "var(--space-sm)" }}>
+              📅 Follow-ups ({followUpToday.length})
+            </h3>
+            <ul className="stack" style={{ gap: "var(--space-xs)", listStyle: "none", padding: 0, margin: 0 }}>
+              {followUpToday.map((a) => (
+                <li key={a.id} style={{ fontSize: "var(--text-body)" }}>
+                  <Link href="/actions" style={{ textDecoration: "none", color: "var(--colour-text-primary)", fontWeight: 600 }}>
+                    {a.title}
+                  </Link>
+                  {a.followUpAt && (
+                    <div style={{ fontSize: "var(--text-label)", color: "var(--colour-text-secondary)", marginTop: "2px" }}>
+                      Scheduled: {new Date(a.followUpAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Waiting On column */}
+        {waitingOn.length > 0 && (
+          <div style={{ border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "var(--space-md)", background: "var(--colour-surface-secondary)" }}>
+            <h3 style={{ fontSize: "var(--text-small)", fontWeight: 600, color: "var(--colour-text-secondary)", textTransform: "uppercase", fontFamily: "var(--font-mono)", marginBottom: "var(--space-sm)" }}>
+              ⏳ Waiting On ({waitingOn.length})
+            </h3>
+            <ul className="stack" style={{ gap: "var(--space-xs)", listStyle: "none", padding: 0, margin: 0 }}>
+              {waitingOn.map((a) => (
+                <li key={a.id} style={{ fontSize: "var(--text-body)" }}>
+                  <Link href="/actions" style={{ textDecoration: "none", color: "var(--colour-text-primary)", fontWeight: 600 }}>
+                    {a.title}
+                  </Link>
+                  {a.followUpAt && (
+                    <div style={{ fontSize: "var(--text-label)", color: "var(--colour-text-muted)", marginTop: "2px" }}>
+                      Follow-up {new Date(a.followUpAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default async function BriefingPage() {
   const ctx = await requireTenantContext();
-  const [briefing, peopleInFocus] = await Promise.all([
+  const [briefing, peopleInFocus, actions] = await Promise.all([
     getLatestBriefing(ctx),
     getPeopleInFocus(),
+    listSuggestedActions(ctx.tenantId),
   ]);
 
   return (
@@ -328,6 +481,8 @@ export default async function BriefingPage() {
       </div>
 
       <PeopleInFocusSection people={peopleInFocus} />
+
+      <ActionsAttentionSection actions={actions} />
 
       {briefing ? (
         /* --- Real briefing ------------------------------------------------ */

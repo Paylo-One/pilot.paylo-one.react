@@ -6,15 +6,13 @@ import "server-only";
  * Server-only read helper for the Actions queue. Reads run through the USER
  * server client (RLS enforces tenant isolation) with an explicit tenant_id
  * predicate as defence-in-depth.
- *
- * Status transitions (approve/defer/dismiss) are NOT here — they are Server
- * Actions co-located with the Actions page. RLS permits authenticated UPDATE on
- * suggested_actions, so those run on the user client (no secret client needed).
  */
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export type ActionStatus = "suggested" | "approved" | "edited" | "deferred" | "dismissed";
+export type ActionStatus = "inbox" | "planned" | "in_progress" | "waiting" | "follow_up" | "completed" | "cancelled";
+export type ActionPriority = "critical" | "high" | "normal" | "low";
+export type ActionCreatedFrom = "manual" | "suggestion" | "diary" | "briefing" | "meeting" | "email";
 
 export interface ActionSourceReference {
   readonly id: string;
@@ -32,6 +30,16 @@ export interface SuggestedActionView {
   readonly dueAt: string | null;
   readonly personId: string | null;
   readonly createdAt: string;
+  readonly description: string | null;
+  readonly followUpAt: string | null;
+  readonly priority: ActionPriority;
+  readonly completedAt: string | null;
+  readonly snoozedUntil: string | null;
+  readonly createdBy: string | null;
+  readonly createdFrom: ActionCreatedFrom;
+  readonly topics: string[];
+  readonly snoozeMetadata: any;
+  readonly completionMetadata: any;
   readonly references: ActionSourceReference[];
 }
 
@@ -43,6 +51,16 @@ interface ActionRow {
   due_at: string | null;
   person_id: string | null;
   created_at: string;
+  description: string | null;
+  follow_up_at: string | null;
+  priority: ActionPriority;
+  completed_at: string | null;
+  snoozed_until: string | null;
+  created_by: string | null;
+  created_from: ActionCreatedFrom;
+  topics: string[];
+  snooze_metadata: any;
+  completion_metadata: any;
 }
 
 interface SourceReferenceRow {
@@ -60,7 +78,25 @@ export async function listSuggestedActions(tenantId: string): Promise<SuggestedA
 
   const { data: actionData } = await supabase
     .from("suggested_actions")
-    .select("id, status, title, rationale, due_at, person_id, created_at")
+    .select(`
+      id, 
+      status, 
+      title, 
+      rationale, 
+      due_at, 
+      person_id, 
+      created_at,
+      description,
+      follow_up_at,
+      priority,
+      completed_at,
+      snoozed_until,
+      created_by,
+      created_from,
+      topics,
+      snooze_metadata,
+      completion_metadata
+    `)
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false });
 
@@ -96,6 +132,16 @@ export async function listSuggestedActions(tenantId: string): Promise<SuggestedA
     dueAt: a.due_at,
     personId: a.person_id,
     createdAt: a.created_at,
+    description: a.description,
+    followUpAt: a.follow_up_at,
+    priority: a.priority,
+    completedAt: a.completed_at,
+    snoozedUntil: a.snoozed_until,
+    createdBy: a.created_by,
+    createdFrom: a.created_from,
+    topics: a.topics ?? [],
+    snoozeMetadata: a.snooze_metadata,
+    completionMetadata: a.completion_metadata,
     references: referencesByAction.get(a.id) ?? [],
   }));
 }
