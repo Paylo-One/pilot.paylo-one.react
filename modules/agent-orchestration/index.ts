@@ -143,27 +143,26 @@ async function persistQuietDayMemo(
   const summary =
     "A quiet day. No new items have arrived from your connected channels since the last briefing.";
 
-  const { data: briefing, error: briefingErr } = await secret
-    .from("briefings")
-    .insert({ tenant_id: ctx.tenantId, status: "ready", summary })
-    .select("id")
-    .single();
-  if (briefingErr || !briefing) {
-    return err(new AppError("internal", briefingErr?.message ?? "briefing_create_failed"));
-  }
-  const briefingId = briefing.id as string;
-
-  const { error: sectionErr } = await secret.from("briefing_sections").insert({
-    tenant_id: ctx.tenantId,
-    briefing_id: briefingId,
-    kind: "executive_summary",
-    position: 0,
-    title: "A quiet day",
-    body: "Nothing new has come in from your connected channels. Connect a source or capture a note, then regenerate.",
+  // Persist the briefing + its single section atomically (see persist_daily_memo).
+  const { data: persistedId, error: persistErr } = await secret.rpc("persist_daily_memo", {
+    p_tenant_id: ctx.tenantId,
+    p_summary: summary,
+    p_prompt_version_id: null,
+    p_sections: [
+      {
+        kind: "executive_summary",
+        position: 0,
+        title: "A quiet day",
+        body: "Nothing new has come in from your connected channels. Connect a source or capture a note, then regenerate.",
+        references: [],
+      },
+    ],
+    p_actions: [],
   });
-  if (sectionErr) {
-    return err(new AppError("internal", sectionErr.message));
+  if (persistErr || !persistedId) {
+    return err(new AppError("internal", persistErr?.message ?? "briefing_create_failed"));
   }
+  const briefingId = persistedId as string;
 
   const news = await appendNewsSafely(ctx.tenantId, briefingId, 1);
   await auditService.record(ctx, {
@@ -201,21 +200,6 @@ async function persistMemo(
   // section/action can cite at least one real item.
   const fallbackItem = tokenToItem.size > 0 ? [...tokenToItem.values()][0] : null;
 
-  const { data: briefing, error: briefingErr } = await secret
-    .from("briefings")
-    .insert({
-      tenant_id: ctx.tenantId,
-      status: "ready",
-      summary: memo.summary,
-      prompt_version_id: promptVersionDbId,
-    })
-    .select("id")
-    .single();
-  if (briefingErr || !briefing) {
-    return err(new AppError("internal", briefingErr?.message ?? "briefing_create_failed"));
-  }
-  const briefingId = briefing.id as string;
-
   // Resolve a list of model-supplied tokens to real, de-duplicated items.
   const resolveItems = (tokens: readonly string[]): StoredSourceItem[] => {
     const seen = new Set<string>();
@@ -231,76 +215,53 @@ async function persistMemo(
     return resolved;
   };
 
+  // Build a source-reference payload for a section/action from its item tokens.
+  const buildRefs = (tokens: readonly string[], confidence: number) =>
+    resolveItems(tokens).map((item) => ({
+      source_item_id: item.id,
+      source_system: item.system,
+      item_timestamp: item.occurredAt,
+      confidence,
+      excerpt_or_pointer: itemExcerpt(item),
+    }));
+
   // Sections (ordered) + their source references.
-  let position = 0;
-  for (const section of memo.sections) {
-    const { data: sectionRow, error: sectionErr } = await secret
-      .from("briefing_sections")
-      .insert({
-        tenant_id: ctx.tenantId,
-        briefing_id: briefingId,
-        kind: section.kind,
-        position,
-        title: section.title,
-        body: section.body,
-      })
-      .select("id")
-      .single();
-    if (sectionErr || !sectionRow) {
-      return err(new AppError("internal", sectionErr?.message ?? "section_create_failed"));
-    }
-    position += 1;
+  const sectionsPayload = memo.sections.map((section, index) => ({
+    kind: section.kind,
+    position: index,
+    title: section.title,
+    body: section.body,
+    references: buildRefs(
+      section.sourceItemIds,
+      roundConfidence(section.confidence ?? DEFAULT_CONFIDENCE),
+    ),
+  }));
 
-    const refs = resolveItems(section.sourceItemIds).map((item) => ({
-      tenant_id: ctx.tenantId,
-      briefing_section_id: sectionRow.id as string,
-      source_item_id: item.id,
-      source_system: item.system,
-      item_timestamp: item.occurredAt,
-      confidence: roundConfidence(section.confidence ?? DEFAULT_CONFIDENCE),
-      excerpt_or_pointer: itemExcerpt(item),
-    }));
-    if (refs.length > 0) {
-      const { error: refErr } = await secret.from("source_references").insert(refs);
-      if (refErr) return err(new AppError("internal", refErr.message));
-    }
+  // Suggested actions (status 'inbox') + their source references.
+  const actionsPayload = memo.actions.map((action) => ({
+    status: "inbox",
+    created_from: "briefing",
+    title: action.title,
+    rationale: action.rationale,
+    references: buildRefs(action.sourceItemIds, DEFAULT_CONFIDENCE),
+  }));
+
+  // Persist the briefing, sections, actions, and references atomically: a single
+  // DB function runs in its own transaction, so a failure on any insert rolls the
+  // whole memo back rather than leaving a partial briefing (see persist_daily_memo).
+  const { data: persistedId, error: persistErr } = await secret.rpc("persist_daily_memo", {
+    p_tenant_id: ctx.tenantId,
+    p_summary: memo.summary,
+    p_prompt_version_id: promptVersionDbId,
+    p_sections: sectionsPayload,
+    p_actions: actionsPayload,
+  });
+  if (persistErr || !persistedId) {
+    return err(new AppError("internal", persistErr?.message ?? "memo_persist_failed"));
   }
+  const briefingId = persistedId as string;
 
-  // Suggested actions (status 'suggested') + their source references.
-  let actionsCreated = 0;
-  for (const action of memo.actions) {
-    const { data: actionRow, error: actionErr } = await secret
-      .from("suggested_actions")
-      .insert({
-        tenant_id: ctx.tenantId,
-        briefing_id: briefingId,
-        status: "suggested",
-        title: action.title,
-        rationale: action.rationale,
-      })
-      .select("id")
-      .single();
-    if (actionErr || !actionRow) {
-      return err(new AppError("internal", actionErr?.message ?? "action_create_failed"));
-    }
-    actionsCreated += 1;
-
-    const refs = resolveItems(action.sourceItemIds).map((item) => ({
-      tenant_id: ctx.tenantId,
-      suggested_action_id: actionRow.id as string,
-      source_item_id: item.id,
-      source_system: item.system,
-      item_timestamp: item.occurredAt,
-      confidence: DEFAULT_CONFIDENCE,
-      excerpt_or_pointer: itemExcerpt(item),
-    }));
-    if (refs.length > 0) {
-      const { error: refErr } = await secret.from("source_references").insert(refs);
-      if (refErr) return err(new AppError("internal", refErr.message));
-    }
-  }
-
-  const news = await appendNewsSafely(ctx.tenantId, briefingId, position);
+  const news = await appendNewsSafely(ctx.tenantId, briefingId, sectionsPayload.length);
   await auditService.record(ctx, {
     action: "briefing.generated",
     target: briefingId,
@@ -308,7 +269,7 @@ async function persistMemo(
       kind: "daily_memo",
       itemsConsidered,
       sections: memo.sections.length + (news.count > 0 ? 1 : 0),
-      actions: actionsCreated,
+      actions: actionsPayload.length,
       promptVersionId: promptVersionDbId,
       externalSignals: news.count,
       externalSignalsError: news.error,
