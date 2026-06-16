@@ -407,9 +407,14 @@ async function syncBridgeMonitors(tenantId: string, sessionId: string): Promise<
   try {
     const chatIds = await listActiveMonitorChatIds(sessionId);
     await bridgeSetMonitors(tenantId, chatIds);
-  } catch {
-    // Allowlist sync is best-effort; the persisted monitors remain the source
-    // of truth and the ingestion webhook re-checks every message anyway.
+  } catch (err) {
+    // Allowlist sync is best-effort (persisted monitors are the source of truth
+    // and the webhook re-checks every message) — but a failure here means the
+    // bridge never starts forwarding those chats, so make it visible.
+    console.error(
+      `[whatsapp] failed to push monitor allowlist to bridge (tenant ${tenantId}) — bridge may not forward approved chats:`,
+      err instanceof Error ? err.message : err,
+    );
   }
 }
 
@@ -638,11 +643,19 @@ export async function approveWhatsAppChatAction(input: {
     // on-demand fetch, all through the deduplicated ingestion webhook. Best-
     // effort: live forwarding works regardless.
     let backfill: { replayed: number; requestedHistory: boolean } | null = null;
+    let backfillError: string | null = null;
     if (whatsappBridgeEnabled()) {
       try {
         backfill = await bridgeBackfillChat(ctx.tenantId, input.chatId);
-      } catch {
-        // Backfill is opportunistic; the monitor itself is already persisted.
+        console.log(
+          `[whatsapp] backfill requested chat=${input.chatId} replayed=${backfill.replayed} requestedHistory=${backfill.requestedHistory}`,
+        );
+      } catch (err) {
+        // Backfill is opportunistic (the monitor is already persisted and live
+        // forwarding works regardless) — but if it fails silently you get an
+        // approved chat that never pulls history, so surface it.
+        backfillError = err instanceof Error ? err.message : String(err);
+        console.error(`[whatsapp] backfill failed for chat=${input.chatId}:`, backfillError);
       }
     }
     await auditService.record(ctx, {
@@ -651,6 +664,7 @@ export async function approveWhatsAppChatAction(input: {
         chatId: input.chatId,
         backfillReplayed: backfill?.replayed ?? 0,
         backfillRequestedHistory: backfill?.requestedHistory ?? false,
+        backfillError,
       },
     });
     revalidatePath("/sources");

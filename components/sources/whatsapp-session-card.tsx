@@ -57,6 +57,11 @@ export function WhatsAppSessionCard({
   const onboarding = status === "awaiting_qr" || status === "connecting";
   const monitoredChatIds = useMemo(() => new Set(monitors.map((m) => m.chatId)), [monitors]);
   const activeCount = monitors.filter((m) => m.isActive).length;
+  // Live session + approved chats, yet nothing has ever ingested → the bridge
+  // isn't delivering to this workspace (or chat IDs don't match). Surface it
+  // instead of leaving the operator to infer it from "LAST SYNC NEVER" rows.
+  const noMessagesYet =
+    bridgeEnabled && connected && activeCount > 0 && monitors.every((m) => !m.lastSyncAt);
 
   function run(action: () => Promise<{ ok: boolean; error: string | null }>) {
     startTransition(async () => {
@@ -150,6 +155,23 @@ export function WhatsAppSessionCard({
               <span className="meta-row__value mono">isolated</span>
             </div>
           </div>
+
+          {noMessagesYet ? (
+            <p
+              className="scaffold-note"
+              style={{
+                marginTop: "var(--space-md)",
+                color: "var(--colour-warning)",
+                borderLeft: "2px solid var(--colour-warning)",
+                paddingLeft: "var(--space-sm)",
+              }}
+            >
+              ⚠ Connected, but no messages have synced yet. If this persists, the
+              bridge may not be forwarding to this workspace — check its webhook URL
+              and callback token, and that approved chat IDs match what the bridge
+              sends. Server logs are tagged <code>[whatsapp/webhook]</code>.
+            </p>
+          ) : null}
 
           <div className="integration__actions" style={{ marginTop: "var(--space-md)", justifyContent: "flex-start" }}>
             <button type="button" className="btn btn--ghost btn--sm" disabled={pending} onClick={() => run(pauseWhatsAppAction)}>
