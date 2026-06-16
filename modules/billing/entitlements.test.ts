@@ -280,4 +280,27 @@ describe("plan catalog — monotonicity sanity (technical-design §12)", () => {
       }
     }
   });
+
+  it("availableSyncFrequencies always includes 'daily' and is monotonic (ADR-043)", () => {
+    const allPlans: PlanKey[] = [
+      "plan_operator",
+      "plan_executive",
+      "plan_command",
+      "plan_enterprise",
+    ];
+    for (const planKey of allPlans) {
+      expect(PLAN_ENTITLEMENTS[planKey].availableSyncFrequencies).toContain("daily");
+    }
+    // Each tier's set is a superset of the one below.
+    for (const [loKey, hiKey] of pairs) {
+      const lo = PLAN_ENTITLEMENTS[loKey].availableSyncFrequencies;
+      const hi = PLAN_ENTITLEMENTS[hiKey].availableSyncFrequencies;
+      for (const f of lo) {
+        expect(hi, `${hiKey} ⊇ ${loKey}`).toContain(f);
+      }
+    }
+    // Operator (entry tier) is daily-only; Executive unlocks the custom set.
+    expect(PLAN_ENTITLEMENTS.plan_operator.availableSyncFrequencies).toEqual(["daily"]);
+    expect(PLAN_ENTITLEMENTS.plan_executive.availableSyncFrequencies.length).toBeGreaterThan(1);
+  });
 });

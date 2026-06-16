@@ -159,6 +159,12 @@ export interface SourceView {
    * chats) when false.
    */
   readonly whatsappBridgeEnabled: boolean;
+  /** Scheduler extension (ADR-043). Always populated by buildSourceViews. */
+  readonly autoRefreshEnabled: boolean;
+  readonly syncFrequency: string;
+  readonly nextSyncAt: string | null;
+  readonly lastSyncStatus: string | null;
+  readonly lastSyncError: string | null;
 }
 
 /** How (and whether) a source can actually be connected in this build. */

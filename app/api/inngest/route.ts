@@ -7,7 +7,13 @@
  */
 
 import { serve } from "inngest/next";
-import { inngest, briefingGenerateFunction, newsIngestFunction } from "@/lib/inngest";
+import {
+  inngest,
+  briefingGenerateFunction,
+  newsIngestFunction,
+  sourceSyncFunction,
+  schedulerDispatchFunction,
+} from "@/lib/inngest";
 
 // Export the GET, POST, and PUT handlers to route requests to Inngest
 export const { GET, POST, PUT } = serve({
@@ -15,5 +21,7 @@ export const { GET, POST, PUT } = serve({
   functions: [
     briefingGenerateFunction,
     newsIngestFunction,
+    sourceSyncFunction,
+    schedulerDispatchFunction,
   ],
 });

@@ -157,6 +157,11 @@ export async function buildSourceViews(ctx: TenantContext): Promise<SourceView[]
       whatsappSession: d.system === "whatsapp" ? whatsappSession : null,
       whatsappMonitors: d.system === "whatsapp" ? whatsappMonitors : [],
       whatsappBridgeEnabled: d.system === "whatsapp" ? bridgeEnabled : false,
+      autoRefreshEnabled: connection?.autoRefreshEnabled ?? false,
+      syncFrequency: connection?.syncFrequency ?? "daily",
+      nextSyncAt: connection?.nextSyncAt ?? null,
+      lastSyncStatus: connection?.lastSyncStatus ?? null,
+      lastSyncError: connection?.lastSyncError ?? null,
     };
   });
 }

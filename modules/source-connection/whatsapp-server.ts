@@ -162,6 +162,22 @@ export async function listActiveMonitorChatIds(sessionId: string): Promise<strin
   return ((data ?? []) as { chat_id: string }[]).map((r) => r.chat_id);
 }
 
+/**
+ * Active-monitor chat ids for a tenant via the SECRET client (job/cron context,
+ * no operator session). Used by the scheduled WhatsApp sync to know which
+ * approved chats to backfill.
+ */
+export async function listActiveMonitorChatIdsByTenant(tenantId: string): Promise<string[]> {
+  const secret = createSupabaseSecretClient();
+  const { data, error } = await secret
+    .from("whatsapp_monitors")
+    .select("chat_id")
+    .eq("tenant_id", tenantId)
+    .eq("is_active", true);
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as { chat_id: string }[]).map((r) => r.chat_id);
+}
+
 /** Resolve the active monitor matching an inbound chat id (ingestion gate). */
 export async function findActiveMonitorByChatId(
   tenantId: string,

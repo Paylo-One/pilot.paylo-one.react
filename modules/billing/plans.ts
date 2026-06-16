@@ -44,6 +44,26 @@ export type MonitoringFrequency =
   | "near_real_time"
   | "real_time";
 
+/**
+ * Per-source automatic-refresh cadences the operator can choose (ADR-043). The
+ * SET a plan unlocks is carried by `Entitlements.availableSyncFrequencies`, so
+ * higher tiers can offer more granular intervals later by extending that array
+ * without any UI/resolver change. "daily" is always available.
+ */
+export type SyncFrequency =
+  | "daily"
+  | "twice_a_day"
+  | "three_times_a_day"
+  | "four_times_a_day";
+
+/** All custom (above-daily) cadences, used by tiers that unlock them. */
+export const ALL_SYNC_FREQUENCIES: readonly SyncFrequency[] = [
+  "daily",
+  "twice_a_day",
+  "three_times_a_day",
+  "four_times_a_day",
+];
+
 export type SupportLevel = "standard" | "priority" | "dedicated";
 
 export type AdminControlsLevel = "basic" | "standard" | "advanced" | "advanced_plus";
@@ -97,6 +117,14 @@ export interface Entitlements {
   readonly monitoringFrequency: MonitoringFrequency;
   readonly supportLevel: SupportLevel;
   readonly adminControlsLevel: AdminControlsLevel;
+
+  /**
+   * The set of per-source auto-refresh cadences this plan unlocks (ADR-043).
+   * The Source page renders only these as selectable; others are shown locked.
+   * Always includes "daily". `canUseCustomSchedules` is the boolean shorthand
+   * for "more than daily is available".
+   */
+  readonly availableSyncFrequencies: readonly SyncFrequency[];
 
   // --- account-state flags (set by the resolver, not by the plan default) ---
   /** True in grace/past_due: new AI processing is paused, existing data readable. */
@@ -173,6 +201,7 @@ export const PLAN_ENTITLEMENTS: Record<PlanKey, Entitlements> = {
     monitoringFrequency: "scheduled_daily",
     supportLevel: "standard",
     adminControlsLevel: "basic",
+    availableSyncFrequencies: ["daily"],
   },
 
   plan_executive: {
@@ -212,6 +241,7 @@ export const PLAN_ENTITLEMENTS: Record<PlanKey, Entitlements> = {
     monitoringFrequency: "hourly",
     supportLevel: "priority",
     adminControlsLevel: "standard",
+    availableSyncFrequencies: ALL_SYNC_FREQUENCIES,
   },
 
   plan_command: {
@@ -251,6 +281,7 @@ export const PLAN_ENTITLEMENTS: Record<PlanKey, Entitlements> = {
     monitoringFrequency: "near_real_time",
     supportLevel: "priority",
     adminControlsLevel: "advanced",
+    availableSyncFrequencies: ALL_SYNC_FREQUENCIES,
   },
 
   plan_enterprise: {
@@ -290,6 +321,7 @@ export const PLAN_ENTITLEMENTS: Record<PlanKey, Entitlements> = {
     monitoringFrequency: "real_time",
     supportLevel: "dedicated",
     adminControlsLevel: "advanced_plus",
+    availableSyncFrequencies: ALL_SYNC_FREQUENCIES,
   },
 };
 
@@ -336,6 +368,7 @@ export const LOCKED_BASELINE: Entitlements = {
   monitoringFrequency: "scheduled_daily",
   supportLevel: "standard",
   adminControlsLevel: "basic",
+  availableSyncFrequencies: ["daily"],
 };
 
 /** Ordering for upgrade/downgrade comparisons (mirrors subscription_plans.tier_rank). */

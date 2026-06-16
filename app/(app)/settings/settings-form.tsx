@@ -42,14 +42,19 @@ export function SettingsProfileForm({ values }: { values: ProfileFormValues }) {
         <label htmlFor="timezone" className="field__label">
           Timezone
         </label>
-        <input
+        <select
           id="timezone"
           name="timezone"
-          type="text"
-          defaultValue={values.timezone}
-          placeholder="e.g. Europe/London"
-          className="input"
-        />
+          defaultValue={values.timezone || "UTC"}
+          className="input select"
+          style={{ height: "42px", padding: "0 12px" }}
+        >
+          {(Intl.supportedValuesOf ? Intl.supportedValuesOf("timeZone") : ["UTC", "America/New_York", "Europe/London", "Asia/Tokyo"]).map((tz) => (
+            <option key={tz} value={tz}>
+              {tz}
+            </option>
+          ))}
+        </select>
         <span className="field__hint">
           Drives when your Daily Memo is prepared.
         </span>
