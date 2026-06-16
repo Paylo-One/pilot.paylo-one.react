@@ -31,6 +31,11 @@ interface SourceConnectionRow {
   storage_policy: string;
   created_at: string;
   updated_at: string;
+  auto_refresh_enabled: boolean;
+  sync_frequency: string;
+  next_sync_at: string | null;
+  last_sync_status: string | null;
+  last_sync_error: string | null;
 }
 
 function mapRow(row: SourceConnectionRow): SourceConnection {
@@ -42,11 +47,16 @@ function mapRow(row: SourceConnectionRow): SourceConnection {
     storagePolicy: row.storage_policy as StoragePolicy,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    autoRefreshEnabled: row.auto_refresh_enabled,
+    syncFrequency: row.sync_frequency,
+    nextSyncAt: row.next_sync_at,
+    lastSyncStatus: row.last_sync_status,
+    lastSyncError: row.last_sync_error,
   };
 }
 
 const SELECT_COLUMNS =
-  "id, system, display_name, status, storage_policy, created_at, updated_at";
+  "id, system, display_name, status, storage_policy, created_at, updated_at, auto_refresh_enabled, sync_frequency, next_sync_at, last_sync_status, last_sync_error";
 
 /**
  * List the current tenant's source connections (oldest first). Uses the USER

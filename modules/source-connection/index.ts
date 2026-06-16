@@ -22,6 +22,11 @@ export interface SourceConnection {
   readonly storagePolicy: StoragePolicy;
   readonly createdAt: string;
   readonly updatedAt: string;
+  readonly autoRefreshEnabled: boolean;
+  readonly syncFrequency: string;
+  readonly nextSyncAt: string | null;
+  readonly lastSyncStatus: string | null;
+  readonly lastSyncError: string | null;
 }
 
 /** Interface contract retained for cross-module callers (technical-design.md). */

@@ -23,6 +23,7 @@ import { SourceIcon } from "@/components/sources/source-icon";
 import { buildSourceViews } from "../source-views";
 import { SourceDetail } from "./source-detail";
 import { getNewsAdminData } from "@/modules/news/server";
+import { resolveEntitlements } from "@/modules/billing/entitlements";
 
 export default async function SourceDetailPage({
   params,
@@ -32,12 +33,17 @@ export default async function SourceDetailPage({
   const ctx = await requireTenantContext();
   const { system } = await params;
 
-  const [views, newsData] = await Promise.all([
+  const [views, newsData, entitlementsResult] = await Promise.all([
     buildSourceViews(ctx),
     system === "news" ? getNewsAdminData(ctx) : Promise.resolve(null),
+    resolveEntitlements(ctx),
   ]);
   const view = views.find((v) => v.system === system);
   if (!view) notFound();
+
+  const entitlements = entitlementsResult.ok ? entitlementsResult.value : null;
+  // The cadences this plan unlocks for auto-refresh (ADR-043); always ≥ ["daily"].
+  const availableSyncFrequencies = entitlements?.availableSyncFrequencies ?? ["daily"];
 
   return (
     <main className="workspace__content workspace__content--narrow">
@@ -78,7 +84,11 @@ export default async function SourceDetailPage({
         </div>
       </div>
 
-      <SourceDetail view={view} newsData={newsData} />
+      <SourceDetail
+        view={view}
+        newsData={newsData}
+        availableSyncFrequencies={availableSyncFrequencies}
+      />
     </main>
   );
 }

@@ -31,6 +31,7 @@ export type {
   CapabilityKey,
   LimitKey,
   MonitoringFrequency,
+  SyncFrequency,
   SupportLevel,
   AdminControlsLevel,
 } from "./plans";

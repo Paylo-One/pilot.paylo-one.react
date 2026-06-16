@@ -22,7 +22,7 @@ import {
 import { listSuggestedActions } from "@/modules/action-extraction/server";
 import { SOURCE_SYSTEM_LABELS } from "@/modules/source-connection";
 import { IMPORTANCE_LABELS, IMPORTANCE_TONE } from "@/modules/people/people.types";
-import { GenerateMemoButton } from "./generate-button";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { RefinementActions } from "@/components/refinement/refinement-actions";
 import { FeedbackChip } from "@/components/refinement/feedback-chip";
 import { NewsFeedbackBar } from "@/components/news/news-feedback-bar";
@@ -457,11 +457,28 @@ function ActionsAttentionSection({ actions }: { actions: any[] }) {
 
 export default async function BriefingPage() {
   const ctx = await requireTenantContext();
-  const [briefing, peopleInFocus, actions] = await Promise.all([
+  const supabase = await createSupabaseServerClient();
+
+  const [briefing, peopleInFocus, actions, profileResult, activeConnectionsResult] = await Promise.all([
     getLatestBriefing(ctx),
     getPeopleInFocus(),
     listSuggestedActions(ctx.tenantId),
+    supabase
+      .from("user_profiles")
+      .select("timezone, briefing_time")
+      .eq("user_id", ctx.userId)
+      .maybeSingle(),
+    supabase
+      .from("source_connections")
+      .select("id")
+      .eq("auto_refresh_enabled", true),
   ]);
+
+  const profile = profileResult?.data;
+  const activeConnections = activeConnectionsResult?.data;
+
+  const timezone = profile?.timezone ?? "UTC";
+  const briefingTime = (profile?.briefing_time as string | null)?.slice(0, 5) ?? "08:00";
 
   return (
     <main className="workspace__content">
@@ -476,7 +493,21 @@ export default async function BriefingPage() {
               traceable to source.
             </p>
           </div>
-          <GenerateMemoButton hasBriefing={Boolean(briefing)} />
+          
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "var(--space-xs)" }}>
+            <span className="status status--info" style={{ textTransform: "none", fontSize: "var(--text-label)" }}>
+              ⏰ Next Briefing: Daily at {briefingTime} ({timezone})
+            </span>
+            {activeConnections && activeConnections.length > 0 ? (
+              <span className="badge badge--plain" style={{ fontSize: "var(--text-micro)" }}>
+                Auto-syncing {activeConnections.length} connected {activeConnections.length === 1 ? "source" : "sources"}
+              </span>
+            ) : (
+              <span className="badge" style={{ fontSize: "var(--text-micro)", textTransform: "none", color: "var(--colour-warning)", border: "1px dashed var(--colour-warning)", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                ⚠ No sources scheduled to auto-refresh
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -542,7 +573,8 @@ export default async function BriefingPage() {
               <p className="alert__body">
                 No memo has been generated for this workspace yet. The structure
                 below shows how a Daily Memo reads once your sources are
-                connected. Generate one to replace it with your own.
+                connected. Set your sources to automatically sync and a memo will
+                be prepared for you on your schedule.
               </p>
             </div>
           </div>

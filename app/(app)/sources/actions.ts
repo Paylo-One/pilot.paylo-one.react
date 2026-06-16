@@ -7,6 +7,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireTenantContext } from "@/modules/identity-tenant/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   ingestPastedText,
   ingestObsidianNotes,
@@ -14,6 +15,7 @@ import {
 } from "@/modules/ingestion/server";
 import {
   disconnectSourceConnection,
+  ensureSourceConnection,
   findConnectionIdBySystem,
   getIntegrationAccessToken,
   upsertProviderConnection,
@@ -57,6 +59,7 @@ import {
   type WhatsAppStoragePolicy,
 } from "@/modules/source-connection/whatsapp.types";
 import { whatsappBridgeEnabled } from "@/lib/config";
+import { ALL_SYNC_FREQUENCIES, type SyncFrequency } from "@/modules/billing/plans";
 import {
   getValidGoogleToken,
   syncGmail,
@@ -487,6 +490,9 @@ export async function getWhatsAppSessionStatusAction(): Promise<{
       // Make sure the bridge has the current allowlist after a (re)connect.
       const session = await getWhatsAppSession();
       if (session) await syncBridgeMonitors(ctx.tenantId, session.id);
+      // Register WhatsApp as a first-class source connection so it becomes
+      // schedulable (auto-refresh) like every other source (ADR-043).
+      await ensureSourceConnection(ctx, "whatsapp");
     }
     return { ok: true, status: state.status, qr: state.qr, error: null };
   } catch (err) {
@@ -562,6 +568,8 @@ export async function simulateWhatsAppScanAction(): Promise<WaResult> {
       deviceLabel: "this workspace (scaffold)",
       lastConnectedAt: new Date().toISOString(),
     });
+    // Schedulable source connection (ADR-043) — same as the real connected path.
+    await ensureSourceConnection(ctx, "whatsapp");
     await auditService.record(ctx, { action: "whatsapp.session.simulated_scan" });
     revalidatePath("/sources");
     return { ok: true, error: null };
@@ -801,5 +809,65 @@ export async function uploadObsidianAction(
       ok: false,
       message: error instanceof Error ? error.message : "Import failed.",
     };
+  }
+}
+
+/** Update a source connection's scheduler settings. */
+export async function updateSourceSchedulerSettingsAction(input: {
+  connectionId: string;
+  autoRefreshEnabled: boolean;
+  syncFrequency: string;
+}): Promise<{ ok: boolean; error: string | null }> {
+  const ctx = await requireTenantContext();
+  if (!input?.connectionId) return { ok: false, error: "Missing connection ID." };
+
+  try {
+    const supabase = await createSupabaseServerClient();
+
+    // The requested cadence must be a known value AND unlocked by the tenant's
+    // plan (ADR-043). `availableSyncFrequencies` always includes "daily"; higher
+    // tiers unlock the rest. We gate on the resolved entitlement set, not a
+    // single boolean, so plans can offer different cadence sets over time.
+    if (!ALL_SYNC_FREQUENCIES.includes(input.syncFrequency as SyncFrequency)) {
+      return { ok: false, error: "Unknown sync frequency." };
+    }
+    const { resolveEntitlements } = await import("@/modules/billing/entitlements");
+    const entitlementsResult = await resolveEntitlements(ctx);
+    const available = entitlementsResult.ok
+      ? entitlementsResult.value.availableSyncFrequencies
+      : (["daily"] as readonly SyncFrequency[]);
+    if (!available.includes(input.syncFrequency as SyncFrequency)) {
+      return {
+        ok: false,
+        error: "That sync frequency isn't available on your current plan.",
+      };
+    }
+
+    // Update auto_refresh_enabled and sync_frequency
+    const { error } = await supabase
+      .from("source_connections")
+      .update({
+        auto_refresh_enabled: input.autoRefreshEnabled,
+        sync_frequency: input.syncFrequency,
+        // If enabling refresh, initialize next_sync_at so the scheduler service picks it up immediately
+        next_sync_at: input.autoRefreshEnabled ? new Date().toISOString() : null,
+      })
+      .eq("id", input.connectionId);
+
+    if (error) throw new Error(error.message);
+
+    await auditService.record(ctx, {
+      action: "source_connection.scheduler.updated",
+      target: input.connectionId,
+      metadata: {
+        autoRefreshEnabled: input.autoRefreshEnabled,
+        syncFrequency: input.syncFrequency,
+      },
+    });
+
+    revalidatePath("/sources");
+    return { ok: true, error: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to update scheduler settings." };
   }
 }
