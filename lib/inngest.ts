@@ -235,21 +235,25 @@ export const sourceSyncFunction = inngest.createFunction(
       return data as { id: string; system: string; sync_frequency: string };
     });
 
-    // 2. Run the real connector. A failure is captured (not thrown) so the run
-    //    can still finalise and other sources are unaffected.
-    let syncSuccess = true;
-    let syncError: string | null = null;
-    let itemsFetched = 0;
-    try {
-      itemsFetched = await step.run("perform-sync", async () => {
-        console.log(`[source/sync] syncing ${connection.system} for tenant ${tenantId} (run ${runId})`);
-        return await runConnectorSync(connection.system, tenantId, connectionId);
-      });
-    } catch (err) {
-      syncSuccess = false;
-      syncError = err instanceof Error ? err.message : "Unknown error during sync";
-      console.error(`[source/sync] sync failed for connection ${connectionId}:`, err);
-    }
+    // 2. Run the real connector. The error is caught INSIDE the step and
+    //    returned (never thrown), so a slow/flaky source fails fast and the run
+    //    finalises immediately — instead of Inngest step-retrying for minutes
+    //    and stalling the whole cycle's briefing. A failed source is simply
+    //    retried on the next scheduled cycle.
+    const syncOutcome = await step.run("perform-sync", async () => {
+      console.log(`[source/sync] syncing ${connection.system} for tenant ${tenantId} (run ${runId})`);
+      try {
+        const items = await runConnectorSync(connection.system, tenantId, connectionId);
+        return { ok: true, itemsFetched: items, error: null as string | null };
+      } catch (err) {
+        const error = err instanceof Error ? err.message : "Unknown error during sync";
+        console.error(`[source/sync] sync failed for connection ${connectionId}:`, error);
+        return { ok: false, itemsFetched: 0, error };
+      }
+    });
+    const syncSuccess = syncOutcome.ok;
+    const syncError = syncOutcome.error;
+    const itemsFetched = syncOutcome.itemsFetched;
 
     // 3. Recompute the next scheduled sync from the tenant owner's timezone.
     const nextSyncTimestamp = await step.run("calculate-next-sync", async () => {
