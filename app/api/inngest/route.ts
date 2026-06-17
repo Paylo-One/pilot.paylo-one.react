@@ -7,6 +7,7 @@
  */
 
 import { serve } from "inngest/next";
+import { appHostBaseUrl } from "@/lib/config";
 import {
   inngest,
   briefingGenerateFunction,
@@ -15,9 +16,16 @@ import {
   schedulerDispatchFunction,
 } from "@/lib/inngest";
 
-// Export the GET, POST, and PUT handlers to route requests to Inngest
+// Pin the URL Inngest registers to the reserved, tenant-neutral `app.` host
+// (e.g. https://app.paylo.one). Without this, the Vercel↔Inngest integration
+// syncs the per-deployment *.vercel.app URL — which is behind Deployment
+// Protection AND an unknown host to our tenant routing, so Inngest "could not
+// reach your URL". Inngest is shared infra (each job payload carries its own
+// tenantId), so it must NOT be bound to a tenant subdomain.
 export const { GET, POST, PUT } = serve({
   client: inngest,
+  serveOrigin: appHostBaseUrl(),
+  servePath: "/api/inngest",
   functions: [
     briefingGenerateFunction,
     newsIngestFunction,
