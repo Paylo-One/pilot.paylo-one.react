@@ -491,20 +491,53 @@ export function DiaryTimeline({ entries }: { entries: DiaryEntryView[] }) {
       ) : null}
 
       {!hasEntries ? (
-        <div className="empty" style={{ marginTop: "var(--space-lg)" }}>
-          <p className="empty__title">Start your diary</p>
-          <p className="empty__body">
+        <div className="empty" style={{
+          marginTop: "var(--space-lg)",
+          padding: "var(--space-xl) var(--space-md)",
+          borderRadius: "var(--radius-md)",
+          border: "1px solid rgba(255, 255, 255, 0.05)",
+          background: "rgba(255, 255, 255, 0.01)",
+          textAlign: "center"
+        }}>
+          <p className="empty__title" style={{
+            fontWeight: 600,
+            color: "var(--colour-text-primary)",
+            fontSize: "var(--text-body)",
+            letterSpacing: "-0.01em"
+          }}>
+            Start your private diary
+          </p>
+          <p className="empty__body" style={{
+            color: "var(--colour-text-secondary)",
+            fontSize: "var(--text-small)",
+            maxWidth: "480px",
+            margin: "var(--space-sm) auto 0",
+            lineHeight: "var(--leading-normal)"
+          }}>
             This is your private space to keep a record of your day &mdash; the
             decisions you make, what you&rsquo;re acting on, and the things still
             on your mind. A line a day is enough. Over time it becomes a memory of
             how your thinking changed.
           </p>
-          <p className="empty__body">Pick a prompt above, or just write your first line.</p>
+          <p className="empty__body" style={{
+            color: "var(--colour-accent)",
+            fontSize: "var(--text-small)",
+            fontWeight: 500,
+            marginTop: "var(--space-md)"
+          }}>
+            Pick a prompt above, or just write your first line.
+          </p>
         </div>
       ) : groups.length === 0 ? (
-        <div className="empty" style={{ marginTop: "var(--space-lg)" }}>
-          <p className="empty__title">No entries match.</p>
-          <p className="empty__body">Clear the filter to see everything.</p>
+        <div className="empty" style={{
+          marginTop: "var(--space-lg)",
+          padding: "var(--space-lg) var(--space-md)",
+          borderRadius: "var(--radius-md)",
+          border: "1px dashed var(--colour-border)",
+          textAlign: "center"
+        }}>
+          <p className="empty__title" style={{ fontWeight: 500, color: "var(--colour-text-primary)" }}>No entries match</p>
+          <p className="empty__body" style={{ color: "var(--colour-text-muted)", fontSize: "var(--text-small)", marginTop: "4px" }}>Clear the filter to see everything.</p>
         </div>
       ) : (
         <div className="diary-days">

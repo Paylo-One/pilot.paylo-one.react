@@ -196,7 +196,9 @@ export function SourceDetail({
       {view.system === "email" ||
       view.system === "calendar" ||
       view.system === "ms365_mail" ||
-      view.system === "teams" ? (
+      view.system === "teams" ||
+      view.system === "slack" ||
+      view.system === "discord" ? (
         <section className="card">
           <h2 className="card__title" style={{ marginBottom: "var(--space-md)" }}>
             {view.system === "email"
@@ -205,7 +207,9 @@ export function SourceDetail({
                 ? "Calendars to sync"
                 : view.system === "ms365_mail"
                   ? "Folders & calendars to sync"
-                  : "Chats & channels to sync"}
+                  : view.system === "teams"
+                    ? "Chats & channels to sync"
+                    : "Channels to sync"}
           </h2>
           <ScopeItemSelector
             items={view.scopeItems}
@@ -214,6 +218,10 @@ export function SourceDetail({
             configured={
               view.system === "ms365_mail" || view.system === "teams"
                 ? view.microsoftConfigured
+                : view.system === "slack"
+                  ? view.slackConfigured
+                  : view.system === "discord"
+                    ? view.discordConfigured
                 : view.googleConfigured
             }
           />

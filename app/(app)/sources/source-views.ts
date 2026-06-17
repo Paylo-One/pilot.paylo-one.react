@@ -17,6 +17,8 @@ import { listRepositoryMonitors } from "@/modules/source-connection/github-repos
 import { listNotionResources } from "@/modules/source-connection/notion";
 import { isGoogleOAuthConfigured } from "@/modules/source-connection/google";
 import { isMicrosoftOAuthConfigured } from "@/modules/source-connection/microsoft";
+import { isSlackOAuthConfigured } from "@/modules/source-connection/slack";
+import { isDiscordOAuthConfigured } from "@/modules/source-connection/discord";
 import { listScopeItems } from "@/modules/source-connection/source-scope";
 import {
   getWhatsAppSession,
@@ -55,6 +57,8 @@ export async function buildSourceViews(ctx: TenantContext): Promise<SourceView[]
   const githubConfigured = isGithubOAuthConfigured();
   const googleConfigured = isGoogleOAuthConfigured();
   const microsoftConfigured = isMicrosoftOAuthConfigured();
+  const slackConfigured = isSlackOAuthConfigured();
+  const discordConfigured = isDiscordOAuthConfigured();
 
   // Real, persisted repository monitors for a *connected* GitHub (if any).
   const githubConnection = connectionBySystem.get("github");
@@ -72,18 +76,29 @@ export async function buildSourceViews(ctx: TenantContext): Promise<SourceView[]
 
   // Scope-item families: Google (email = Gmail labels, calendar) and
   // Microsoft 365 (ms365_mail = folders + calendars, teams = chats + channels).
-  const scopeItemsFor = (system: "email" | "calendar" | "ms365_mail" | "teams") => {
+  const scopeItemsFor = (
+    system: "email" | "calendar" | "ms365_mail" | "teams" | "slack" | "discord",
+  ) => {
     const connection = connectionBySystem.get(system);
     return connection && connection.status === "connected"
       ? listScopeItems(connection.id)
       : Promise.resolve([]);
   };
-  const [emailScopeItems, calendarScopeItems, ms365ScopeItems, teamsScopeItems] =
+  const [
+    emailScopeItems,
+    calendarScopeItems,
+    ms365ScopeItems,
+    teamsScopeItems,
+    slackScopeItems,
+    discordScopeItems,
+  ] =
     await Promise.all([
       scopeItemsFor("email"),
       scopeItemsFor("calendar"),
       scopeItemsFor("ms365_mail"),
       scopeItemsFor("teams"),
+      scopeItemsFor("slack"),
+      scopeItemsFor("discord"),
     ]);
 
   // WhatsApp: tenant session + approved monitors. The bridge flag decides
@@ -144,6 +159,8 @@ export async function buildSourceViews(ctx: TenantContext): Promise<SourceView[]
       notionResources: d.system === "notion" ? notionResources : [],
       googleConfigured,
       microsoftConfigured,
+      slackConfigured,
+      discordConfigured,
       scopeItems:
         d.system === "email"
           ? emailScopeItems
@@ -153,6 +170,10 @@ export async function buildSourceViews(ctx: TenantContext): Promise<SourceView[]
               ? ms365ScopeItems
               : d.system === "teams"
                 ? teamsScopeItems
+                : d.system === "slack"
+                  ? slackScopeItems
+                  : d.system === "discord"
+                    ? discordScopeItems
                 : [],
       whatsappSession: d.system === "whatsapp" ? whatsappSession : null,
       whatsappMonitors: d.system === "whatsapp" ? whatsappMonitors : [],

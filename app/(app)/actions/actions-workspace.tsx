@@ -1109,16 +1109,23 @@ export function ActionsWorkspace({
         {/* Dense List Work Area */}
         <section className="actions-working-set" aria-labelledby="working-set-title" style={{ padding: 0 }}>
           {filteredActions.length === 0 ? (
-            <div className="empty actions-empty" style={{ margin: "var(--space-lg) 0", padding: "48px 16px", background: "var(--colour-surface-secondary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-md)", textAlign: "center" }}>
-              <p className="empty__title" style={{ fontSize: "16px", fontWeight: 600, color: "var(--colour-text-primary)", margin: 0 }}>
+            <div className="empty actions-empty" style={{
+              margin: "var(--space-lg) 0",
+              padding: "var(--space-xl) var(--space-md)",
+              background: "rgba(255, 255, 255, 0.01)",
+              border: "1px solid rgba(255, 255, 255, 0.05)",
+              borderRadius: "var(--radius-md)",
+              textAlign: "center"
+            }}>
+              <p className="empty__title" style={{ fontSize: "var(--text-body)", fontWeight: 600, color: "var(--colour-text-primary)", margin: 0 }}>
                 {searchQuery || filterTopic !== "all" || filterPerson !== "all" || filterPriority !== "all" || filterDate !== "all"
                   ? "No commitments match your active filters"
                   : "No active commitments in this category"}
               </p>
-              <p className="empty__body" style={{ fontSize: "13px", color: "var(--colour-text-secondary)", marginTop: "4px" }}>
+              <p className="empty__body" style={{ fontSize: "var(--text-small)", color: "var(--colour-text-secondary)", marginTop: "var(--space-xs)", lineHeight: "var(--leading-normal)" }}>
                 {searchQuery || filterTopic !== "all" || filterPerson !== "all" || filterPriority !== "all" || filterDate !== "all"
-                  ? "Try resetting filters or adjusting search queries."
-                  : "Click '+ Quick Capture' to log a new commitment."}
+                  ? "Try resetting filters or adjusting search queries to locate your record."
+                  : "Every commitment, task, and promise extracted from your feeds is logged here. Create a manual record with 'Quick Capture'."}
               </p>
             </div>
           ) : filterStatus === "all_active" ? (

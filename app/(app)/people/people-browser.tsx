@@ -97,8 +97,8 @@ export function PeopleBrowser({
         </div>
         {suggestions.length === 0 ? (
           <p className="scaffold-note">
-            No pending suggestions. Run correlation to resolve recent ingested
-            items to your people — confident matches attach as signals; uncertain
+            No pending suggestions. Run correlation to resolve recently synced
+            feeds to your people — confident matches attach as signals; uncertain
             ones appear here to confirm.
           </p>
         ) : (
@@ -112,10 +112,30 @@ export function PeopleBrowser({
 
       <div className="people__layout">
         <div className="people__list">
-          {filtered.length === 0 ? (
-            <div className="empty">
-              <p className="empty__title">No people match</p>
-              <p className="empty__body">Try a different search, or add a person.</p>
+          {people.length === 0 ? (
+            <div className="empty" style={{
+              padding: "var(--space-xl) var(--space-md)",
+              borderRadius: "var(--radius-md)",
+              border: "1px solid rgba(255, 255, 255, 0.05)",
+              background: "rgba(255, 255, 255, 0.01)",
+              textAlign: "center"
+            }}>
+              <p className="empty__title" style={{ fontWeight: 600, color: "var(--colour-text-primary)", fontSize: "var(--text-body)" }}>
+                Establish your directory
+              </p>
+              <p className="empty__body" style={{ color: "var(--colour-text-secondary)", fontSize: "var(--text-small)", maxWidth: "320px", margin: "var(--space-xs) auto 0" }}>
+                Add key stakeholders, team members, and partners to map relationship-aware signals to your Daily Memo.
+              </p>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="empty" style={{
+              padding: "var(--space-lg) var(--space-md)",
+              borderRadius: "var(--radius-md)",
+              border: "1px dashed var(--colour-border)",
+              textAlign: "center"
+            }}>
+              <p className="empty__title" style={{ fontWeight: 500, color: "var(--colour-text-primary)" }}>No people match</p>
+              <p className="empty__body" style={{ color: "var(--colour-text-muted)", fontSize: "var(--text-small)", marginTop: "4px" }}>Try a different search query.</p>
             </div>
           ) : (
             filtered.map((person) => (

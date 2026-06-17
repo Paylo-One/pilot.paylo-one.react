@@ -292,6 +292,8 @@ function identityForSystem(system: string): { sourceType: SourceMappingSourceTyp
     case "github": return { sourceType: "github", identityType: "github" };
     case "whatsapp": return { sourceType: "whatsapp", identityType: "whatsapp" };
     case "teams": return { sourceType: "teams", identityType: "teams" };
+    case "slack": return { sourceType: "slack", identityType: "slack" };
+    case "discord": return { sourceType: "discord", identityType: "discord" };
     case "notion": return { sourceType: "notion", identityType: "notion" };
     default: return { sourceType: "generic", identityType: "email" };
   }

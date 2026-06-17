@@ -73,6 +73,42 @@ export function ConnectAction({ view }: { view: SourceView }) {
         </button>
       );
     }
+    case "slack_oauth":
+      if (connected && view.connectionId) {
+        return <DisconnectButton connectionId={view.connectionId} />;
+      }
+      return view.slackConfigured ? (
+        <a className="btn btn--primary btn--sm" href="/api/oauth/slack/start">
+          Connect Slack
+        </a>
+      ) : (
+        <button
+          type="button"
+          className="btn btn--ghost btn--sm"
+          disabled
+          title="Add SLACK_CLIENT_ID / SLACK_CLIENT_SECRET to enable"
+        >
+          Needs credentials
+        </button>
+      );
+    case "discord_oauth":
+      if (connected && view.connectionId) {
+        return <DisconnectButton connectionId={view.connectionId} />;
+      }
+      return view.discordConfigured ? (
+        <a className="btn btn--primary btn--sm" href="/api/oauth/discord/start">
+          Connect Discord
+        </a>
+      ) : (
+        <button
+          type="button"
+          className="btn btn--ghost btn--sm"
+          disabled
+          title="Add DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET / DISCORD_BOT_TOKEN to enable"
+        >
+          Needs credentials
+        </button>
+      );
     case "enterprise":
       return (
         <button

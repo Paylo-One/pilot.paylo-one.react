@@ -21,6 +21,8 @@ export type SourceSystem =
   | "ms365_mail"
   | "calendar"
   | "teams"
+  | "slack"
+  | "discord"
   | "whatsapp"
   | "github"
   | "notion"

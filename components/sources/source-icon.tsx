@@ -13,6 +13,8 @@ import {
   SiGooglecalendar,
   SiNotion,
   SiObsidian,
+  SiSlack,
+  SiDiscord,
   SiWhatsapp,
 } from "react-icons/si";
 import {
@@ -27,6 +29,8 @@ const ICONS: Record<SourceSystem, { Icon: IconType; colour?: string }> = {
   calendar: { Icon: SiGooglecalendar, colour: "#4285F4" },
   ms365_mail: { Icon: PiMicrosoftOutlookLogoFill, colour: "#0F6CBD" },
   teams: { Icon: PiMicrosoftTeamsLogoFill, colour: "#6264A7" },
+  slack: { Icon: SiSlack, colour: "#4A154B" },
+  discord: { Icon: SiDiscord, colour: "#5865F2" },
   whatsapp: { Icon: SiWhatsapp, colour: "#25D366" },
   github: { Icon: SiGithub },
   notion: { Icon: SiNotion },

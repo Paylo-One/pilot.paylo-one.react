@@ -36,6 +36,8 @@ export type IdentityType =
   | "phone"
   | "whatsapp"
   | "teams"
+  | "slack"
+  | "discord"
   | "github"
   | "notion"
   | "alias";
@@ -185,6 +187,8 @@ export const IDENTITY_TYPE_LABELS: Record<IdentityType, string> = {
   phone: "Phone",
   whatsapp: "WhatsApp",
   teams: "Teams",
+  slack: "Slack",
+  discord: "Discord",
   github: "GitHub",
   notion: "Notion",
   alias: "Alias",

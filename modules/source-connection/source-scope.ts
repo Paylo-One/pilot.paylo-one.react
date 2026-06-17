@@ -26,10 +26,15 @@ interface ScopeItemRow {
   external_id: string;
   name: string | null;
   is_active: boolean;
+  include_in_daily_memo: boolean;
+  priority: string;
+  sync_cursor: string | null;
+  metadata: Record<string, unknown> | null;
   last_sync_at: string | null;
 }
 
-const SELECT_COLUMNS = "id, system, item_type, external_id, name, is_active, last_sync_at";
+const SELECT_COLUMNS =
+  "id, system, item_type, external_id, name, is_active, include_in_daily_memo, priority, sync_cursor, metadata, last_sync_at";
 
 function mapRow(row: ScopeItemRow): SourceScopeItem {
   return {
@@ -39,6 +44,10 @@ function mapRow(row: ScopeItemRow): SourceScopeItem {
     externalId: row.external_id,
     name: row.name,
     isActive: row.is_active,
+    includeInDailyMemo: row.include_in_daily_memo,
+    priority: row.priority === "high" ? "high" : "normal",
+    syncCursor: row.sync_cursor,
+    metadata: row.metadata,
     lastSyncAt: row.last_sync_at,
   };
 }
@@ -114,12 +123,29 @@ export async function listActiveScopeItems(
 /** Activate/deactivate a scope item (RLS user client; tenant-enforced). */
 export async function updateScopeItem(
   scopeItemId: string,
-  isActive: boolean,
+  input:
+    | boolean
+    | {
+        isActive?: boolean;
+        includeInDailyMemo?: boolean;
+        priority?: "normal" | "high";
+      },
 ): Promise<boolean> {
+  const patch =
+    typeof input === "boolean"
+      ? { is_active: input }
+      : {
+          ...(input.isActive !== undefined ? { is_active: input.isActive } : {}),
+          ...(input.includeInDailyMemo !== undefined
+            ? { include_in_daily_memo: input.includeInDailyMemo }
+            : {}),
+          ...(input.priority ? { priority: input.priority } : {}),
+        };
+  if (Object.keys(patch).length === 0) return false;
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("source_scope_items")
-    .update({ is_active: isActive })
+    .update(patch)
     .eq("id", scopeItemId)
     .select("id");
   if (error) throw new Error(error.message);
@@ -136,6 +162,23 @@ export async function markScopeItemSynced(
   await secret
     .from("source_scope_items")
     .update({ last_sync_at: when })
+    .eq("id", scopeItemId)
+    .eq("tenant_id", tenantId);
+}
+
+/** Stamp last_sync_at and provider cursor on a scope item after incremental sync. */
+export async function markScopeItemSyncState(
+  tenantId: string,
+  scopeItemId: string,
+  input: { when: string; syncCursor?: string | null },
+): Promise<void> {
+  const secret = createSupabaseSecretClient();
+  await secret
+    .from("source_scope_items")
+    .update({
+      last_sync_at: input.when,
+      ...(input.syncCursor !== undefined ? { sync_cursor: input.syncCursor } : {}),
+    })
     .eq("id", scopeItemId)
     .eq("tenant_id", tenantId);
 }

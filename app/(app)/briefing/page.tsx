@@ -565,42 +565,70 @@ export default async function BriefingPage() {
           <ExternalSignalsSection signals={briefing.externalSignals} />
         </div>
       ) : (
-        /* --- Illustrative memo (no real briefing yet) -------------------- */
-        <>
-          <div className="alert alert--accent" style={{ marginBottom: "var(--space-md)" }}>
-            <div>
-              <p className="alert__title">Preview — illustrative memo</p>
-              <p className="alert__body">
-                No memo has been generated for this workspace yet. The structure
-                below shows how a Daily Memo reads once your sources are
-                connected. Set your sources to automatically sync and a memo will
-                be prepared for you on your schedule.
-              </p>
-            </div>
+        /* --- Premium Schedule Card (no real briefing yet) ---------------- */
+        <div style={{
+          padding: "var(--space-xl)",
+          borderRadius: "var(--radius-lg)",
+          border: "1px solid rgba(255, 255, 255, 0.05)",
+          background: "rgba(21, 24, 30, 0.4)",
+          backdropFilter: "blur(12px)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          textAlign: "center",
+          gap: "var(--space-md)",
+          maxWidth: "640px",
+          margin: "var(--space-xl) auto",
+          boxShadow: "var(--shadow-pop)"
+        }}>
+          <div style={{
+            fontSize: "40px",
+            lineHeight: 1,
+            marginBottom: "var(--space-xs)"
+          }}>
+            ⏰
           </div>
+          <h2 style={{
+            fontSize: "var(--text-h2)",
+            fontWeight: 600,
+            letterSpacing: "-0.01em",
+            color: "var(--colour-text-primary)",
+            margin: 0
+          }}>
+            Daily Briefing rhythm
+          </h2>
+          <p style={{
+            fontSize: "var(--text-body)",
+            color: "var(--colour-text-secondary)",
+            lineHeight: "var(--leading-normal)",
+            maxWidth: "480px",
+            margin: 0
+          }}>
+            Your private Daily Memo prepares on a regular schedule. Your next briefing is scheduled for <strong style={{ color: "var(--colour-accent)" }}>{briefingTime} Daily ({timezone})</strong>. 
+            Paylo.one will securely process your synced integrations to extract commitments, actions, and key decisions.
+          </p>
 
-          <div className="memo">
-            <div className="memo__head">
-              <div>
-                <p className="memo__kicker">
-                  Paylo.one Management OS · Daily Memo · Sample
-                </p>
-                <h2 className="memo__title">What matters today</h2>
-                <p className="memo__meta">
-                  Illustrative · grounded in 5 sources · {ctx.tenantSlug}.paylo.one
-                </p>
-              </div>
-            </div>
-
-            {SAMPLE_MEMO.sections.map((section, index) => (
-              <SampleSectionBlock
-                key={section.kind}
-                section={section}
-                index={index}
-              />
-            ))}
+          <div style={{
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "center",
+            gap: "var(--space-md)",
+            marginTop: "var(--space-sm)",
+            width: "100%",
+            maxWidth: "480px",
+            borderTop: "1px solid var(--colour-border)",
+            paddingTop: "var(--space-lg)"
+          }}>
+            <form action="" method="get">
+              <button type="submit" className="btn btn--primary">
+                Check &amp; Sync Now
+              </button>
+            </form>
+            <Link href="/sources" className="btn btn--secondary">
+              Configure Sync Feeds
+            </Link>
           </div>
-        </>
+        </div>
       )}
 
       <p className="scaffold-note" style={{ marginTop: "var(--space-lg)" }}>

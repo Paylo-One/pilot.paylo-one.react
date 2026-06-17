@@ -122,6 +122,38 @@ export const SOURCE_DESCRIPTORS: readonly SourceDescriptor[] = [
     riskNote: "Channel reads need tenant-admin consent; chats are the dependable path.",
   },
   {
+    system: "slack",
+    category: "communication",
+    provider: "Slack",
+    description:
+      "Workspace messages from the public channels you approve, including threads and lightweight metadata.",
+    mvpStatus: "fast_follow",
+    authModel: "Slack OAuth 2.0, read-only bot token; public channels first",
+    dataPulled: "Messages, thread replies, timestamps, authors, channel names, reactions, links, and attachments",
+    scopeControl: "Select public channels; private channels and DMs are reserved for later scopes",
+    dailyMemoUse: "Decisions, blockers, commitments, and escalations from selected channels",
+    defaultPolicy: "summaries_only",
+    referenceReady: true,
+    connect: "slack_oauth",
+    riskNote: "Slack history APIs are rate-limited; sync stays incremental and channel-scoped.",
+  },
+  {
+    system: "discord",
+    category: "communication",
+    provider: "Discord",
+    description:
+      "Server messages from the Discord channels you approve, with bot-based read access.",
+    mvpStatus: "fast_follow",
+    authModel: "Discord OAuth2 bot install + read-only bot token",
+    dataPulled: "Messages, active thread messages, timestamps, authors, channel names, reactions, links, and attachments",
+    scopeControl: "Install the bot, then select servers/channels to monitor",
+    dailyMemoUse: "Community and team signals from selected Discord channels",
+    defaultPolicy: "summaries_only",
+    referenceReady: true,
+    connect: "discord_oauth",
+    riskNote: "Requires View Channel + Read Message History and Message Content intent for message text.",
+  },
+  {
     system: "whatsapp",
     category: "communication",
     provider: "WhatsApp",
@@ -215,6 +247,8 @@ export function deriveSourceStatus(
     case "phased":
       return "coming_soon";
     case "github_oauth":
+    case "slack_oauth":
+    case "discord_oauth":
     case "news_preferences":
     case "file_upload":
     case "scaffold":

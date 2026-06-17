@@ -23,7 +23,7 @@ function googleNotice(
     case "connected":
       return {
         message:
-          "Google connected (Gmail + Calendar). Open the Email or Calendar source to choose which labels/calendars to sync — nothing is ingested until you activate one.",
+          "Google connected (Gmail + Calendar). Open the Email or Calendar source to choose which labels/calendars to sync — nothing is synced until you activate one.",
         ok: true,
       };
     case "unconfigured":
@@ -44,7 +44,7 @@ function githubNotice(
     case "connected":
       return {
         message:
-          "GitHub connected. Open the GitHub source to choose which repositories to monitor — nothing is ingested until you activate a repository.",
+          "GitHub connected. Open the GitHub source to choose which repositories to monitor — nothing is synced until you activate a repository.",
         ok: true,
       };
     case "unconfigured":
@@ -58,10 +58,58 @@ function githubNotice(
   }
 }
 
+function slackNotice(
+  slack: string | undefined,
+): { message: string; ok: boolean } | null {
+  switch (slack) {
+    case "connected":
+      return {
+        message:
+          "Slack connected. Open the Slack source to choose which public channels to monitor — nothing is synced until you activate a channel.",
+        ok: true,
+      };
+    case "unconfigured":
+      return { message: "Slack OAuth is not configured.", ok: false };
+    case "error":
+      return { message: "Slack connection failed. Please try again.", ok: false };
+    case "denied":
+      return { message: "Slack authorisation was cancelled.", ok: false };
+    default:
+      return null;
+  }
+}
+
+function discordNotice(
+  discord: string | undefined,
+): { message: string; ok: boolean } | null {
+  switch (discord) {
+    case "connected":
+      return {
+        message:
+          "Discord connected. Open the Discord source to choose which server channels to monitor — nothing is synced until you activate a channel.",
+        ok: true,
+      };
+    case "unconfigured":
+      return { message: "Discord OAuth/bot credentials are not configured.", ok: false };
+    case "error":
+      return { message: "Discord connection failed. Please try again.", ok: false };
+    case "denied":
+      return { message: "Discord authorisation was cancelled.", ok: false };
+    default:
+      return null;
+  }
+}
+
 export default async function SourcesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ github?: string; repos?: string; google?: string }>;
+  searchParams: Promise<{
+    github?: string;
+    repos?: string;
+    google?: string;
+    slack?: string;
+    discord?: string;
+  }>;
 }) {
   const ctx = await requireTenantContext();
   const [views, recentItems, params] = await Promise.all([
@@ -70,7 +118,11 @@ export default async function SourcesPage({
     searchParams,
   ]);
 
-  const notice = githubNotice(params.github) ?? googleNotice(params.google);
+  const notice =
+    githubNotice(params.github) ??
+    googleNotice(params.google) ??
+    slackNotice(params.slack) ??
+    discordNotice(params.discord);
   const discoveredRepos = params.repos ? Number(params.repos) : null;
 
   return (
@@ -104,15 +156,15 @@ export default async function SourcesPage({
 
       <SourcesBrowser views={views} />
 
-      {/* --- Recently ingested --------------------------------------------- */}
+      {/* --- Recently synced --------------------------------------------- */}
       <section style={{ marginTop: "var(--space-xl)" }}>
         <div className="card">
           <p className="eyebrow" style={{ marginBottom: "var(--space-md)" }}>
-            Recently ingested
+            Recently synced
           </p>
           {recentItems.length === 0 ? (
             <div className="empty">
-              <p className="empty__title">Nothing ingested yet</p>
+              <p className="empty__title">Nothing synced yet</p>
               <p className="empty__body">
                 Connect a source above to bring in real context, or add a note
                 via the Local uploads source.

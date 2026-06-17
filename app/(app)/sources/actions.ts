@@ -70,6 +70,14 @@ import {
   syncMs365Mail,
   syncTeams,
 } from "@/modules/source-connection/microsoft";
+import {
+  getValidSlackToken,
+  syncSlackChannels,
+} from "@/modules/source-connection/slack";
+import {
+  getValidDiscordToken,
+  syncDiscordChannels,
+} from "@/modules/source-connection/discord";
 import type {
   GitHubMonitorSettings,
   SourceType,
@@ -275,17 +283,27 @@ export async function syncNotionAction(): Promise<{
 /** Activate/deactivate a Gmail label or Google calendar (scope item). */
 export async function updateScopeItemAction(input: {
   scopeItemId: string;
-  isActive: boolean;
+  isActive?: boolean;
+  includeInDailyMemo?: boolean;
+  priority?: "normal" | "high";
 }): Promise<{ ok: boolean; error: string | null }> {
   const ctx = await requireTenantContext();
   if (!input?.scopeItemId) return { ok: false, error: "Missing scope item." };
   try {
-    const changed = await updateScopeItem(input.scopeItemId, input.isActive);
+    const changed = await updateScopeItem(input.scopeItemId, {
+      isActive: input.isActive,
+      includeInDailyMemo: input.includeInDailyMemo,
+      priority: input.priority,
+    });
     if (changed) {
       await auditService.record(ctx, {
         action: "source.scope_item.updated",
         target: input.scopeItemId,
-        metadata: { isActive: input.isActive },
+        metadata: {
+          isActive: input.isActive,
+          includeInDailyMemo: input.includeInDailyMemo,
+          priority: input.priority,
+        },
       });
     }
     revalidatePath("/sources");
@@ -326,6 +344,73 @@ export async function syncGoogleAction(input: {
     });
     revalidatePath("/sources");
     return { ok: true, itemCount: result.itemCount, scopeCount: result.scopeCount, error: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Sync failed." };
+  }
+}
+
+// --- Slack ------------------------------------------------------------------
+
+export async function syncSlackAction(): Promise<{
+  ok: boolean;
+  itemCount?: number;
+  scopeCount?: number;
+  error: string | null;
+}> {
+  const ctx = await requireTenantContext();
+  try {
+    const connectionId = await findConnectionIdBySystem("slack");
+    if (!connectionId) return { ok: false, error: "Slack is not connected." };
+    const token = await getValidSlackToken(ctx.tenantId, connectionId);
+    if (!token) return { ok: false, error: "No Slack credentials stored." };
+
+    const result = await syncSlackChannels(ctx.tenantId, connectionId, token);
+    await auditService.record(ctx, {
+      action: "slack.channels.synced",
+      target: connectionId,
+      metadata: { itemCount: result.itemCount, scopeCount: result.scopeCount },
+    });
+    revalidatePath("/sources");
+    return { ok: true, itemCount: result.itemCount, scopeCount: result.scopeCount, error: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Sync failed." };
+  }
+}
+
+// --- Discord ----------------------------------------------------------------
+
+export async function syncDiscordAction(): Promise<{
+  ok: boolean;
+  itemCount?: number;
+  scopeCount?: number;
+  deniedCount?: number;
+  error: string | null;
+}> {
+  const ctx = await requireTenantContext();
+  try {
+    const connectionId = await findConnectionIdBySystem("discord");
+    if (!connectionId) return { ok: false, error: "Discord is not connected." };
+    const token = await getValidDiscordToken(ctx.tenantId, connectionId);
+    if (!token) return { ok: false, error: "No Discord bot token configured." };
+
+    const result = await syncDiscordChannels(ctx.tenantId, connectionId, token);
+    await auditService.record(ctx, {
+      action: "discord.channels.synced",
+      target: connectionId,
+      metadata: {
+        itemCount: result.itemCount,
+        scopeCount: result.scopeCount,
+        deniedCount: result.deniedCount,
+      },
+    });
+    revalidatePath("/sources");
+    return {
+      ok: true,
+      itemCount: result.itemCount,
+      scopeCount: result.scopeCount,
+      deniedCount: result.deniedCount,
+      error: null,
+    };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Sync failed." };
   }

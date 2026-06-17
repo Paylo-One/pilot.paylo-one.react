@@ -33,6 +33,7 @@ export interface StoredSourceItem {
   author: string | null;
   occurredAt: string | null;
   createdAt: string;
+  raw?: Record<string, unknown> | null;
 }
 
 /** Insert one normalised source item for a tenant. Returns the new id. */
@@ -70,6 +71,7 @@ function mapStoredItem(r: Record<string, unknown>): StoredSourceItem {
     author: (r.author as string | null) ?? null,
     occurredAt: (r.occurred_at as string | null) ?? null,
     createdAt: r.created_at as string,
+    raw: (r.raw as Record<string, unknown> | null) ?? null,
   };
 }
 
@@ -104,7 +106,7 @@ export async function listMemoSourceItems(
 ): Promise<StoredSourceItem[]> {
   const secret = createSupabaseSecretClient();
 
-  const [chatMonitors, repoMonitors] = await Promise.all([
+  const [chatMonitors, repoMonitors, channelScopes] = await Promise.all([
     secret
       .from("whatsapp_monitors")
       .select("chat_id")
@@ -116,15 +118,32 @@ export async function listMemoSourceItems(
       .select("repository_full_name")
       .eq("tenant_id", tenantId)
       .eq("include_in_daily_memo", false),
+    secret
+      .from("source_scope_items")
+      .select("id, system, include_in_daily_memo, priority")
+      .eq("tenant_id", tenantId)
+      .in("system", ["slack", "discord"])
+      .eq("is_active", true),
   ]);
   if (chatMonitors.error) throw new Error(chatMonitors.error.message);
   if (repoMonitors.error) throw new Error(repoMonitors.error.message);
+  if (channelScopes.error) throw new Error(channelScopes.error.message);
 
   const memoChatIds = new Set(
     (chatMonitors.data ?? []).map((m) => m.chat_id as string),
   );
   const mutedRepos = new Set(
     (repoMonitors.data ?? []).map((m) => m.repository_full_name as string),
+  );
+  const memoChannelScopeIds = new Set(
+    (channelScopes.data ?? [])
+      .filter((s) => s.include_in_daily_memo)
+      .map((s) => s.id as string),
+  );
+  const highPriorityScopeIds = new Set(
+    (channelScopes.data ?? [])
+      .filter((s) => s.priority === "high")
+      .map((s) => s.id as string),
   );
 
   // Over-fetch so items filtered out below don't underfill the memo pool. The
@@ -150,7 +169,19 @@ export async function listMemoSourceItems(
         const repository = raw?.repository;
         return !(typeof repository === "string" && mutedRepos.has(repository));
       }
+      if ((r.system as string) === "slack" || (r.system as string) === "discord") {
+        const scopeItemId = raw?.scopeItemId;
+        return typeof scopeItemId === "string" && memoChannelScopeIds.has(scopeItemId);
+      }
       return true;
+    })
+    .sort((a, b) => {
+      const aScope = (a.raw as Record<string, unknown> | null)?.scopeItemId;
+      const bScope = (b.raw as Record<string, unknown> | null)?.scopeItemId;
+      const aPriority = typeof aScope === "string" && highPriorityScopeIds.has(aScope) ? 1 : 0;
+      const bPriority = typeof bScope === "string" && highPriorityScopeIds.has(bScope) ? 1 : 0;
+      if (aPriority !== bPriority) return bPriority - aPriority;
+      return 0;
     })
     .slice(0, limit)
     .map(mapStoredItem);

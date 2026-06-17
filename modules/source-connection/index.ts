@@ -27,6 +27,11 @@ export interface SourceConnection {
   readonly nextSyncAt: string | null;
   readonly lastSyncStatus: string | null;
   readonly lastSyncError: string | null;
+  readonly providerWorkspaceId: string | null;
+  readonly providerWorkspaceName: string | null;
+  readonly permissionsGranted: Record<string, unknown> | null;
+  readonly lastSuccessfulSyncAt: string | null;
+  readonly failedSyncAttempts: number;
 }
 
 /** Interface contract retained for cross-module callers (technical-design.md). */
@@ -40,6 +45,8 @@ export const SOURCE_SYSTEM_LABELS: Record<SourceSystem, string> = {
   ms365_mail: "Microsoft 365 — Mail",
   calendar: "Google Calendar",
   teams: "Microsoft Teams",
+  slack: "Slack",
+  discord: "Discord",
   whatsapp: "WhatsApp",
   github: "GitHub",
   notion: "Notion",

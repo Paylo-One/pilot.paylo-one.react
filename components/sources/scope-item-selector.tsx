@@ -18,6 +18,8 @@ import {
   updateScopeItemAction,
   syncGoogleAction,
   syncMicrosoftAction,
+  syncSlackAction,
+  syncDiscordAction,
 } from "@/app/(app)/sources/actions";
 import { Toggle } from "./toggle";
 import { SourceIcon } from "./source-icon";
@@ -96,6 +98,32 @@ const FAMILY: Partial<Record<SourceType, FamilyCopy>> = {
     unconfigured:
       "Microsoft OAuth is not configured. Add MICROSOFT_OAUTH_CLIENT_ID / MICROSOFT_OAUTH_CLIENT_SECRET to enable.",
   },
+  slack: {
+    plural: "channels",
+    singular: "channel",
+    heading: "Slack channels",
+    scopeNote:
+      "Read-only public channels first. Active channels are synced incrementally; mute noisy channels from the Daily Memo without removing them from search.",
+    connectHref: "/api/oauth/slack/start",
+    connectLabel: "Connect Slack",
+    connectPrompt:
+      "Connect Slack (read-only). You then choose exactly which public channels to monitor.",
+    unconfigured:
+      "Slack OAuth is not configured. Add SLACK_CLIENT_ID / SLACK_CLIENT_SECRET to enable.",
+  },
+  discord: {
+    plural: "channels",
+    singular: "channel",
+    heading: "Discord server channels",
+    scopeNote:
+      "Bot-based read access. Only active server channels are synced; the bot needs View Channel, Read Message History, and Message Content intent for text.",
+    connectHref: "/api/oauth/discord/start",
+    connectLabel: "Connect Discord",
+    connectPrompt:
+      "Connect Discord and install the bot. You then choose which server channels to monitor.",
+    unconfigured:
+      "Discord OAuth is not configured. Add DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET / DISCORD_BOT_TOKEN to enable.",
+  },
 };
 
 export function ScopeItemSelector({
@@ -160,7 +188,11 @@ export function ScopeItemSelector({
     setMessage(null);
     startTransition(async () => {
       const res =
-        system === "ms365_mail" || system === "teams"
+        system === "slack"
+          ? await syncSlackAction()
+          : system === "discord"
+            ? await syncDiscordAction()
+            : system === "ms365_mail" || system === "teams"
           ? await syncMicrosoftAction({ system })
           : await syncGoogleAction({ system });
       if (res.ok) {
@@ -175,6 +207,27 @@ export function ScopeItemSelector({
       } else {
         setMessage(res.error ?? "Sync failed.");
       }
+    });
+  }
+
+  function setMemoInclusion(item: SourceScopeItem, includeInDailyMemo: boolean) {
+    setMessage(null);
+    startTransition(async () => {
+      const res = await updateScopeItemAction({
+        scopeItemId: item.id,
+        includeInDailyMemo,
+      });
+      if (!res.ok && res.error) setMessage(res.error);
+      router.refresh();
+    });
+  }
+
+  function setPriority(item: SourceScopeItem, priority: "normal" | "high") {
+    setMessage(null);
+    startTransition(async () => {
+      const res = await updateScopeItemAction({ scopeItemId: item.id, priority });
+      if (!res.ok && res.error) setMessage(res.error);
+      router.refresh();
     });
   }
 
@@ -223,10 +276,33 @@ export function ScopeItemSelector({
               <div className="repo-row__main">
                 <p className="repo-row__name">{item.name ?? item.externalId}</p>
                 <p className="repo-row__meta mono">
-                  {item.isActive ? `active · last sync ${formatSync(item.lastSyncAt)}` : "not synced"}
+                  {item.isActive
+                    ? `active · ${item.includeInDailyMemo ? "memo on" : "muted"} · ${item.priority} · last sync ${formatSync(item.lastSyncAt)}`
+                    : "not synced"}
                 </p>
               </div>
               <div className="repo-row__controls">
+                {system === "slack" || system === "discord" ? (
+                  <>
+                    <Toggle
+                      pressed={item.includeInDailyMemo}
+                      onChange={(checked) => setMemoInclusion(item, checked)}
+                      label={`Include ${item.name ?? copy.singular} in Daily Memo`}
+                      disabled={pending}
+                    />
+                    <select
+                      aria-label={`Priority for ${item.name ?? copy.singular}`}
+                      value={item.priority}
+                      onChange={(e) => setPriority(item, e.target.value === "high" ? "high" : "normal")}
+                      disabled={pending}
+                      className="input select"
+                      style={{ height: "34px", minWidth: "112px", padding: "0 8px" }}
+                    >
+                      <option value="normal">Normal</option>
+                      <option value="high">Important</option>
+                    </select>
+                  </>
+                ) : null}
                 <Toggle
                   pressed={item.isActive}
                   onChange={() => toggle(item)}

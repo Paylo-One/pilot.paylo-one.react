@@ -75,6 +75,10 @@ export function observedIdentityFromItem(
     }
     case "teams":
       return { type: "teams", value: author };
+    case "slack":
+      return { type: "slack", value: author };
+    case "discord":
+      return { type: "discord", value: author };
     case "notion":
       return { type: "notion", value: author };
     case "calendar":

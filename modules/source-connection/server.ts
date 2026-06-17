@@ -36,6 +36,11 @@ interface SourceConnectionRow {
   next_sync_at: string | null;
   last_sync_status: string | null;
   last_sync_error: string | null;
+  provider_workspace_id: string | null;
+  provider_workspace_name: string | null;
+  permissions_granted: unknown;
+  last_successful_sync_at: string | null;
+  failed_sync_attempts: number;
 }
 
 function mapRow(row: SourceConnectionRow): SourceConnection {
@@ -52,11 +57,16 @@ function mapRow(row: SourceConnectionRow): SourceConnection {
     nextSyncAt: row.next_sync_at,
     lastSyncStatus: row.last_sync_status,
     lastSyncError: row.last_sync_error,
+    providerWorkspaceId: row.provider_workspace_id,
+    providerWorkspaceName: row.provider_workspace_name,
+    permissionsGranted: row.permissions_granted as Record<string, unknown> | null,
+    lastSuccessfulSyncAt: row.last_successful_sync_at,
+    failedSyncAttempts: row.failed_sync_attempts,
   };
 }
 
 const SELECT_COLUMNS =
-  "id, system, display_name, status, storage_policy, created_at, updated_at, auto_refresh_enabled, sync_frequency, next_sync_at, last_sync_status, last_sync_error";
+  "id, system, display_name, status, storage_policy, created_at, updated_at, auto_refresh_enabled, sync_frequency, next_sync_at, last_sync_status, last_sync_error, provider_workspace_id, provider_workspace_name, permissions_granted, last_successful_sync_at, failed_sync_attempts";
 
 /**
  * List the current tenant's source connections (oldest first). Uses the USER
@@ -129,6 +139,9 @@ export async function upsertProviderConnection(
     displayName?: string;
     status?: SourceConnectionStatus;
     storagePolicy?: StoragePolicy;
+    providerWorkspaceId?: string | null;
+    providerWorkspaceName?: string | null;
+    permissionsGranted?: Record<string, unknown> | null;
   },
 ): Promise<string> {
   const secret = createSupabaseSecretClient();
@@ -149,7 +162,19 @@ export async function upsertProviderConnection(
   if (existing) {
     const { error } = await secret
       .from("source_connections")
-      .update({ status, display_name: displayName })
+      .update({
+        status,
+        display_name: displayName,
+        ...(opts?.providerWorkspaceId !== undefined
+          ? { provider_workspace_id: opts.providerWorkspaceId }
+          : {}),
+        ...(opts?.providerWorkspaceName !== undefined
+          ? { provider_workspace_name: opts.providerWorkspaceName }
+          : {}),
+        ...(opts?.permissionsGranted !== undefined
+          ? { permissions_granted: opts.permissionsGranted }
+          : {}),
+      })
       .eq("id", existing.id)
       .eq("tenant_id", tenantId);
     if (error) throw new Error(error.message);
@@ -171,6 +196,9 @@ export async function upsertProviderConnection(
       display_name: displayName,
       status,
       storage_policy: opts?.storagePolicy ?? "summaries_only",
+      provider_workspace_id: opts?.providerWorkspaceId ?? null,
+      provider_workspace_name: opts?.providerWorkspaceName ?? null,
+      permissions_granted: opts?.permissionsGranted ?? null,
     })
     .select("id")
     .single();

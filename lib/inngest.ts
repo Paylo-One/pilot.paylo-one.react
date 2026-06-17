@@ -7,6 +7,8 @@ import { syncActiveRepositories } from "@/modules/source-connection/github-repos
 import { syncActiveResources as syncActiveNotionResources } from "@/modules/source-connection/notion";
 import { getValidGoogleToken, syncGmail, syncCalendar } from "@/modules/source-connection/google";
 import { getValidMicrosoftToken, syncMs365Mail, syncTeams } from "@/modules/source-connection/microsoft";
+import { getValidSlackToken, syncSlackChannels } from "@/modules/source-connection/slack";
+import { getValidDiscordToken, syncDiscordChannels } from "@/modules/source-connection/discord";
 import { syncActiveWhatsAppMonitors } from "@/modules/source-connection/whatsapp-sync";
 import { calculateNextSyncAt } from "@/lib/sync-schedule";
 
@@ -152,6 +154,16 @@ async function runConnectorSync(
       if (!token) throw new Error("No Microsoft 365 credentials stored.");
       return (await syncTeams(tenantId, connectionId, token)).itemCount;
     }
+    case "slack": {
+      const token = await getValidSlackToken(tenantId, connectionId);
+      if (!token) throw new Error("No Slack credentials stored.");
+      return (await syncSlackChannels(tenantId, connectionId, token)).itemCount;
+    }
+    case "discord": {
+      const token = await getValidDiscordToken(tenantId, connectionId);
+      if (!token) throw new Error("No Discord bot token configured.");
+      return (await syncDiscordChannels(tenantId, connectionId, token)).itemCount;
+    }
     case "whatsapp":
       return (await syncActiveWhatsAppMonitors(tenantId, connectionId)).itemCount;
     default:
@@ -226,13 +238,18 @@ export const sourceSyncFunction = inngest.createFunction(
     const connection = await step.run("validate-connection", async () => {
       const { data, error } = await supabase
         .from("source_connections")
-        .select("id, system, sync_frequency")
+        .select("id, system, sync_frequency, failed_sync_attempts")
         .eq("id", connectionId)
         .single();
       if (error || !data) {
         throw new Error(`Source connection not found: ${connectionId}`);
       }
-      return data as { id: string; system: string; sync_frequency: string };
+      return data as {
+        id: string;
+        system: string;
+        sync_frequency: string;
+        failed_sync_attempts: number | null;
+      };
     });
 
     // 2. Run the real connector. The error is caught INSIDE the step and
@@ -263,14 +280,17 @@ export const sourceSyncFunction = inngest.createFunction(
 
     // 4. Persist the connection's sync state (clear the claim).
     await step.run("update-connection-state", async () => {
+      const update = {
+        last_sync_status: syncSuccess ? "success" : "failed",
+        last_sync_error: syncError,
+        failed_sync_attempts: syncSuccess ? 0 : (connection.failed_sync_attempts ?? 0) + 1,
+        next_sync_at: nextSyncTimestamp,
+        sync_claimed_at: null,
+        ...(syncSuccess ? { last_successful_sync_at: new Date().toISOString() } : {}),
+      };
       const { error } = await supabase
         .from("source_connections")
-        .update({
-          last_sync_status: syncSuccess ? "success" : "failed",
-          last_sync_error: syncError,
-          next_sync_at: nextSyncTimestamp,
-          sync_claimed_at: null,
-        })
+        .update(update)
         .eq("id", connectionId);
       if (error) {
         throw new Error(`Failed to update source connection status: ${error.message}`);

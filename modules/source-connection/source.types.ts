@@ -149,6 +149,10 @@ export interface SourceView {
   readonly googleConfigured: boolean;
   /** Whether Microsoft Entra OAuth credentials are configured in this build. */
   readonly microsoftConfigured: boolean;
+  /** Whether Slack OAuth credentials are configured in this build. */
+  readonly slackConfigured: boolean;
+  /** Whether Discord OAuth/bot credentials are configured in this build. */
+  readonly discordConfigured: boolean;
   /** WhatsApp only: the tenant's session (null until started). */
   readonly whatsappSession: WhatsAppSession | null;
   /** WhatsApp only: the operator's approved monitors (empty unless any). */
@@ -172,6 +176,8 @@ export type SourceConnectAffordance =
   | "github_oauth" // real GitHub OAuth (when configured)
   | "google_oauth" // real Google OAuth — Gmail + Calendar (when configured)
   | "microsoft_oauth" // real Microsoft Entra OAuth — MS 365 Mail / Teams (when configured)
+  | "slack_oauth" // real Slack OAuth — public channel monitoring first
+  | "discord_oauth" // real Discord OAuth + bot install — server/channel monitoring
   | "notion_token" // real Notion internal-integration token (paste → store)
   | "whatsapp_session" // tenant-scoped WhatsApp session (QR onboarding, scaffold)
   | "file_upload" // real in-app upload
@@ -246,7 +252,9 @@ export type ScopeItemType =
   | "ms365_folder"
   | "ms365_calendar"
   | "teams_chat"
-  | "teams_channel";
+  | "teams_channel"
+  | "slack_channel"
+  | "discord_channel";
 
 /**
  * A selectable scope item for a source — a Gmail label, Google/MS 365 calendar,
@@ -260,6 +268,13 @@ export interface SourceScopeItem {
   readonly externalId: string;
   readonly name: string | null;
   readonly isActive: boolean;
+  /** Whether active items may inform Daily Memo/actions; false = synced but muted. */
+  readonly includeInDailyMemo: boolean;
+  /** Channel importance hint used by memo retrieval ordering. */
+  readonly priority: "normal" | "high";
+  /** Provider cursor for incremental sync (Slack ts, Discord snowflake, etc.). */
+  readonly syncCursor: string | null;
+  readonly metadata: Record<string, unknown> | null;
   readonly lastSyncAt: string | null;
 }
 

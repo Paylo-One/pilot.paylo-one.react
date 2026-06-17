@@ -24,6 +24,8 @@ import { BrandMark } from "@/components/brand-mark";
 import { PayloWordmark } from "@/components/paylo-wordmark";
 import { WorkspaceNav } from "@/components/workspace-nav";
 import { MobileNav } from "@/components/mobile-nav";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { OnboardingWizard } from "@/components/onboarding-wizard";
 
 function greeting(hour: number): string {
   if (hour < 12) return "Good morning";
@@ -40,6 +42,13 @@ export default async function AppLayout({
   const ctx = await requireTenantContext();
   const user = await getSignedInUser();
 
+  const supabase = await createSupabaseServerClient();
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("display_name, timezone, briefing_time, onboarding_completed")
+    .eq("user_id", ctx.userId)
+    .maybeSingle();
+
   const now = new Date();
   const dateLabel = now.toLocaleDateString("en-GB", {
     weekday: "long",
@@ -49,6 +58,9 @@ export default async function AppLayout({
 
   return (
     <div className="workspace">
+      {!profile?.onboarding_completed && (
+        <OnboardingWizard profile={profile} />
+      )}
       {/* --- Command layer ------------------------------------------------- */}
       <aside className="workspace__sidebar">
         <div className="brand">
