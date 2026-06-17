@@ -28,6 +28,7 @@ import {
 } from "./settings-form";
 import { PasskeysCard } from "./passkeys-card";
 import { ByoModelCard } from "@/components/settings/byo-model-card";
+import { OnboardingLauncher } from "@/components/settings/onboarding-launcher";
 import { ReferralCard } from "./referral-card";
 import { SettingsNav } from "./settings-nav";
 
@@ -167,8 +168,18 @@ export default async function SettingsPage() {
           </div>
           <div className="meta-row">
             <span className="meta-row__key">Onboarding</span>
-            <span className="meta-row__value">
+            <span
+              className="meta-row__value"
+              style={{
+                display: "flex",
+                gap: "var(--space-sm)",
+                alignItems: "center",
+                justifyContent: "flex-end",
+                flexWrap: "wrap",
+              }}
+            >
               <span className="status status--ok">Invite-only · active</span>
+              <OnboardingLauncher profile={profile} />
             </span>
           </div>
         </SectionCard>

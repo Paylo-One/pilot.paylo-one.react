@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, type ReactNode, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   FiArrowLeft,
   FiArrowRight,
@@ -14,6 +15,7 @@ import {
   FiRefreshCcw,
   FiTarget,
   FiUsers,
+  FiX,
 } from "react-icons/fi";
 import type { IconType } from "react-icons";
 import { completeOnboardingAction } from "@/app/(app)/onboarding-actions";
@@ -228,7 +230,16 @@ function focusLabel(id: FocusId): string {
   return FOCUS_OPTIONS.find((focus) => focus.id === id)?.title ?? id;
 }
 
-export function OnboardingWizard({ profile }: { profile: Profile | null }) {
+export function OnboardingWizard({
+  profile,
+  onComplete,
+  onDismiss,
+}: {
+  profile: Profile | null;
+  onComplete?: () => void;
+  onDismiss?: () => void;
+}) {
+  const router = useRouter();
   const initialTime = (profile?.briefing_time as string | null)?.slice(0, 5) || "08:00";
   const [step, setStep] = useState<StepId>("welcome");
   const [timezone, setTimezone] = useState<string>(() => detectedTimezone(profile));
@@ -323,20 +334,29 @@ export function OnboardingWizard({ profile }: { profile: Profile | null }) {
         setError(
           "We could not save your setup. Please check your connection and try again.",
         );
+        return;
       }
+      onComplete?.();
+      router.refresh();
     });
   }
 
   return (
     <div className="onboarding-canvas">
-      <OnboardingShell titleId={`onboarding-step-${step}`}>
+      <OnboardingShell
+        titleId={`onboarding-step-${step}`}
+        onDismiss={onDismiss}
+      >
         <OnboardingPreviewPanel
           briefingTime={briefingTime}
           selectedFocus={selectedFocus}
           selectedSources={selectedSources}
         />
 
-        <section className="onboarding-stage" aria-labelledby={`onboarding-step-${step}`}>
+        <section
+          className={`onboarding-stage onboarding-stage--${step}`}
+          aria-labelledby={`onboarding-step-${step}`}
+        >
           <OnboardingProgress currentIndex={stepIndex} />
 
           {step === "welcome" ? (
@@ -510,9 +530,11 @@ export function OnboardingWizard({ profile }: { profile: Profile | null }) {
 function OnboardingShell({
   children,
   titleId,
+  onDismiss,
 }: {
   children: ReactNode;
   titleId: string;
+  onDismiss?: () => void;
 }) {
   return (
     <section
@@ -521,6 +543,16 @@ function OnboardingShell({
       aria-modal="true"
       aria-labelledby={titleId}
     >
+      {onDismiss ? (
+        <button
+          type="button"
+          className="onboarding-shell__close"
+          aria-label="Close setup guide"
+          onClick={onDismiss}
+        >
+          <FiX aria-hidden="true" />
+        </button>
+      ) : null}
       {children}
     </section>
   );
@@ -817,6 +849,7 @@ function OnboardingStyles() {
       }
 
       .onboarding-shell {
+        position: relative;
         width: min(1120px, 100%);
         min-height: min(740px, calc(100vh - 48px));
         display: grid;
@@ -826,6 +859,33 @@ function OnboardingStyles() {
         background: rgba(255, 255, 255, 0.86);
         box-shadow: 0 28px 80px rgba(15, 23, 42, 0.18);
         overflow: hidden;
+      }
+
+      .onboarding-shell__close {
+        position: absolute;
+        top: 14px;
+        right: 14px;
+        z-index: 2;
+        display: grid;
+        width: 36px;
+        height: 36px;
+        place-items: center;
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-pill);
+        background: rgba(255, 255, 255, 0.86);
+        color: var(--colour-text-secondary);
+        cursor: pointer;
+        touch-action: manipulation;
+        transition:
+          background var(--speed) var(--ease-standard),
+          color var(--speed) var(--ease-standard),
+          border-color var(--speed) var(--ease-standard);
+      }
+
+      .onboarding-shell__close:hover {
+        border-color: var(--colour-border-strong);
+        background: var(--colour-surface-elevated);
+        color: var(--colour-text-primary);
       }
 
       .onboarding-preview {
@@ -944,6 +1004,10 @@ function OnboardingStyles() {
         background: rgba(251, 251, 253, 0.94);
       }
 
+      .onboarding-stage--sources {
+        padding: 22px 28px 24px;
+      }
+
       .onboarding-progress {
         display: grid;
         grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -1034,6 +1098,16 @@ function OnboardingStyles() {
         text-wrap: balance;
       }
 
+      .onboarding-stage--sources .onboarding-step-header h1 {
+        font-size: clamp(1.9rem, 3vw, 2.8rem);
+        line-height: 1;
+      }
+
+      .onboarding-stage--sources .onboarding-step-header p:last-child {
+        margin-top: var(--space-sm);
+        font-size: var(--text-body);
+      }
+
       .onboarding-step-header p:last-child {
         margin: var(--space-md) 0 0;
         max-width: 660px;
@@ -1080,6 +1154,11 @@ function OnboardingStyles() {
       .onboarding-choice-grid--three,
       .onboarding-source-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .onboarding-source-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin-top: var(--space-md);
       }
 
       .onboarding-choice-card,
@@ -1216,7 +1295,8 @@ function OnboardingStyles() {
       .onboarding-source-card {
         display: flex;
         flex-direction: column;
-        padding: 16px;
+        min-height: 138px;
+        padding: 13px;
       }
 
       .onboarding-source-card:disabled {
@@ -1232,7 +1312,7 @@ function OnboardingStyles() {
         align-items: center;
         justify-content: space-between;
         gap: var(--space-sm);
-        margin-bottom: var(--space-md);
+        margin-bottom: var(--space-sm);
       }
 
       .onboarding-source-card .integration__glyph {
@@ -1277,10 +1357,14 @@ function OnboardingStyles() {
 
       .onboarding-source-card__action {
         margin-top: auto;
-        padding-top: var(--space-md);
+        padding-top: var(--space-sm);
         color: var(--colour-accent);
         font-size: var(--text-small);
         font-weight: 800;
+      }
+
+      .onboarding-stage--sources .onboarding-footer-actions {
+        margin-top: var(--space-md);
       }
 
       .onboarding-summary {
@@ -1447,6 +1531,10 @@ function OnboardingStyles() {
         }
 
         .onboarding-value-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .onboarding-source-grid {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
       }
