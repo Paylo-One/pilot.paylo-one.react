@@ -12,9 +12,9 @@ import { BrandMark } from "@/components/brand-mark";
 import { PayloWordmark } from "@/components/paylo-wordmark";
 
 export const metadata: Metadata = {
-  title: "Invitation unavailable · Paylo.one Management OS",
+  title: "Invitation unavailable · Pilot by Paylo.one",
   description:
-    "This invitation link is no longer available. You can ask for access to Paylo.one Management OS instead.",
+    "This invitation link is no longer available. You can ask for access to Pilot by Paylo.one instead.",
   robots: { index: false, follow: false },
 };
 
@@ -72,7 +72,7 @@ export default async function InviteUnavailablePage({
             className="brand__inst"
             style={{ color: "var(--colour-text-tertiary)" }}
           >
-            Management OS
+            Pilot
           </span>
         </div>
       </Link>

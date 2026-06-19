@@ -14,9 +14,9 @@ import { PayloWordmark } from "@/components/paylo-wordmark";
 import { RequestAccessForm } from "./request-access-form";
 
 export const metadata: Metadata = {
-  title: "Request access · Paylo.one Management OS",
+  title: "Request access · Pilot by Paylo.one",
   description:
-    "Ask for an invitation to Paylo.one Management OS — a private place to run your decisions, people, and daily priorities from one calm view.",
+    "Ask for an invitation to Pilot by Paylo.one, a private place to run your decisions, people, and daily priorities from one calm view.",
   robots: { index: true, follow: true },
 };
 
@@ -38,7 +38,7 @@ export default function RequestAccessPage() {
             className="brand__inst"
             style={{ color: "var(--colour-text-tertiary)" }}
           >
-            Management OS
+            Pilot
           </span>
         </div>
       </Link>

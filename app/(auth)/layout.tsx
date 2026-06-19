@@ -24,7 +24,7 @@ export default function AuthLayout({
           <div className="brand__wordmark">
             <PayloWordmark size={18} />
             <span className="brand__inst" style={{ color: "var(--colour-text-tertiary)" }}>
-              Management OS
+              Pilot
             </span>
           </div>
         </div>

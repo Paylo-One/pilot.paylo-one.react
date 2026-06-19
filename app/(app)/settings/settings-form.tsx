@@ -56,7 +56,7 @@ export function SettingsProfileForm({ values }: { values: ProfileFormValues }) {
           ))}
         </select>
         <span className="field__hint">
-          Drives when your Daily Memo is prepared.
+          Drives when your daily briefing is prepared.
         </span>
       </div>
 

@@ -365,10 +365,10 @@ export function OnboardingWizard({
               <OnboardingStepHeader
                 id="onboarding-step-welcome"
                 eyebrow="First Run Setup"
-                title="Welcome to Paylo.one"
-                description="Turn scattered information into a clear daily briefing, organised actions, and useful context."
+                title="Welcome to Pilot"
+                description="Pilot is a calm intelligence layer for your work. It turns scattered information into a clear daily briefing, organised actions, and useful context."
               />
-              <div className="onboarding-value-grid" aria-label="What Paylo.one prepares">
+              <div className="onboarding-value-grid" aria-label="What Pilot prepares">
                 {[
                   ["Briefing", "A calm view of what changed."],
                   ["Actions", "Follow-ups kept in sight."],
@@ -391,7 +391,7 @@ export function OnboardingWizard({
                 id="onboarding-step-rhythm"
                 eyebrow="Step 2 of 5"
                 title="Set Your Briefing Rhythm"
-                description="Choose when Paylo.one should prepare your briefing. You can change this later from Settings."
+                description="Choose when Pilot should prepare your briefing. You can change this later from Settings."
               />
               <div className="onboarding-choice-grid onboarding-choice-grid--two">
                 {RHYTHM_OPTIONS.map((option) => (
@@ -470,7 +470,7 @@ export function OnboardingWizard({
                 id="onboarding-step-focus"
                 eyebrow="Step 4 of 5"
                 title="Choose What Matters"
-                description="Pick the areas Paylo.one should keep especially visible in your first briefings."
+                description="Pick the areas Pilot should keep especially visible in your first briefings."
               />
               <div className="onboarding-choice-grid onboarding-choice-grid--three">
                 {FOCUS_OPTIONS.map((focus) => (
@@ -702,7 +702,7 @@ function OnboardingPreviewPanel({
         <BrandMark size={30} />
         <div>
           <p>Paylo.one</p>
-          <span>Private Management OS</span>
+          <span>Pilot</span>
         </div>
       </div>
       <div className="onboarding-preview__briefing">

@@ -1,7 +1,7 @@
 "use server";
 
 /**
- * Server Actions for the Actions Command Centre.
+ * Server Actions for the Actions surface.
  * Scoped fully to the authenticated tenant via requireTenantContext.
  * Writes audit logs for tracing all mutations.
  */
@@ -522,7 +522,7 @@ export async function suggestActionMetadata(
 
     try {
       const client = new OpenAI({ apiKey });
-      const systemPrompt = `You are an AI assistant in Antigravity Management OS. Your task is to analyze an action's title and description to extract and suggest structured metadata.
+      const systemPrompt = `You are an assistant in Pilot by Paylo.one. Your task is to analyze an action's title and description to extract and suggest structured metadata.
 We want to keep metadata minimal and avoid information hoarding and tag clutter. Suggest only what is highly relevant and high-value.
 
 Context of this workspace:

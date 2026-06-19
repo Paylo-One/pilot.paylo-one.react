@@ -2,7 +2,7 @@
   "name": "paylo-one-app",
   "version": "0.1.0",
   "private": true,
-  "description": "Paylo.one Management OS — application scaffold (modular monolith, multi-tenant, passkey-ready, governed Model & Tool gateways). Scaffold only: no live integrations, providers, passkeys, or payments.",
+  "description": "Pilot by Paylo.one — application scaffold (modular monolith, multi-tenant, passkey-ready, governed Model & Tool gateways). Scaffold only: no live integrations, providers, passkeys, or payments.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

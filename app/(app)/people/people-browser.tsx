@@ -124,7 +124,7 @@ export function PeopleBrowser({
                 Establish your directory
               </p>
               <p className="empty__body" style={{ color: "var(--colour-text-secondary)", fontSize: "var(--text-small)", maxWidth: "320px", margin: "var(--space-xs) auto 0" }}>
-                Add key stakeholders, team members, and partners to map relationship-aware signals to your Daily Memo.
+                Add key stakeholders, team members, and partners to map relationship-aware signals to your daily briefing.
               </p>
             </div>
           ) : filtered.length === 0 ? (

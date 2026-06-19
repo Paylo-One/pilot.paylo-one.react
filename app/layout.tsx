@@ -19,9 +19,9 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Paylo.one Management OS",
+  title: "Pilot by Paylo.one",
   description:
-    "Private management operating system for high-context leaders. Application scaffold.",
+    "A calm intelligence layer for leaders. Know what matters. Lose the noise.",
   robots: { index: false, follow: false },
 };
 

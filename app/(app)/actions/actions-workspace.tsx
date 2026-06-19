@@ -862,7 +862,7 @@ export function ActionsWorkspace({
       {/* Main Header Panel */}
       <div className="page-head actions-page__head" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "var(--space-md)", flexWrap: "wrap", borderBottom: "1px solid var(--colour-border)", paddingBottom: "var(--space-md)" }}>
         <div style={{ flex: 1, minWidth: "300px" }}>
-          <p className="eyebrow">Action Command Centre</p>
+          <p className="eyebrow">Actions</p>
           <h1 className="page-head__title" style={{ margin: "4px 0" }}>Commitments & Accountability</h1>
           <p className="page-head__lead" style={{ margin: 0 }}>
             Executive-grade execution memory. Track deliverables, set strict priorities, prevent timeline slips, and avoid information-hoarding clutter.

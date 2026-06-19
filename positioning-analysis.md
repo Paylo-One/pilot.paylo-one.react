@@ -1,5 +1,7 @@
 # Positioning Analysis — Paylo.one Management OS
 
+> **Superseded (2026-06-19).** This is a historical positioning analysis from the "Management OS" era. The product has since been renamed to **Pilot by Paylo.one**, with the positioning "Know what matters. Lose the noise." and a calm-intelligence-layer frame. See the current naming decision and brand positioning in `../governance/design/`. This document is retained for the reasoning behind the original category bet only.
+
 > Research as of 2026-06-14. Grounds in the locked frame in product-strategy.md / brand-strategy.md. This document validates the locked category bet against the live 2026 competitive set, maps the white-space, evaluates all eight candidate positionings, and recommends a primary frame, a wedge frame, and the exact lines to ship.
 
 ## 1. How the relevant competitors position themselves

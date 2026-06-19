@@ -345,7 +345,7 @@ export function ActionDetailWorkspace({
           <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
             <path d="M13.5 16.5 L7 10 L13.5 3.5" />
           </svg>
-          Back to Command Centre
+          Back to Actions
         </Link>
         <span className={`status status--${status === "completed" ? "ok" : status === "cancelled" ? "neutral" : "info"}`}>
           Action ID: {action.id.substring(0, 8)}...

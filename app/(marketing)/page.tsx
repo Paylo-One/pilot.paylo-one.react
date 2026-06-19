@@ -38,20 +38,20 @@ export default async function AppApexLanding() {
         <div className="brand__wordmark">
           <PayloWordmark size={18} />
           <span className="brand__inst" style={{ color: "var(--colour-text-tertiary)" }}>
-            Management OS
+            Pilot
           </span>
         </div>
       </div>
 
-      <p className="eyebrow">A private management operating system</p>
+      <p className="eyebrow">A calm intelligence layer for leaders</p>
       <h1 style={{ fontSize: "var(--text-h1)", margin: "var(--space-sm) 0 var(--space-md)" }}>
-        Run your whole leadership context from one calm place.
+        Know what matters. Lose the noise.
       </h1>
       <p className="text-secondary measure" style={{ fontSize: "var(--text-body)" }}>
-        Paylo.one pulls together the email, messages, calendar, and documents you
-        already work across, then gives you one short brief each morning: what
+        Pilot pulls together the email, messages, calendar, and documents you
+        already work across, then gives you one short briefing each morning: what
         matters today, what changed, what needs a decision, and what cannot slip.
-        Source-backed Actions keeps the commitments, people, and context behind
+        Source-backed Actions keep the commitments, people, and context behind
         the next move together. Built for leaders who carry a lot of context and
         cannot afford to lose any of it.
       </p>

@@ -379,7 +379,7 @@ export function SourceDetail({
       {/* --- Policy & Daily Memo -------------------------------------------- */}
       <section className="card">
         <h2 className="card__title" style={{ marginBottom: "var(--space-md)" }}>
-          Storage &amp; Daily Memo
+          Storage &amp; daily briefing
         </h2>
 
         <div className="integration__detail-block" style={{ borderTop: "none", paddingTop: 0, marginTop: 0 }}>
@@ -398,15 +398,15 @@ export function SourceDetail({
             <Toggle
               pressed={inMemo}
               onChange={setInMemo}
-              label={`Include ${view.name} in the Daily Memo`}
+              label={`Include ${view.name} in the daily briefing`}
               disabled={!view.referenceReady}
             />
             <span className="integration__toggle-label">
-              Include in Daily Memo
+              Include in daily briefing
             </span>
           </span>
           <p className="segmented__hint">
-            Only approved, active sources inform the Daily Memo.
+            Only approved, active sources inform the daily briefing.
           </p>
         </div>
       </section>

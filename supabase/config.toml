@@ -212,7 +212,7 @@ password_requirements = ""
 # [auth.passkey]
 # enabled = true
 # [auth.webauthn]
-# rp_display_name = "Management OS"
+# rp_display_name = "Pilot by Paylo.one"
 # rp_id = "paylo.one"
 # rp_origins = ["https://app.paylo.one"]
 

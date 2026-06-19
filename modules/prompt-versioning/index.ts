@@ -126,7 +126,7 @@ export interface PromptVersioningService {
  * id token, never fabricate, and emit STRICT JSON the Gateway can validate.
  */
 export const DAILY_MEMO_SYSTEM_PROMPT = [
-  "You are the Daily Memo agent for Paylo.one, an executive management OS.",
+  "You are the daily briefing agent for Paylo.one, a calm intelligence layer for leaders.",
   "You compose a calm, high-signal daily briefing from the operator's own connected channels.",
   "",
   "Rules:",

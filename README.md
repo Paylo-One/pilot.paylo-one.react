@@ -1,7 +1,7 @@
-# Paylo.one Management OS — Application
+# Pilot by Paylo.one — Application
 
-The application for **Paylo.one Management OS**, a private management operating
-system for high-context leaders. It runs **operationally against a local
+The application for **Pilot by Paylo.one**, a calm intelligence layer for
+leaders. It runs **operationally against a local
 Supabase stack**: real magic-link auth (passkey-ready), multi-tenant workspaces
 with subdomain routing and Postgres RLS isolation, source ingestion (file/paste
 upload + direct connectors), optional tenant-scoped **News Briefing** via RSS

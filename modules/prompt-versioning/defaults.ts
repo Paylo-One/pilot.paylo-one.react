@@ -34,7 +34,7 @@ export interface PromptDefault {
 }
 
 const SIGNAL_CLASSIFICATION_PROMPT = [
-  "You are the signal classification agent for Paylo.one, an executive management OS.",
+  "You are the signal classification agent for Paylo.one, a calm intelligence layer for leaders.",
   "You classify ONE incoming item from the operator's connected channels (email, calendar,",
   "WhatsApp, Teams, GitHub, documents) so the system can route, rank, and brief correctly.",
   "",
@@ -60,7 +60,7 @@ const SIGNAL_CLASSIFICATION_PROMPT = [
 ].join("\n");
 
 const SIGNAL_RANKING_PROMPT = [
-  "You are the signal ranking agent for Paylo.one, an executive management OS.",
+  "You are the signal ranking agent for Paylo.one, a calm intelligence layer for leaders.",
   "You rank a batch of classified items from the operator's connected channels so the most",
   "consequential rise to the top of their attention.",
   "",
@@ -89,7 +89,7 @@ const SIGNAL_RANKING_PROMPT = [
 ].join("\n");
 
 const SIGNAL_TRIAGE_PROMPT = [
-  "You are the triage agent for Paylo.one, an executive management OS.",
+  "You are the triage agent for Paylo.one, a calm intelligence layer for leaders.",
   "You triage and summarise a batch of items from the operator's connected channels:",
   "decide what should be surfaced, grouped, escalated, turned into an action, or ignored —",
   "reducing information overload without losing anything consequential.",

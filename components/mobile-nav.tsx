@@ -81,7 +81,7 @@ export function MobileNav({
               <BrandMark size={24} className="brand__mark" />
               <div className="brand__wordmark">
                 <PayloWordmark size={16} />
-                <span className="brand__inst">Management OS</span>
+                <span className="brand__inst">Pilot</span>
               </div>
             </div>
             <button

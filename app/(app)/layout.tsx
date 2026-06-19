@@ -2,7 +2,7 @@
  * app/(app)/layout.tsx
  *
  * The tenant workspace shell, served on <slug>.paylo.one. It is built to feel
- * like an operating system, not a dashboard: a permanent dark command layer
+ * like a calm command layer, not a dashboard: a permanent dark command layer
  * (sidebar) carrying brand, tenant context, and navigation, beside a calm main
  * column with a context-bearing topbar.
  *
@@ -67,7 +67,7 @@ export default async function AppLayout({
           <BrandMark size={26} className="brand__mark" />
           <div className="brand__wordmark">
             <PayloWordmark size={17} />
-            <span className="brand__inst">Management OS</span>
+            <span className="brand__inst">Pilot</span>
           </div>
         </div>
 
@@ -126,9 +126,9 @@ export default async function AppLayout({
               <span className="status-pill__dot status-pill__dot--ok" />
               Sources · idle
             </span>
-            <span className="status-pill" title="Daily Memo status">
+            <span className="status-pill" title="Daily briefing status">
               <span className="status-pill__dot status-pill__dot--accent" />
-              Memo · ready
+              Briefing · ready
             </span>
           </div>
         </header>

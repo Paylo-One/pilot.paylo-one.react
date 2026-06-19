@@ -131,7 +131,7 @@ export default async function SourcesPage({
         <p className="eyebrow">Sources</p>
         <h1 className="page-head__title">Connected sources</h1>
         <p className="page-head__lead">
-          Choose the sources that should inform your Daily Memo. Each source is
+          Choose the sources that should inform your daily briefing. Each source is
           private to your workspace, keeps its own storage rules, and every point
           it produces stays traceable to where it came from. Paylo.one only
           watches what you turn on — never everything by default.

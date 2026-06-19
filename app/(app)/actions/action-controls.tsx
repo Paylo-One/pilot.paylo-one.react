@@ -2,7 +2,7 @@
 
 /**
  * Client controls for actions, allowing quick state transitions
- * within the Action Command Centre.
+ * within Actions.
  */
 
 import { useState, useTransition } from "react";

@@ -353,7 +353,7 @@ function ActionsAttentionSection({ actions }: { actions: any[] }) {
           <h2 className="card__title">Actions requiring your attention today</h2>
         </div>
         <Link href="/actions" className="btn btn--ghost btn--sm">
-          Open Command Centre
+          Open Actions
         </Link>
       </div>
       <p className="action-card__rationale" style={{ marginTop: 0, marginBottom: "var(--space-md)" }}>
@@ -485,7 +485,7 @@ export default async function BriefingPage() {
       <div className="page-head">
         <div className="page-head__row">
           <div>
-            <p className="eyebrow">Daily Memo</p>
+            <p className="eyebrow">Daily briefing</p>
             <h1 className="page-head__title">What matters today</h1>
             <p className="page-head__lead">
               Every morning, know what matters, what changed, what needs
@@ -521,7 +521,7 @@ export default async function BriefingPage() {
           <div className="memo__head">
             <div>
               <p className="memo__kicker">
-                Paylo.one Management OS · Daily Memo
+                Pilot by Paylo.one · Daily briefing
               </p>
               <h2 className="memo__title">Your briefing</h2>
               <p className="memo__meta">
@@ -604,8 +604,8 @@ export default async function BriefingPage() {
             maxWidth: "480px",
             margin: 0
           }}>
-            Your private Daily Memo prepares on a regular schedule. Your next briefing is scheduled for <strong style={{ color: "var(--colour-accent)" }}>{briefingTime} Daily ({timezone})</strong>. 
-            Paylo.one will securely process your synced integrations to extract commitments, actions, and key decisions.
+            Your private daily briefing prepares on a regular schedule. Your next briefing is scheduled for <strong style={{ color: "var(--colour-accent)" }}>{briefingTime} Daily ({timezone})</strong>.
+            Pilot will securely process your connected sources to extract commitments, actions, and key decisions.
           </p>
 
           <div style={{
