@@ -2242,10 +2242,9 @@ button.actions-view:hover {
    DIARY
    ========================================================================== */
 .diary-capture {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
-  gap: var(--space-lg);
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
 }
 .diary-capture__text {
   min-width: 0;
@@ -2257,32 +2256,51 @@ button.actions-view:hover {
   margin-top: var(--space-xs);
 }
 .diary-voice {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.7fr) minmax(320px, 1.3fr);
+  grid-template-areas:
+    "head controls"
+    "audio edit";
+  gap: var(--space-md) var(--space-lg);
+  align-items: start;
   border: 1px solid var(--colour-border);
   border-radius: var(--radius-md);
   background: var(--colour-surface);
-  padding: var(--space-lg);
+  padding: var(--space-md) var(--space-lg);
   min-width: 0;
 }
 .diary-voice__head {
+  grid-area: head;
   display: flex;
   justify-content: space-between;
   gap: var(--space-md);
   align-items: flex-start;
-  margin-bottom: var(--space-md);
 }
 .diary-voice__controls {
+  grid-area: controls;
   display: flex;
   gap: var(--space-sm);
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .diary-voice__audio {
+  grid-area: audio;
   width: 100%;
-  margin-top: var(--space-md);
+  align-self: center;
 }
 .diary-voice__edit {
+  grid-area: edit;
   display: grid;
+  grid-template-columns: minmax(9rem, 0.3fr) minmax(260px, 1fr) auto;
+  align-items: end;
   gap: var(--space-md);
-  margin-top: var(--space-md);
+}
+.diary-voice__edit .field {
+  min-width: 0;
+}
+.diary-voice > .form-message {
+  grid-column: 1 / -1;
+  margin-top: 0;
 }
 .diary-summary {
   margin-top: var(--space-xl);
@@ -2514,9 +2532,21 @@ button.actions-view:hover {
 }
 
 @media (max-width: 900px) {
-  .diary-capture,
+  .diary-voice,
+  .diary-voice__edit,
   .diary-summary__grid {
     grid-template-columns: 1fr;
+  }
+  .diary-voice {
+    grid-template-areas:
+      "head"
+      "controls"
+      "audio"
+      "edit";
+    padding: var(--space-lg);
+  }
+  .diary-voice__controls {
+    justify-content: flex-start;
   }
   .diary-summary__head,
   .diary-voice__head {
