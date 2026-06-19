@@ -62,7 +62,7 @@ export function WhatsAppMonitorList({
               {m.isActive ? `monitored · last sync ${formatSync(m.lastSyncAt)}` : "not monitored"} ·
               {" "}
               {POLICY_LABEL[m.storagePolicy]} ·{" "}
-              {m.includeInDailyMemo ? "in Daily Memo" : "not in memo"}
+              {m.includeInDailyMemo ? "in daily briefing" : "not in briefing"}
             </p>
           </div>
           <div className="repo-row__controls" style={{ flexDirection: "column", alignItems: "flex-end", gap: "var(--space-xs)" }}>
@@ -71,8 +71,8 @@ export function WhatsAppMonitorList({
               <span className="integration__toggle-label">Monitor</span>
             </span>
             <span className="integration__toggle">
-              <Toggle pressed={m.includeInDailyMemo} onChange={() => onToggleMemo(m.id)} label={`Include ${label} in Daily Memo`} disabled={!m.isActive} />
-              <span className="integration__toggle-label">Daily Memo</span>
+              <Toggle pressed={m.includeInDailyMemo} onChange={() => onToggleMemo(m.id)} label={`Include ${label} in daily briefing`} disabled={!m.isActive} />
+              <span className="integration__toggle-label">Daily briefing</span>
             </span>
           </div>
         </li>

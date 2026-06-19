@@ -20,6 +20,7 @@ export interface ActionSourceReference {
   readonly itemTimestamp: string | null;
   readonly confidence: number | null;
   readonly excerptOrPointer: string | null;
+  readonly diaryEntryId: string | null;
 }
 
 export interface SuggestedActionView {
@@ -72,6 +73,7 @@ interface SourceReferenceRow {
   item_timestamp: string | null;
   confidence: number | null;
   excerpt_or_pointer: string | null;
+  diary_entry_id: string | null;
 }
 
 /** All actions for the tenant (newest first), each with its source references. */
@@ -111,7 +113,7 @@ export async function listSuggestedActions(tenantId: string): Promise<SuggestedA
 
   const { data: refData } = await supabase
     .from("source_references")
-    .select("id, suggested_action_id, source_system, item_timestamp, confidence, excerpt_or_pointer")
+    .select("id, suggested_action_id, source_system, item_timestamp, confidence, excerpt_or_pointer, diary_entry_id")
     .in("suggested_action_id", actionIds);
 
   for (const row of (refData ?? []) as SourceReferenceRow[]) {
@@ -123,6 +125,7 @@ export async function listSuggestedActions(tenantId: string): Promise<SuggestedA
       itemTimestamp: row.item_timestamp,
       confidence: row.confidence,
       excerptOrPointer: row.excerpt_or_pointer,
+      diaryEntryId: row.diary_entry_id,
     });
     referencesByAction.set(row.suggested_action_id, list);
   }

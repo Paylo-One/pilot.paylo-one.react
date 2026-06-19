@@ -34,6 +34,7 @@ interface ActionDetailWorkspaceProps {
       readonly itemTimestamp: string | null;
       readonly confidence: number | null;
       readonly excerptOrPointer: string | null;
+      readonly diaryEntryId: string | null;
     }[];
   };
   readonly tenantId: string;
@@ -538,7 +539,7 @@ export function ActionDetailWorkspace({
             <div className="panel" style={{ background: "var(--colour-surface-secondary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-md)", padding: "var(--space-lg)" }}>
               <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--colour-text-primary)", marginBottom: "4px" }}>Sources & Traceability</h3>
               <p style={{ fontSize: "13px", color: "var(--colour-text-muted)", marginBottom: "var(--space-md)" }}>
-                This commitment was extracted from the following interaction logs or signals:
+                This action is linked to the source that created it.
               </p>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
@@ -557,6 +558,15 @@ export function ActionDetailWorkspace({
                     ) : (
                       <p style={{ fontSize: "13px", color: "var(--colour-text-muted)" }}>Traceability reference ID logged securely.</p>
                     )}
+                    {reference.diaryEntryId ? (
+                      <Link
+                        href={`/diary?entry=${reference.diaryEntryId}`}
+                        className="btn btn--ghost btn--sm"
+                        style={{ marginTop: "var(--space-sm)" }}
+                      >
+                        Open Diary Reference
+                      </Link>
+                    ) : null}
                   </div>
                 ))}
               </div>

@@ -20,6 +20,7 @@ import {
   type PersonInFocus,
 } from "@/modules/briefing/server";
 import { listSuggestedActions } from "@/modules/action-extraction/server";
+import { diaryService, type DiaryEntry } from "@/modules/diary";
 import { SOURCE_SYSTEM_LABELS } from "@/modules/source-connection";
 import { IMPORTANCE_LABELS, IMPORTANCE_TONE } from "@/modules/people/people.types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -455,14 +456,57 @@ function ActionsAttentionSection({ actions }: { actions: any[] }) {
   );
 }
 
+function DiaryRisksSection({ risks }: { risks: DiaryEntry[] }) {
+  if (risks.length === 0) return null;
+  return (
+    <div className="card" style={{ marginBottom: "var(--space-lg)" }}>
+      <div className="card-head">
+        <div>
+          <p className="eyebrow">Diary risks</p>
+          <h2 className="card__title">Risks you marked for attention</h2>
+        </div>
+        <Link href="/diary" className="btn btn--ghost btn--sm">
+          Open Diary
+        </Link>
+      </div>
+      <p className="action-card__rationale" style={{ marginTop: 0, marginBottom: "var(--space-md)" }}>
+        Active risks from your private diary stay visible here until you mark
+        them resolved. The original diary entry remains part of the historical
+        record.
+      </p>
+      <div className="stack" style={{ gap: "var(--space-sm)" }}>
+        {risks.slice(0, 5).map((risk) => (
+          <article className="memo-item" key={risk.id}>
+            <div className="memo-item__main">
+              <p className="memo-item__title">
+                {risk.transcript || risk.body || "Diary risk"}
+              </p>
+              <div className="source-ref-row">
+                <span className="source-ref">
+                  <span className="source-ref__system">Diary</span>
+                  <span>{formatTimestamp(risk.createdAt)}</span>
+                </span>
+              </div>
+            </div>
+            <div className="memo-item__aside">
+              <span className="status status--risk">Active</span>
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default async function BriefingPage() {
   const ctx = await requireTenantContext();
   const supabase = await createSupabaseServerClient();
 
-  const [briefing, peopleInFocus, actions, profileResult, activeConnectionsResult] = await Promise.all([
+  const [briefing, peopleInFocus, actions, activeRisksResult, profileResult, activeConnectionsResult] = await Promise.all([
     getLatestBriefing(ctx),
     getPeopleInFocus(),
     listSuggestedActions(ctx.tenantId),
+    diaryService.listActiveRisks(ctx),
     supabase
       .from("user_profiles")
       .select("timezone, briefing_time")
@@ -476,6 +520,7 @@ export default async function BriefingPage() {
 
   const profile = profileResult?.data;
   const activeConnections = activeConnectionsResult?.data;
+  const activeRisks = activeRisksResult.ok ? activeRisksResult.value : [];
 
   const timezone = profile?.timezone ?? "UTC";
   const briefingTime = (profile?.briefing_time as string | null)?.slice(0, 5) ?? "08:00";
@@ -512,6 +557,8 @@ export default async function BriefingPage() {
       </div>
 
       <PeopleInFocusSection people={peopleInFocus} />
+
+      <DiaryRisksSection risks={activeRisks} />
 
       <ActionsAttentionSection actions={actions} />
 

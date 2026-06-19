@@ -103,7 +103,7 @@ const FAMILY: Partial<Record<SourceType, FamilyCopy>> = {
     singular: "channel",
     heading: "Slack channels",
     scopeNote:
-      "Read-only public channels first. Active channels are synced incrementally; mute noisy channels from the Daily Memo without removing them from search.",
+      "Read-only public channels first. Active channels are synced incrementally; mute noisy channels from the daily briefing without removing them from search.",
     connectHref: "/api/oauth/slack/start",
     connectLabel: "Connect Slack",
     connectPrompt:
@@ -287,7 +287,7 @@ export function ScopeItemSelector({
                     <Toggle
                       pressed={item.includeInDailyMemo}
                       onChange={(checked) => setMemoInclusion(item, checked)}
-                      label={`Include ${item.name ?? copy.singular} in Daily Memo`}
+                      label={`Include ${item.name ?? copy.singular} in daily briefing`}
                       disabled={pending}
                     />
                     <select

@@ -129,7 +129,7 @@ export const DEFAULT_PROMPT_CATALOGUE: readonly PromptDefault[] = [
   {
     templateKey: "daily_memo",
     workflow: "Briefing generation",
-    name: "Daily Memo synthesis",
+    name: "Daily briefing synthesis",
     description:
       "Composes the executive daily briefing from connected channels: tone, structure, prioritisation, and the strict-JSON output the memo pipeline validates.",
     content: DAILY_MEMO_SYSTEM_PROMPT,

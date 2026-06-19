@@ -225,7 +225,7 @@ export function NewsSourceConfig({ data }: { data: NewsAdminData }) {
         <p className="action-card__rationale">
           News is off by default and never becomes a generic feed. Only external
           signals matching this workspace&apos;s preferences and relevance
-          threshold can reach the Daily Memo.
+          threshold can reach the daily briefing.
         </p>
         <div className="news-toggle-row">
           <span>
@@ -240,7 +240,7 @@ export function NewsSourceConfig({ data }: { data: NewsAdminData }) {
         </div>
         <div className="news-toggle-row">
           <span>
-            <strong>Include External Signals in the Daily Memo</strong>
+            <strong>Include external signals in the daily briefing</strong>
             <span className="field__hint">
               Requires News ingestion and at least one relevant candidate.
             </span>
@@ -248,7 +248,7 @@ export function NewsSourceConfig({ data }: { data: NewsAdminData }) {
           <Toggle
             pressed={preferences.briefingEnabled}
             onChange={(value) => update("briefingEnabled", value)}
-            label="Include News in the Daily Memo"
+            label="Include News in the daily briefing"
             disabled={!preferences.enabled}
           />
         </div>

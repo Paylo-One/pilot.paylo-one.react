@@ -43,7 +43,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
   // Fetch references
   const { data: refData } = await supabase
     .from("source_references")
-    .select("id, suggested_action_id, source_system, item_timestamp, confidence, excerpt_or_pointer")
+    .select("id, suggested_action_id, source_system, item_timestamp, confidence, excerpt_or_pointer, diary_entry_id")
     .eq("suggested_action_id", id);
 
   const references = (refData ?? []).map((row) => ({
@@ -52,6 +52,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
     itemTimestamp: row.item_timestamp,
     confidence: row.confidence,
     excerptOrPointer: row.excerpt_or_pointer,
+    diaryEntryId: row.diary_entry_id,
   }));
 
   const action = {

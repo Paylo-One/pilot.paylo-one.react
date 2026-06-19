@@ -83,10 +83,10 @@ export function proposedRuleForFeedback(
 ): { ruleType: RefinementRule["ruleType"]; statement: string } | null {
   switch (feedback) {
     case "always_include":
-      return { ruleType: "include_in_memo", statement: "Always include this in the Daily Memo." };
+      return { ruleType: "include_in_memo", statement: "Always include this in the daily briefing." };
     case "not_relevant":
     case "do_not_show_again":
-      return { ruleType: "exclude_from_memo", statement: "Exclude this from the Daily Memo." };
+      return { ruleType: "exclude_from_memo", statement: "Exclude this from the daily briefing." };
     case "raise_priority":
       return { ruleType: "priority", statement: "Raise the priority of this person/source." };
     case "lower_priority":

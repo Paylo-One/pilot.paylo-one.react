@@ -135,8 +135,8 @@ export const FEEDBACK_LABELS: Record<FeedbackType, string> = {
 };
 
 export const RULE_TYPE_LABELS: Record<RuleType, string> = {
-  include_in_memo: "Include in Daily Memo",
-  exclude_from_memo: "Exclude from Daily Memo",
+  include_in_memo: "Include in daily briefing",
+  exclude_from_memo: "Exclude from daily briefing",
   priority: "Priority",
   person_link: "Person link",
   topic_link: "Topic / project link",

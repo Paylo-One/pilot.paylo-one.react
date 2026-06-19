@@ -169,7 +169,7 @@ const PROMPT_REGISTRY: Readonly<Record<string, ResolvedPrompt>> = {
     template: {
       promptTemplateId: "daily_memo",
       agentName: "daily_memo",
-      name: "Daily Memo synthesis",
+      name: "Daily briefing synthesis",
       description: "Composes the executive daily briefing from connected channels.",
       status: "active",
     },

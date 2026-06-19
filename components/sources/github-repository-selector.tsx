@@ -329,7 +329,7 @@ export function GithubRepositorySelector({
                           </span>
                           <span className="monitor-toggle__body">
                             <span className="monitor-toggle__label">
-                              Include in Daily Memo
+                              Include in daily briefing
                             </span>
                             <span className="monitor-toggle__hint">
                               Activity still syncs; switch off to keep this
