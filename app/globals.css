@@ -1457,6 +1457,349 @@ button {
 }
 
 /* ============================================================================
+   BRIEFING — the Daily Memo command surface (Screen 1)
+
+   The first screen after sign-in. It reads top-down by consequence: a calm
+   masthead, a triage strip that answers "how much needs me today", a single
+   prioritised attention queue, then the editorial memo and its supporting
+   context. Flat, hairline-led, token-only — no emoji, no glass, no inline
+   colour. State is carried by the shared status vocabulary, never by teal.
+   ========================================================================== */
+.briefing {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+/* Anchored sections clear the sticky topbar when reached via the triage strip. */
+.briefing [id] {
+  scroll-margin-top: var(--space-xl);
+}
+
+/* --- Masthead ------------------------------------------------------------- */
+.briefing__masthead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+}
+.briefing__title {
+  font-size: var(--text-h1);
+  margin-top: var(--space-xs);
+  text-wrap: balance;
+}
+.briefing__lead {
+  margin-top: var(--space-sm);
+  color: var(--colour-text-secondary);
+  max-width: var(--measure);
+  text-wrap: pretty;
+}
+.briefing__statusline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  color: var(--colour-text-tertiary);
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+  background: var(--colour-text-tertiary);
+}
+.dot--ready {
+  background: var(--colour-success);
+}
+.dot--scheduled {
+  background: var(--colour-info);
+}
+.dot--stale {
+  background: var(--colour-warning);
+}
+.dot--idle {
+  background: var(--colour-border-strong);
+}
+.briefing__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-shrink: 0;
+}
+
+/* --- Triage strip — "how much needs me today" ----------------------------- */
+.triage {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-sm);
+}
+.triage__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-md);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-md);
+  background: var(--colour-surface);
+  transition: border-color var(--speed) var(--ease-standard),
+    background var(--speed) var(--ease-standard);
+}
+a.triage__item:hover {
+  border-color: var(--colour-border-strong);
+  background: var(--colour-surface-elevated);
+}
+.triage__count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--colour-text-primary);
+}
+.triage__label {
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+}
+/* A live count earns a coloured marker; zero stays neutral and quiet. */
+.triage__item--alert .triage__count {
+  color: var(--colour-danger);
+}
+.triage__item--warn .triage__count {
+  color: var(--colour-warning);
+}
+.triage__item--muted .triage__count {
+  color: var(--colour-text-tertiary);
+}
+
+/* --- Section heading shared by briefing panels ---------------------------- */
+.briefing-section__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-xs);
+}
+.briefing-section__lead {
+  font-size: var(--text-small);
+  color: var(--colour-text-tertiary);
+  margin-bottom: var(--space-md);
+  max-width: var(--measure);
+}
+
+/* --- Attention queue — one prioritised list, not four coloured boxes ------ */
+.attention-list {
+  display: flex;
+  flex-direction: column;
+}
+.attention-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  padding: var(--space-md) 0;
+  border-bottom: 1px solid var(--colour-border);
+}
+.attention-row:first-child {
+  padding-top: 0;
+}
+.attention-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.attention-row__when {
+  flex-shrink: 0;
+  width: 96px;
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+  padding-top: 2px;
+  color: var(--colour-text-tertiary);
+}
+.attention-row__when--overdue {
+  color: var(--colour-danger);
+}
+.attention-row__when--today {
+  color: var(--colour-warning);
+}
+.attention-row__main {
+  min-width: 0;
+  flex: 1;
+}
+.attention-row__title {
+  font-size: var(--text-body);
+  font-weight: 500;
+  color: var(--colour-text-primary);
+}
+a.attention-row__title:hover {
+  color: var(--colour-accent);
+}
+.attention-row__meta {
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+  margin-top: 2px;
+}
+
+/* --- All-clear — a calm, deliberate resolution, not "nothing here" -------- */
+.all-clear {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  padding: var(--space-md) 0;
+}
+.all-clear__mark {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--colour-success);
+  background: var(--colour-success-tint);
+}
+/* Neutral variant — "what will appear here", before any data exists. */
+.all-clear__mark--neutral {
+  color: var(--colour-text-tertiary);
+  background: var(--colour-surface-sunken);
+}
+.all-clear__title {
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--colour-text-primary);
+}
+.all-clear__body {
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+  margin-top: 2px;
+  max-width: 54ch;
+}
+
+/* --- Stale banner — "newer activity exists, refresh" ---------------------- */
+.stale-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-md);
+  background: var(--colour-warning-tint);
+}
+.stale-banner__text {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--text-small);
+  color: var(--colour-warning);
+}
+
+/* --- Onboarding / empty states (replaces the glass schedule card) --------- */
+.briefing-onboard {
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-md);
+  background: var(--colour-surface);
+  padding: var(--space-xl);
+  max-width: 640px;
+}
+.briefing-onboard--center {
+  margin: 0 auto;
+  text-align: center;
+}
+.briefing-onboard__title {
+  font-size: var(--text-h2);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.briefing-onboard__body {
+  margin-top: var(--space-sm);
+  color: var(--colour-text-secondary);
+  max-width: 52ch;
+}
+.briefing-onboard--center .briefing-onboard__body {
+  margin-inline: auto;
+}
+.briefing-onboard__steps {
+  list-style: none;
+  margin: var(--space-lg) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  text-align: left;
+}
+.briefing-onboard__step {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+}
+.briefing-onboard__num {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  font-weight: 600;
+  color: var(--colour-accent);
+  background: var(--colour-accent-soft);
+}
+.briefing-onboard__step-title {
+  font-size: var(--text-small);
+  font-weight: 600;
+  color: var(--colour-text-primary);
+}
+.briefing-onboard__step-body {
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+  margin-top: 1px;
+}
+.briefing-onboard__cta {
+  margin-top: var(--space-lg);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+.briefing-onboard--center .briefing-onboard__cta {
+  justify-content: center;
+}
+
+/* --- Footer privacy note (replaces .scaffold-note on this surface) -------- */
+.briefing__assurance {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  font-size: var(--text-small);
+  color: var(--colour-text-tertiary);
+  line-height: var(--leading-snug);
+  max-width: var(--measure);
+}
+.briefing__assurance svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--colour-text-tertiary);
+}
+
+@media (max-width: 620px) {
+  .attention-row {
+    flex-direction: column;
+    gap: var(--space-xs);
+  }
+  .attention-row__when {
+    width: auto;
+    padding-top: 0;
+  }
+  .briefing-onboard {
+    padding: var(--space-lg);
+  }
+}
+
+/* ============================================================================
    ACTION CARDS
    ========================================================================== */
 .action-card {
