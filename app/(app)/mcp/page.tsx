@@ -164,6 +164,46 @@ export default async function ToolLayerPage() {
         <div className="card-head">
           <div>
             <p className="eyebrow">Client setup</p>
+            <h2 className="card__title">Connect an MCP client</h2>
+          </div>
+        </div>
+        <p className="action-card__rationale">
+          Use these details in a client that supports remote MCP servers with
+          OAuth. The client will open Pilot for approval, ask you to choose a
+          workspace, then receive a scoped token for that workspace only.
+        </p>
+        <div className="stack" style={{ gap: "var(--space-sm)", marginTop: "var(--space-md)" }}>
+          <div className="meta-row">
+            <span className="meta-row__key">1. Add server URL</span>
+            <span className="meta-row__value mono">{issuer}/api/mcp</span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">2. Use OAuth discovery</span>
+            <span className="meta-row__value mono">
+              {issuer}/.well-known/oauth-authorization-server
+            </span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">3. Sign in and approve</span>
+            <span className="meta-row__value">
+              Pick the workspace, review the requested scopes, then allow
+              access.
+            </span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">4. Review access here</span>
+            <span className="meta-row__value">
+              Connected clients appear above with last-used time, scopes, audit
+              events, and revoke controls.
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <section className="card" style={{ maxWidth: "920px", marginTop: "var(--space-md)" }}>
+        <div className="card-head">
+          <div>
+            <p className="eyebrow">Technical details</p>
             <h2 className="card__title">OAuth endpoints</h2>
           </div>
         </div>
