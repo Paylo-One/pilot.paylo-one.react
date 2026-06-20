@@ -22,6 +22,7 @@ import { AVAILABILITY_LABELS, AVAILABILITY_TONE } from "@/modules/shared";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { listTenantModelProviders } from "@/modules/tenant-models/server";
 import { referralService } from "@/modules/referral";
+import { listMcpGrants } from "@/modules/mcp";
 import {
   SettingsProfileForm,
   type ProfileFormValues,
@@ -109,6 +110,8 @@ export default async function SettingsPage() {
 
   const providersRes = await listTenantModelProviders(ctx);
   const providers = providersRes.ok ? providersRes.value : [];
+  const mcpGrants = await listMcpGrants(ctx);
+  const activeMcpGrants = mcpGrants.filter((grant) => grant.status === "active");
 
   const values: ProfileFormValues = {
     displayName: profile?.display_name ?? "",
@@ -294,29 +297,31 @@ export default async function SettingsPage() {
         {/* ===== Tool access & trust ====================================== */}
         <GroupHeading id="tools">Tool access &amp; trust</GroupHeading>
 
-        <SectionCard label="Tool access" title="Connected tools" tag="planned">
+        <SectionCard label="Tool access" title="Connected MCP clients" tag="active">
           <p className="action-card__rationale" style={{ marginBottom: "var(--space-md)" }}>
-            In time, Paylo.one will be able to use a small set of approved tools to
-            gather context for you. Tools that only read information run quietly
-            and are logged; anything that would change something always waits for
-            your approval. This is planned, and switched on with help during
-            onboarding rather than by default.
+            Approved clients can use Pilot memory through MCP after you grant
+            access. Each grant is scoped to this workspace, logged, and
+            revocable.
           </p>
           <div className="meta-row">
-            <span className="meta-row__key">Tools that only read</span>
+            <span className="meta-row__key">Active clients</span>
             <span className="meta-row__value">
-              <span className="status status--ok">Allowed and logged</span>
+              <span className="status status--ok">{activeMcpGrants.length} connected</span>
             </span>
           </div>
           <div className="meta-row">
-            <span className="meta-row__key">Tools that make changes</span>
+            <span className="meta-row__key">Write access</span>
             <span className="meta-row__value">
-              <span className="status status--warn">Need your approval</span>
+              <span className="status status--warn">Scope-gated</span>
             </span>
           </div>
           <div className="meta-row">
             <span className="meta-row__key">Scope</span>
-            <span className="meta-row__value">Your workspace only</span>
+            <span className="meta-row__value">
+              <a className="btn btn--ghost btn--sm" href="/mcp">
+                Manage MCP Access
+              </a>
+            </span>
           </div>
         </SectionCard>
 

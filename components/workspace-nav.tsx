@@ -116,8 +116,7 @@ const GROUPS: NavGroup[] = [
       },
       {
         href: "/mcp",
-        label: "Tool Layer",
-        availability: "planned",
+        label: "MCP Access",
         icon: (
           <svg {...ICON_PROPS}>
             <path d="M12 2 3 7v10l9 5 9-5V7l-9-5Z" />
