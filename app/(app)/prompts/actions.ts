@@ -16,7 +16,10 @@ import { requireTenantContext } from "@/modules/identity-tenant/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { auditService } from "@/modules/audit";
 import { modelGateway } from "@/modules/model-gateway";
-import type { GatewayRequest, RetrievalContextItem } from "@/modules/model-gateway";
+import type {
+  GatewayRequest,
+  RetrievalContextItem,
+} from "@/modules/model-gateway";
 import type { ModelTask } from "@/modules/model-catalogue";
 import {
   activatePromptVersion,
@@ -47,7 +50,12 @@ function failure(error: string): ActionResponse {
 
 function revalidatePrompts(promptId?: string): void {
   revalidatePath("/prompts");
-  if (promptId) revalidatePath(`/prompts/${promptId}`);
+  revalidatePath("/intelligence");
+  revalidatePath("/intelligence/prompts");
+  if (promptId) {
+    revalidatePath(`/prompts/${promptId}`);
+    revalidatePath(`/intelligence/prompts/${promptId}`);
+  }
 }
 
 /** The Gateway task each workflow template maps to. */
@@ -56,6 +64,14 @@ const TEMPLATE_TASK: Record<PromptTemplateKey, ModelTask> = {
   signal_classification: "classification",
   signal_ranking: "priority_scoring",
   signal_triage: "summarisation",
+  action_extraction: "action_extraction",
+  decision_extraction: "extraction",
+  risk_detection: "risk_signal",
+  diary_reflection: "reasoning",
+  people_memory: "extraction",
+  source_processing: "extraction",
+  memory_synthesis: "reasoning",
+  weekly_operating_review: "reasoning",
 };
 
 // --- Version lifecycle --------------------------------------------------------
@@ -84,9 +100,12 @@ export async function createPromptVersionAction(input: {
     inputVariables: input.inputVariables ?? latest.inputVariables,
     outputFormat: input.outputFormat ?? latest.outputFormat,
     modelSettings: {
-      policyName: input.modelSettings?.policyName ?? latest.modelSettings.policyName,
-      temperature: input.modelSettings?.temperature ?? latest.modelSettings.temperature,
-      maxTokens: input.modelSettings?.maxTokens ?? latest.modelSettings.maxTokens,
+      policyName:
+        input.modelSettings?.policyName ?? latest.modelSettings.policyName,
+      temperature:
+        input.modelSettings?.temperature ?? latest.modelSettings.temperature,
+      maxTokens:
+        input.modelSettings?.maxTokens ?? latest.modelSettings.maxTokens,
     },
     changeNote: input.changeNote?.trim() || undefined,
   });
@@ -243,7 +262,10 @@ export async function updatePromptMetaAction(input: {
   await auditService.record(ctx, {
     action: "prompt.updated",
     target: input.promptId,
-    metadata: { name: input.name ?? null, description: input.description ?? null },
+    metadata: {
+      name: input.name ?? null,
+      description: input.description ?? null,
+    },
   });
   revalidatePrompts(input.promptId);
   return { ok: true, error: null };
@@ -309,7 +331,8 @@ export async function runPromptTestAction(input: {
   let retrievalContext: RetrievalContextItem[] = [];
   if (input.inputKind === "source_items") {
     const ids = (input.sourceItemIds ?? []).filter(Boolean).slice(0, 10);
-    if (ids.length === 0) return { ok: false, error: "Select at least one source item." };
+    if (ids.length === 0)
+      return { ok: false, error: "Select at least one source item." };
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase
       .from("source_items")
@@ -352,7 +375,8 @@ export async function runPromptTestAction(input: {
     sourceReferences: [],
     modelPolicy: { policyName: version.modelSettings.policyName ?? "default" },
     expectedOutputSchema: {
-      schemaId: version.outputFormat.schemaId ?? `${version.templateKey}_output`,
+      schemaId:
+        version.outputFormat.schemaId ?? `${version.templateKey}_output`,
       schemaVersion: "1",
     },
   };
@@ -374,12 +398,18 @@ export async function runPromptTestAction(input: {
       const missingKeys = requiredKeys.filter(
         (key) => !(key in (result.value.output as Record<string, unknown>)),
       );
-      validation = { passed: missingKeys.length === 0, missingKeys: [...missingKeys] };
+      validation = {
+        passed: missingKeys.length === 0,
+        missingKeys: [...missingKeys],
+      };
     } else {
       errorMessage = result.error.message;
     }
   } catch (cause) {
-    errorMessage = cause instanceof Error ? cause.message : "model_gateway_invocation_failed";
+    errorMessage =
+      cause instanceof Error
+        ? cause.message
+        : "model_gateway_invocation_failed";
   }
   const latencyMs = Date.now() - startedAt;
 

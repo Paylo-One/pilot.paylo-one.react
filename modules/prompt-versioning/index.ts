@@ -132,7 +132,7 @@ export const DAILY_MEMO_SYSTEM_PROMPT = [
   "Rules:",
   "- Synthesise ONLY from the supplied items. Never invent facts, names, dates, or events.",
   "- Rank by consequence, not chronology. Be brief and editorial. Use British spelling.",
-  "- Every section and every action MUST cite the item id tokens (e.g. \"item-1\") it draws from.",
+  '- Every section and every action MUST cite the item id tokens (e.g. "item-1") it draws from.',
   "- Do not manufacture urgency. If little happened, say so plainly.",
   "",
   "Return STRICT JSON only (no prose, no markdown) matching exactly this shape:",
@@ -163,14 +163,77 @@ const GENERIC_JSON_SYSTEM_PROMPT = [
   "never fabricate. Return STRICT JSON only (no prose, no markdown).",
 ].join("\n");
 
+/**
+ * The evaluation judge (Testing Lab). Scores a prompt's output on the
+ * dimensions that matter for an executive intelligence layer, so an operator
+ * can decide whether a draft is better than what is live before publishing.
+ */
+export const PROMPT_EVALUATION_SYSTEM_PROMPT = [
+  "You are an impartial evaluator for Paylo.one. You judge the OUTPUT of an AI prompt against the",
+  "SAMPLE INPUT it was given, on behalf of a busy executive. You are scoring quality, not rewriting.",
+  "",
+  "The supplied items are, in order: the sample input, then the output to score, then (optionally)",
+  "the output of the currently-live version for comparison. Score the output to score.",
+  "",
+  "Score each dimension 0-5 (5 = excellent), with one short, specific reason:",
+  "- clarity: is it easy to understand at a glance?",
+  "- relevance: does it focus on what matters to the operator?",
+  "- completeness: does it capture what it should, without padding?",
+  "- riskSensitivity: does it surface real risk without manufacturing urgency?",
+  "- actionUsefulness: are any actions concrete, owned, and worth doing?",
+  "- toneAlignment: calm, precise, executive — not hype, not robotic?",
+  "- sourceGrounding: are claims grounded in the supplied input, not invented?",
+  "",
+  "Return STRICT JSON only (no prose, no markdown) matching exactly this shape:",
+  "{",
+  '  "scores": {',
+  '    "clarity": { "score": number, "reason": string },',
+  '    "relevance": { "score": number, "reason": string },',
+  '    "completeness": { "score": number, "reason": string },',
+  '    "riskSensitivity": { "score": number, "reason": string },',
+  '    "actionUsefulness": { "score": number, "reason": string },',
+  '    "toneAlignment": { "score": number, "reason": string },',
+  '    "sourceGrounding": { "score": number, "reason": string }',
+  "  },",
+  '  "overall": number,            // 0-5, your holistic judgement',
+  '  "verdict": string,            // one of: "better" | "similar" | "worse" | "no_comparison"',
+  '  "summary": string             // one sentence: is this output good, and better than live?',
+  "}",
+].join("\n");
+
 /** Immutable in-code prompt registry keyed by `promptTemplateId`. */
 const PROMPT_REGISTRY: Readonly<Record<string, ResolvedPrompt>> = {
+  prompt_evaluation: {
+    template: {
+      promptTemplateId: "prompt_evaluation",
+      agentName: "prompt_evaluation",
+      name: "Prompt evaluation judge",
+      description: "Scores a prompt's output for the Testing Lab.",
+      status: "active",
+    },
+    version: {
+      promptVersionId: "prompt_evaluation@1",
+      promptTemplateId: "prompt_evaluation",
+      promptVersion: "1.0.0",
+      agentVersion: "prompt_evaluation-agent@1.0.0",
+      systemPrompt: PROMPT_EVALUATION_SYSTEM_PROMPT,
+      modelPolicy: { policyName: "default" },
+      temperature: 0,
+      maxTokens: 1200,
+      structuredOutputSchemaId: "prompt_evaluation_output@1",
+      retrievalPolicy: { enabled: true, maxItems: 5 },
+      sourceReferencePolicy: { required: false, minConfidence: 0 },
+      status: "active",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    },
+  },
   daily_memo: {
     template: {
       promptTemplateId: "daily_memo",
       agentName: "daily_memo",
       name: "Daily briefing synthesis",
-      description: "Composes the executive daily briefing from connected channels.",
+      description:
+        "Composes the executive daily briefing from connected channels.",
       status: "active",
     },
     version: {
@@ -224,24 +287,124 @@ function genericPrompt(promptTemplateId: string): ResolvedPrompt {
  * that inference works for tenants with no stored prompts.
  */
 export function fallbackResolve(req: PromptResolutionRequest): ResolvedPrompt {
-  return PROMPT_REGISTRY[req.promptTemplateId] ?? genericPrompt(req.promptTemplateId);
+  return (
+    PROMPT_REGISTRY[req.promptTemplateId] ?? genericPrompt(req.promptTemplateId)
+  );
 }
 
 // --- Tenant prompt library types (DB-backed; pure, importable by the UI) -----
 
-/** The four workflow templates every tenant library is seeded with. */
+/** The workflow templates a tenant library can carry, grouped by purpose. */
 export type PromptTemplateKey =
   | "daily_memo"
   | "signal_classification"
   | "signal_ranking"
-  | "signal_triage";
+  | "signal_triage"
+  | "action_extraction"
+  | "decision_extraction"
+  | "risk_detection"
+  | "diary_reflection"
+  | "people_memory"
+  | "source_processing"
+  | "memory_synthesis"
+  | "weekly_operating_review";
 
 export const PROMPT_WORKFLOW_LABELS: Record<PromptTemplateKey, string> = {
   daily_memo: "Briefing generation",
   signal_classification: "Signal classification",
   signal_ranking: "Signal ranking",
   signal_triage: "Triage & summarisation",
+  action_extraction: "Action extraction",
+  decision_extraction: "Decision extraction",
+  risk_detection: "Risk detection",
+  diary_reflection: "Diary reflection",
+  people_memory: "People & relationship memory",
+  source_processing: "Source processing",
+  memory_synthesis: "Memory synthesis",
+  weekly_operating_review: "Weekly operating review",
 };
+
+/** The purpose group a prompt belongs to in the library. */
+export type PromptPurpose =
+  | "Briefings"
+  | "Source processing"
+  | "Ranking & prioritisation"
+  | "Actions"
+  | "Decisions"
+  | "Risks"
+  | "Diary & reflections"
+  | "People & topics"
+  | "Memory building"
+  | "Custom workflows";
+
+/** The order purpose groups are shown in. */
+export const PROMPT_PURPOSE_ORDER: readonly PromptPurpose[] = [
+  "Briefings",
+  "Source processing",
+  "Ranking & prioritisation",
+  "Actions",
+  "Decisions",
+  "Risks",
+  "Diary & reflections",
+  "People & topics",
+  "Memory building",
+  "Custom workflows",
+];
+
+/** Canonical purpose for each template key. */
+export const PROMPT_PURPOSE_BY_KEY: Record<PromptTemplateKey, PromptPurpose> = {
+  daily_memo: "Briefings",
+  source_processing: "Source processing",
+  signal_classification: "Source processing",
+  signal_ranking: "Ranking & prioritisation",
+  signal_triage: "Ranking & prioritisation",
+  action_extraction: "Actions",
+  decision_extraction: "Decisions",
+  risk_detection: "Risks",
+  diary_reflection: "Diary & reflections",
+  people_memory: "People & topics",
+  memory_synthesis: "Memory building",
+  weekly_operating_review: "Briefings",
+};
+
+/** One-line purpose statement for each template key (library + detail copy). */
+export const PROMPT_PURPOSE_SUMMARY: Record<PromptTemplateKey, string> = {
+  daily_memo: "Composes your daily briefing from connected channels.",
+  signal_classification: "Reads each incoming item and decides what it is.",
+  signal_ranking: "Orders what matters most so the consequential rises first.",
+  signal_triage: "Groups related items and recommends one move per group.",
+  action_extraction:
+    "Turns commitments into tracked actions with owners and dates.",
+  decision_extraction:
+    "Captures decisions with the context that keeps them useful.",
+  risk_detection: "Surfaces genuine risk early, without crying wolf.",
+  diary_reflection: "Makes private reflection useful, and keeps it private.",
+  people_memory: "Remembers commitments and context around people.",
+  source_processing:
+    "Cleans and frames raw source content before anything else reads it.",
+  memory_synthesis: "Connects scattered items into durable operating memory.",
+  weekly_operating_review: "Closes the week with a clear operating picture.",
+};
+
+/** Where a prompt's active content comes from. */
+export type PromptProvenance = "system_default" | "tenant_default" | "custom";
+
+export const PROMPT_PROVENANCE_LABELS: Record<PromptProvenance, string> = {
+  system_default: "System default",
+  tenant_default: "Workspace default",
+  custom: "Custom",
+};
+
+/**
+ * Honest provenance from the active version number: still on the shipped v1 =
+ * system default; a later published version = the workspace has customised it.
+ */
+export function derivePromptProvenance(
+  activeVersionNumber: number | null,
+): PromptProvenance {
+  if (activeVersionNumber === null) return "system_default";
+  return activeVersionNumber > 1 ? "custom" : "system_default";
+}
 
 /** Lifecycle status of a stored tenant prompt version. */
 export type StoredVersionStatus = "draft" | "active" | "archived";
@@ -275,6 +438,7 @@ export interface TenantPrompt {
   readonly name: string;
   readonly description: string | null;
   readonly workflow: string;
+  readonly purpose: string;
   readonly catalogueVersion: string;
   readonly archivedAt: string | null;
   readonly createdBy: string | null;
@@ -326,5 +490,9 @@ export interface StoredTestRun {
   readonly error: string | null;
   readonly latencyMs: number | null;
   readonly totalTokens: number | null;
+  /** LLM-judge evaluation scores (Testing Lab), when one was run. */
+  readonly evaluation: unknown;
+  /** The active version this run was compared against, when comparing. */
+  readonly comparedVersionId: string | null;
   readonly createdAt: string;
 }

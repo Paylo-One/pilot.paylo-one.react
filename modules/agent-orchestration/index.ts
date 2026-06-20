@@ -28,15 +28,33 @@ import {
   type TenantContext,
 } from "@/modules/shared";
 import { createSupabaseSecretClient } from "@/lib/supabase/secret";
-import { listMemoSourceItems, type StoredSourceItem } from "@/modules/knowledge-store/server";
+import {
+  listMemoSourceItems,
+  listRecentSourceItems,
+  type StoredSourceItem,
+} from "@/modules/knowledge-store/server";
 import { auditService } from "@/modules/audit";
-import { modelGateway, type GatewayRequest, type RetrievalContextItem } from "@/modules/model-gateway";
+import {
+  modelGateway,
+  type GatewayRequest,
+  type RetrievalContextItem,
+} from "@/modules/model-gateway";
 import { appendExternalSignalsToBriefing } from "@/modules/news/briefing";
 import { checkBriefingLimit } from "@/modules/briefing/server";
 
 export type AgentKind =
   | "daily_memo"
+  | "signal_classification"
+  | "signal_ranking"
+  | "signal_triage"
   | "action_extraction"
+  | "decision_extraction"
+  | "risk_detection"
+  | "diary_reflection"
+  | "people_memory"
+  | "topic_synthesis"
+  | "weekly_operating_review"
+  | "intelligence_batch"
   | "priority_scoring"
   | "risk_signal"
   | "source_attribution";
@@ -54,7 +72,10 @@ export interface AgentRunResult {
 }
 
 export interface AgentOrchestrationService {
-  run(ctx: TenantContext, req: AgentRunRequest): Promise<Result<AgentRunResult>>;
+  run(
+    ctx: TenantContext,
+    req: AgentRunRequest,
+  ): Promise<Result<AgentRunResult>>;
 }
 
 /** How many recent items to consider for a Daily Memo run. */
@@ -144,23 +165,28 @@ async function persistQuietDayMemo(
     "A quiet day. No new items have arrived from your connected channels since the last briefing.";
 
   // Persist the briefing + its single section atomically (see persist_daily_memo).
-  const { data: persistedId, error: persistErr } = await secret.rpc("persist_daily_memo", {
-    p_tenant_id: ctx.tenantId,
-    p_summary: summary,
-    p_prompt_version_id: null,
-    p_sections: [
-      {
-        kind: "executive_summary",
-        position: 0,
-        title: "A quiet day",
-        body: "Nothing new has come in from your connected channels. Connect a source or capture a note, then regenerate.",
-        references: [],
-      },
-    ],
-    p_actions: [],
-  });
+  const { data: persistedId, error: persistErr } = await secret.rpc(
+    "persist_daily_memo",
+    {
+      p_tenant_id: ctx.tenantId,
+      p_summary: summary,
+      p_prompt_version_id: null,
+      p_sections: [
+        {
+          kind: "executive_summary",
+          position: 0,
+          title: "A quiet day",
+          body: "Nothing new has come in from your connected channels. Connect a source or capture a note, then regenerate.",
+          references: [],
+        },
+      ],
+      p_actions: [],
+    },
+  );
   if (persistErr || !persistedId) {
-    return err(new AppError("internal", persistErr?.message ?? "briefing_create_failed"));
+    return err(
+      new AppError("internal", persistErr?.message ?? "briefing_create_failed"),
+    );
   }
   const briefingId = persistedId as string;
 
@@ -198,7 +224,8 @@ async function persistMemo(
   const secret = createSupabaseSecretClient();
   // A deterministic fallback reference target (most recent item) so every
   // section/action can cite at least one real item.
-  const fallbackItem = tokenToItem.size > 0 ? [...tokenToItem.values()][0] : null;
+  const fallbackItem =
+    tokenToItem.size > 0 ? [...tokenToItem.values()][0] : null;
 
   // Resolve a list of model-supplied tokens to real, de-duplicated items.
   const resolveItems = (tokens: readonly string[]): StoredSourceItem[] => {
@@ -249,19 +276,28 @@ async function persistMemo(
   // Persist the briefing, sections, actions, and references atomically: a single
   // DB function runs in its own transaction, so a failure on any insert rolls the
   // whole memo back rather than leaving a partial briefing (see persist_daily_memo).
-  const { data: persistedId, error: persistErr } = await secret.rpc("persist_daily_memo", {
-    p_tenant_id: ctx.tenantId,
-    p_summary: memo.summary,
-    p_prompt_version_id: promptVersionDbId,
-    p_sections: sectionsPayload,
-    p_actions: actionsPayload,
-  });
+  const { data: persistedId, error: persistErr } = await secret.rpc(
+    "persist_daily_memo",
+    {
+      p_tenant_id: ctx.tenantId,
+      p_summary: memo.summary,
+      p_prompt_version_id: promptVersionDbId,
+      p_sections: sectionsPayload,
+      p_actions: actionsPayload,
+    },
+  );
   if (persistErr || !persistedId) {
-    return err(new AppError("internal", persistErr?.message ?? "memo_persist_failed"));
+    return err(
+      new AppError("internal", persistErr?.message ?? "memo_persist_failed"),
+    );
   }
   const briefingId = persistedId as string;
 
-  const news = await appendNewsSafely(ctx.tenantId, briefingId, sectionsPayload.length);
+  const news = await appendNewsSafely(
+    ctx.tenantId,
+    briefingId,
+    sectionsPayload.length,
+  );
   await auditService.record(ctx, {
     action: "briefing.generated",
     target: briefingId,
@@ -280,7 +316,9 @@ async function persistMemo(
 }
 
 /** The Daily Memo agent: retrieve -> Gateway -> validate -> persist. */
-async function runDailyMemo(ctx: TenantContext): Promise<Result<AgentRunResult>> {
+async function runDailyMemo(
+  ctx: TenantContext,
+): Promise<Result<AgentRunResult>> {
   const agentRunId = randomUUID();
 
   // Billing capability check (observe-only)
@@ -320,7 +358,10 @@ async function runDailyMemo(ctx: TenantContext): Promise<Result<AgentRunResult>>
   try {
     gatewayResult = await modelGateway.invoke(gatewayRequest);
   } catch (cause) {
-    const message = cause instanceof Error ? cause.message : "model_gateway_invocation_failed";
+    const message =
+      cause instanceof Error
+        ? cause.message
+        : "model_gateway_invocation_failed";
     return err(new AppError("internal", message));
   }
   if (!gatewayResult.ok) return gatewayResult;
@@ -345,13 +386,864 @@ async function runDailyMemo(ctx: TenantContext): Promise<Result<AgentRunResult>>
   );
 }
 
+// ===========================================================================
+// Intelligence pipelines — classification + extraction over recent items.
+//
+// Each follows the daily-memo skeleton: build a tenant-filtered, tokenised
+// retrieval context -> resolve the tenant's active prompt (which composes the
+// Manager Manifesto + linked skills) and call the governed Gateway -> validate
+// the domain schema -> persist tenant-scoped via the secret client -> audit.
+// ===========================================================================
+
+/** How many recent items to feed batch extraction. */
+const BATCH_ITEM_LIMIT = 20;
+/** How many unclassified items to classify per run (cost bound). */
+const CLASSIFY_LIMIT = 15;
+
+function buildContext(items: readonly StoredSourceItem[]): {
+  context: RetrievalContextItem[];
+  tokenToItem: Map<string, StoredSourceItem>;
+} {
+  const tokenToItem = new Map<string, StoredSourceItem>();
+  const context = items.map((item, index) => {
+    const token = `item-${index + 1}`;
+    tokenToItem.set(token, item);
+    return {
+      sourceItemId: token,
+      summary: itemSummary(item),
+      occurredAt: item.occurredAt ?? item.createdAt,
+    };
+  });
+  return { context, tokenToItem };
+}
+
+function firstItemId(
+  tokens: readonly string[],
+  tokenToItem: Map<string, StoredSourceItem>,
+): string | null {
+  for (const t of tokens) {
+    const item = tokenToItem.get(t.trim());
+    if (item) return item.id;
+  }
+  return null;
+}
+
+const ActionsSchema = z.object({
+  actions: z
+    .array(
+      z.object({
+        title: z.string().min(1),
+        rationale: z.string().optional().default(""),
+        owner: z.string().optional().default(""),
+        dueAt: z.string().optional().default(""),
+        sourceItemIds: z.array(z.string()).optional().default([]),
+      }),
+    )
+    .default([]),
+});
+
+const DecisionsSchema = z.object({
+  decisions: z
+    .array(
+      z.object({
+        title: z.string().min(1),
+        rationale: z.string().optional().default(""),
+        context: z.string().optional().default(""),
+        status: z.string().optional().default("made"),
+        sourceItemIds: z.array(z.string()).optional().default([]),
+      }),
+    )
+    .default([]),
+});
+
+const RisksSchema = z.object({
+  risks: z
+    .array(
+      z.object({
+        title: z.string().min(1),
+        description: z.string().optional().default(""),
+        category: z.string().optional().default("operational"),
+        severity: z.string().optional().default("medium"),
+        likelihood: z.string().optional().default("possible"),
+        sourceItemIds: z.array(z.string()).optional().default([]),
+      }),
+    )
+    .default([]),
+});
+
+const ThemesSchema = z.object({
+  themes: z
+    .array(
+      z.object({
+        label: z.string().min(1),
+        throughLine: z.string().optional().default(""),
+      }),
+    )
+    .default([]),
+});
+
+const ClassificationSchema = z.object({
+  category: z.string().min(1),
+  importance: z.number().min(0).max(1).optional().default(0),
+  urgency: z.number().min(0).max(1).optional().default(0),
+  actionRequired: z.boolean().optional().default(false),
+  linkedPeople: z.array(z.string()).optional().default([]),
+  topics: z.array(z.string()).optional().default([]),
+  confidence: z.number().min(0).max(1).optional().default(0),
+  rationale: z.string().optional().default(""),
+});
+
+const VALID_CATEGORY = new Set([
+  "decision_request",
+  "fyi",
+  "risk",
+  "commitment",
+  "question",
+  "noise",
+]);
+const VALID_SEVERITY = new Set(["critical", "high", "medium", "low"]);
+const VALID_LIKELIHOOD = new Set([
+  "certain",
+  "very_likely",
+  "likely",
+  "possible",
+  "unlikely",
+]);
+const VALID_DECISION_STATUS = new Set(["open", "made", "deferred", "reversed"]);
+
+const RankingSchema = z.object({
+  ranked: z
+    .array(
+      z.object({
+        itemId: z.string().min(1),
+        priorityScore: z.number().min(0).max(1).optional().default(0),
+        tier: z.string().optional().default("background"),
+        reason: z.string().optional().default(""),
+      }),
+    )
+    .default([]),
+});
+
+const TriageSchema = z.object({
+  summary: z.string().optional().default(""),
+  groups: z
+    .array(
+      z.object({
+        theme: z.string().min(1),
+        itemIds: z.array(z.string()).optional().default([]),
+        recommendedAction: z.string().optional().default("ignore"),
+        urgency: z.string().optional().default("none"),
+        draftNote: z.string().optional().default(""),
+      }),
+    )
+    .default([]),
+});
+
+const PeopleSchema = z.object({
+  people: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        commitments: z.array(z.string()).optional().default([]),
+        concerns: z.array(z.string()).optional().default([]),
+        context: z.string().optional().default(""),
+        sourceItemIds: z.array(z.string()).optional().default([]),
+      }),
+    )
+    .default([]),
+});
+
+const DiarySchema = z.object({
+  reflection: z.string().optional().default(""),
+  recurringThemes: z.array(z.string()).optional().default([]),
+  decisions: z.array(z.string()).optional().default([]),
+  risks: z.array(z.string()).optional().default([]),
+  nextWeekAttention: z.array(z.string()).optional().default([]),
+});
+
+const ReviewSchema = z.object({
+  summary: z.string().optional().default(""),
+  moved: z.array(z.string()).optional().default([]),
+  stalled: z.array(z.string()).optional().default([]),
+  decisions: z.array(z.string()).optional().default([]),
+  openRisks: z.array(z.string()).optional().default([]),
+  nextFocus: z.array(z.string()).optional().default([]),
+});
+
+const VALID_TIER = new Set(["act_now", "today", "this_week", "background"]);
+const VALID_RECOMMENDED_ACTION = new Set([
+  "respond",
+  "delegate",
+  "schedule",
+  "escalate",
+  "turn_into_action",
+  "ignore",
+]);
+const VALID_GROUP_URGENCY = new Set(["now", "today", "this_week", "none"]);
+
+/** The Monday (UTC) that starts the week containing `base`, as YYYY-MM-DD. */
+function weekStartDate(base = new Date()): string {
+  const d = new Date(
+    Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate()),
+  );
+  const dow = d.getUTCDay(); // 0 = Sun
+  const diff = dow === 0 ? 6 : dow - 1;
+  d.setUTCDate(d.getUTCDate() - diff);
+  return d.toISOString().slice(0, 10);
+}
+
+function invoke(
+  ctx: TenantContext,
+  task: GatewayRequest["task"],
+  templateKey: string,
+  context: RetrievalContextItem[],
+) {
+  const request: GatewayRequest = {
+    ctx,
+    task,
+    agentRunId: randomUUID(),
+    dataClassification: "confidential",
+    promptTemplateId: templateKey,
+    retrievalContext: context,
+    sourceReferences: [],
+    modelPolicy: { policyName: "default" },
+    expectedOutputSchema: {
+      schemaId: `${templateKey}_output`,
+      schemaVersion: "1",
+    },
+  };
+  return modelGateway.invoke(request);
+}
+
+/** Classify recent items that do not yet have a signal; upsert into `signals`. */
+async function runSignalClassification(
+  ctx: TenantContext,
+): Promise<Result<AgentRunResult>> {
+  const agentRunId = randomUUID();
+  const secret = createSupabaseSecretClient();
+  const items = await listRecentSourceItems(ctx.tenantId, BATCH_ITEM_LIMIT);
+  if (items.length === 0)
+    return ok({ agentRunId, kind: "signal_classification" });
+
+  // Skip items already classified.
+  const { data: existing } = await secret
+    .from("signals")
+    .select("source_item_id")
+    .eq("tenant_id", ctx.tenantId)
+    .in(
+      "source_item_id",
+      items.map((i) => i.id),
+    );
+  const done = new Set((existing ?? []).map((r) => r.source_item_id as string));
+  const todo = items.filter((i) => !done.has(i.id)).slice(0, CLASSIFY_LIMIT);
+
+  let classified = 0;
+  for (const item of todo) {
+    const { context } = buildContext([item]);
+    let result;
+    try {
+      result = await invoke(
+        ctx,
+        "classification",
+        "signal_classification",
+        context,
+      );
+    } catch {
+      continue;
+    }
+    if (!result.ok) continue;
+    const parsed = ClassificationSchema.safeParse(result.value.output);
+    if (!parsed.success) continue;
+    const c = parsed.data;
+    const category = VALID_CATEGORY.has(c.category) ? c.category : "noise";
+    await secret.from("signals").upsert(
+      {
+        tenant_id: ctx.tenantId,
+        source_item_id: item.id,
+        category,
+        importance: c.importance,
+        urgency: c.urgency,
+        action_required: c.actionRequired,
+        linked_people: c.linkedPeople,
+        topics: c.topics,
+        confidence: c.confidence,
+        rationale: c.rationale,
+        prompt_version_id: result.value.promptVersionDbId,
+        classified_at: new Date().toISOString(),
+      },
+      { onConflict: "source_item_id" },
+    );
+    classified += 1;
+  }
+
+  await auditService.record(ctx, {
+    action: "pipeline.classification.run",
+    target: ctx.tenantId,
+    metadata: { classified, considered: todo.length },
+  });
+  return ok({ agentRunId, kind: "signal_classification" });
+}
+
+/** Extract actions from the recent batch into `suggested_actions`. */
+async function runActionExtraction(
+  ctx: TenantContext,
+): Promise<Result<AgentRunResult>> {
+  const agentRunId = randomUUID();
+  const secret = createSupabaseSecretClient();
+  const items = await listRecentSourceItems(ctx.tenantId, BATCH_ITEM_LIMIT);
+  if (items.length === 0) return ok({ agentRunId, kind: "action_extraction" });
+  const { context } = buildContext(items);
+
+  let result;
+  try {
+    result = await invoke(
+      ctx,
+      "action_extraction",
+      "action_extraction",
+      context,
+    );
+  } catch (cause) {
+    return err(
+      new AppError(
+        "internal",
+        cause instanceof Error ? cause.message : "action_extraction_failed",
+      ),
+    );
+  }
+  if (!result.ok) return result;
+  const parsed = ActionsSchema.safeParse(result.value.output);
+  if (!parsed.success) return ok({ agentRunId, kind: "action_extraction" });
+
+  const rows = parsed.data.actions.map((a) => {
+    const dueAt =
+      a.dueAt && !Number.isNaN(Date.parse(a.dueAt))
+        ? new Date(a.dueAt).toISOString()
+        : null;
+    return {
+      tenant_id: ctx.tenantId,
+      status: "inbox",
+      created_from: "suggestion",
+      title: clamp(a.title, 200),
+      rationale: clamp(a.rationale, 1000),
+      due_at: dueAt,
+    };
+  });
+  if (rows.length > 0) await secret.from("suggested_actions").insert(rows);
+
+  await auditService.record(ctx, {
+    action: "pipeline.action_extraction.run",
+    target: ctx.tenantId,
+    metadata: { extracted: rows.length },
+  });
+  return ok({ agentRunId, kind: "action_extraction" });
+}
+
+/** Extract decisions from the recent batch into `decisions`. */
+async function runDecisionExtraction(
+  ctx: TenantContext,
+): Promise<Result<AgentRunResult>> {
+  const agentRunId = randomUUID();
+  const secret = createSupabaseSecretClient();
+  const items = await listRecentSourceItems(ctx.tenantId, BATCH_ITEM_LIMIT);
+  if (items.length === 0)
+    return ok({ agentRunId, kind: "decision_extraction" });
+  const { context, tokenToItem } = buildContext(items);
+
+  let result;
+  try {
+    result = await invoke(ctx, "extraction", "decision_extraction", context);
+  } catch (cause) {
+    return err(
+      new AppError(
+        "internal",
+        cause instanceof Error ? cause.message : "decision_extraction_failed",
+      ),
+    );
+  }
+  if (!result.ok) return result;
+  const parsed = DecisionsSchema.safeParse(result.value.output);
+  if (!parsed.success) return ok({ agentRunId, kind: "decision_extraction" });
+
+  const rows = parsed.data.decisions.map((d) => ({
+    tenant_id: ctx.tenantId,
+    title: clamp(d.title, 200),
+    rationale: clamp(d.rationale, 2000),
+    context: clamp(d.context, 2000),
+    status: VALID_DECISION_STATUS.has(d.status) ? d.status : "made",
+    decided_at: new Date().toISOString(),
+    source_item_id: firstItemId(d.sourceItemIds, tokenToItem),
+    prompt_version_id: result.value.promptVersionDbId,
+  }));
+  if (rows.length > 0) await secret.from("decisions").insert(rows);
+
+  await auditService.record(ctx, {
+    action: "pipeline.decision_extraction.run",
+    target: ctx.tenantId,
+    metadata: { extracted: rows.length },
+  });
+  return ok({ agentRunId, kind: "decision_extraction" });
+}
+
+/** Detect risks across the recent batch into `risks`. */
+async function runRiskDetection(
+  ctx: TenantContext,
+): Promise<Result<AgentRunResult>> {
+  const agentRunId = randomUUID();
+  const secret = createSupabaseSecretClient();
+  const items = await listRecentSourceItems(ctx.tenantId, BATCH_ITEM_LIMIT);
+  if (items.length === 0) return ok({ agentRunId, kind: "risk_detection" });
+  const { context, tokenToItem } = buildContext(items);
+
+  let result;
+  try {
+    result = await invoke(ctx, "risk_signal", "risk_detection", context);
+  } catch (cause) {
+    return err(
+      new AppError(
+        "internal",
+        cause instanceof Error ? cause.message : "risk_detection_failed",
+      ),
+    );
+  }
+  if (!result.ok) return result;
+  const parsed = RisksSchema.safeParse(result.value.output);
+  if (!parsed.success) return ok({ agentRunId, kind: "risk_detection" });
+
+  const rows = parsed.data.risks.map((r) => ({
+    tenant_id: ctx.tenantId,
+    title: clamp(r.title, 200),
+    description: clamp(r.description, 2000),
+    category: clamp(r.category, 60) || "operational",
+    severity: VALID_SEVERITY.has(r.severity) ? r.severity : "medium",
+    likelihood: VALID_LIKELIHOOD.has(r.likelihood) ? r.likelihood : "possible",
+    status: "active",
+    source_item_id: firstItemId(r.sourceItemIds, tokenToItem),
+    prompt_version_id: result.value.promptVersionDbId,
+  }));
+  if (rows.length > 0) await secret.from("risks").insert(rows);
+
+  await auditService.record(ctx, {
+    action: "pipeline.risk_detection.run",
+    target: ctx.tenantId,
+    metadata: { extracted: rows.length },
+  });
+  return ok({ agentRunId, kind: "risk_detection" });
+}
+
+/** Synthesise durable topics from the recent batch into `topics`. */
+async function runTopicSynthesis(
+  ctx: TenantContext,
+): Promise<Result<AgentRunResult>> {
+  const agentRunId = randomUUID();
+  const secret = createSupabaseSecretClient();
+  const items = await listRecentSourceItems(ctx.tenantId, BATCH_ITEM_LIMIT);
+  if (items.length === 0) return ok({ agentRunId, kind: "topic_synthesis" });
+  const { context } = buildContext(items);
+
+  let result;
+  try {
+    result = await invoke(ctx, "reasoning", "memory_synthesis", context);
+  } catch {
+    return ok({ agentRunId, kind: "topic_synthesis" });
+  }
+  if (!result.ok) return ok({ agentRunId, kind: "topic_synthesis" });
+  const parsed = ThemesSchema.safeParse(result.value.output);
+  if (!parsed.success) return ok({ agentRunId, kind: "topic_synthesis" });
+
+  const rows = parsed.data.themes
+    .map((t) => clamp(t.label, 80))
+    .filter(Boolean)
+    .map((name) => ({ tenant_id: ctx.tenantId, name }));
+  if (rows.length > 0) {
+    await secret
+      .from("topics")
+      .upsert(rows, { onConflict: "tenant_id,name", ignoreDuplicates: true });
+  }
+
+  await auditService.record(ctx, {
+    action: "pipeline.topic_synthesis.run",
+    target: ctx.tenantId,
+    metadata: { topics: rows.length },
+  });
+  return ok({ agentRunId, kind: "topic_synthesis" });
+}
+
+/** Rank the recent batch by consequence; update signals' priority_score/tier. */
+async function runSignalRanking(
+  ctx: TenantContext,
+): Promise<Result<AgentRunResult>> {
+  const agentRunId = randomUUID();
+  const secret = createSupabaseSecretClient();
+  const items = await listRecentSourceItems(ctx.tenantId, BATCH_ITEM_LIMIT);
+  if (items.length === 0) return ok({ agentRunId, kind: "signal_ranking" });
+  const { context, tokenToItem } = buildContext(items);
+
+  let result;
+  try {
+    result = await invoke(ctx, "priority_scoring", "signal_ranking", context);
+  } catch {
+    return ok({ agentRunId, kind: "signal_ranking" });
+  }
+  if (!result.ok) return ok({ agentRunId, kind: "signal_ranking" });
+  const parsed = RankingSchema.safeParse(result.value.output);
+  if (!parsed.success) return ok({ agentRunId, kind: "signal_ranking" });
+
+  let ranked = 0;
+  for (const r of parsed.data.ranked) {
+    const item = tokenToItem.get(r.itemId.trim());
+    if (!item) continue;
+    const tier = VALID_TIER.has(r.tier) ? r.tier : "background";
+    // Only updates rows that already have a signal (classification ran first).
+    const { data } = await secret
+      .from("signals")
+      .update({ priority_score: r.priorityScore, priority_tier: tier })
+      .eq("tenant_id", ctx.tenantId)
+      .eq("source_item_id", item.id)
+      .select("id");
+    if (data && data.length > 0) ranked += 1;
+  }
+
+  await auditService.record(ctx, {
+    action: "pipeline.ranking.run",
+    target: ctx.tenantId,
+    metadata: { ranked },
+  });
+  return ok({ agentRunId, kind: "signal_ranking" });
+}
+
+/** Triage the recent batch into themed groups; persist to `signal_groups`. */
+async function runSignalTriage(
+  ctx: TenantContext,
+): Promise<Result<AgentRunResult>> {
+  const agentRunId = randomUUID();
+  const secret = createSupabaseSecretClient();
+  const items = await listRecentSourceItems(ctx.tenantId, BATCH_ITEM_LIMIT);
+  if (items.length === 0) return ok({ agentRunId, kind: "signal_triage" });
+  const { context, tokenToItem } = buildContext(items);
+
+  let result;
+  try {
+    result = await invoke(ctx, "summarisation", "signal_triage", context);
+  } catch {
+    return ok({ agentRunId, kind: "signal_triage" });
+  }
+  if (!result.ok) return ok({ agentRunId, kind: "signal_triage" });
+  const parsed = TriageSchema.safeParse(result.value.output);
+  if (!parsed.success) return ok({ agentRunId, kind: "signal_triage" });
+
+  const rows = parsed.data.groups.map((g) => {
+    const itemIds = g.itemIds
+      .map((t) => tokenToItem.get(t.trim())?.id)
+      .filter((id): id is string => Boolean(id));
+    return {
+      tenant_id: ctx.tenantId,
+      theme: clamp(g.theme, 200),
+      item_ids: itemIds,
+      recommended_action: VALID_RECOMMENDED_ACTION.has(g.recommendedAction)
+        ? g.recommendedAction
+        : "ignore",
+      urgency: VALID_GROUP_URGENCY.has(g.urgency) ? g.urgency : "none",
+      draft_note: clamp(g.draftNote, 1000),
+      prompt_version_id: result.value.promptVersionDbId,
+    };
+  });
+  if (rows.length > 0) await secret.from("signal_groups").insert(rows);
+
+  await auditService.record(ctx, {
+    action: "pipeline.triage.run",
+    target: ctx.tenantId,
+    metadata: { groups: rows.length },
+  });
+  return ok({ agentRunId, kind: "signal_triage" });
+}
+
+/**
+ * People & relationship memory: extract per-person commitments/concerns/context
+ * from the recent batch and append a note to MATCHING existing people (by name).
+ * Unmatched names are skipped — we never invent or auto-create people.
+ */
+async function runPeopleMemory(
+  ctx: TenantContext,
+): Promise<Result<AgentRunResult>> {
+  const agentRunId = randomUUID();
+  const secret = createSupabaseSecretClient();
+  const items = await listRecentSourceItems(ctx.tenantId, BATCH_ITEM_LIMIT);
+  if (items.length === 0) return ok({ agentRunId, kind: "people_memory" });
+  const { context } = buildContext(items);
+
+  let result;
+  try {
+    result = await invoke(ctx, "extraction", "people_memory", context);
+  } catch {
+    return ok({ agentRunId, kind: "people_memory" });
+  }
+  if (!result.ok) return ok({ agentRunId, kind: "people_memory" });
+  const parsed = PeopleSchema.safeParse(result.value.output);
+  if (!parsed.success) return ok({ agentRunId, kind: "people_memory" });
+
+  // Match names against existing people (case-insensitive), tenant-scoped.
+  const { data: peopleRows } = await secret
+    .from("people")
+    .select("id, display_name")
+    .eq("tenant_id", ctx.tenantId);
+  const byName = new Map<string, string>();
+  for (const p of peopleRows ?? []) {
+    byName.set((p.display_name as string).trim().toLowerCase(), p.id as string);
+  }
+
+  let noted = 0;
+  for (const person of parsed.data.people) {
+    const personId = byName.get(person.name.trim().toLowerCase());
+    if (!personId) continue;
+    const lines = [
+      ...person.commitments.map((c) => `Commitment: ${c}`),
+      ...person.concerns.map((c) => `Concern: ${c}`),
+      person.context ? `Context: ${person.context}` : "",
+    ].filter(Boolean);
+    if (lines.length === 0) continue;
+    await secret.from("person_notes").insert({
+      tenant_id: ctx.tenantId,
+      person_id: personId,
+      body: clamp(lines.join("\n"), 1500),
+    });
+    noted += 1;
+  }
+
+  await auditService.record(ctx, {
+    action: "pipeline.people_memory.run",
+    target: ctx.tenantId,
+    metadata: { noted, people: parsed.data.people.length },
+  });
+  return ok({ agentRunId, kind: "people_memory" });
+}
+
+/**
+ * Diary reflection: read a single author's recent diary entries and persist a
+ * private weekly reflection to diary_weekly_summaries. Author-scoped — it only
+ * ever reads and writes for `authorUserId`.
+ */
+async function runDiaryReflection(
+  ctx: TenantContext,
+  authorUserId: string,
+): Promise<Result<AgentRunResult>> {
+  const agentRunId = randomUUID();
+  if (!authorUserId) return ok({ agentRunId, kind: "diary_reflection" });
+  const secret = createSupabaseSecretClient();
+
+  const { data: entries } = await secret
+    .from("diary_entries")
+    .select("id, body, transcript, entry_type, created_at")
+    .eq("tenant_id", ctx.tenantId)
+    .eq("author_user_id", authorUserId)
+    .order("created_at", { ascending: false })
+    .limit(BATCH_ITEM_LIMIT);
+  if (!entries || entries.length === 0) {
+    return ok({ agentRunId, kind: "diary_reflection" });
+  }
+
+  const context: RetrievalContextItem[] = entries.map((e, index) => ({
+    sourceItemId: `item-${index + 1}`,
+    summary: clamp(
+      `(${e.entry_type ?? "note"}) ${(e.body as string) || (e.transcript as string) || ""}`,
+      800,
+    ),
+    occurredAt: e.created_at as string,
+  }));
+
+  let result;
+  try {
+    result = await invoke(ctx, "reasoning", "diary_reflection", context);
+  } catch {
+    return ok({ agentRunId, kind: "diary_reflection" });
+  }
+  if (!result.ok) return ok({ agentRunId, kind: "diary_reflection" });
+  const parsed = DiarySchema.safeParse(result.value.output);
+  if (!parsed.success) return ok({ agentRunId, kind: "diary_reflection" });
+  const d = parsed.data;
+
+  await secret.from("diary_weekly_summaries").upsert(
+    {
+      tenant_id: ctx.tenantId,
+      author_user_id: authorUserId,
+      week_start_date: weekStartDate(),
+      key_reflections: d.reflection ? [d.reflection] : [],
+      important_decisions: d.decisions,
+      notable_risks: d.risks,
+      recurring_themes: d.recurringThemes,
+      next_week_attention: d.nextWeekAttention,
+      follow_ups_created: [],
+      entry_count: entries.length,
+      generated_at: new Date().toISOString(),
+    },
+    { onConflict: "tenant_id,author_user_id,week_start_date" },
+  );
+
+  await auditService.record(ctx, {
+    action: "pipeline.diary_reflection.run",
+    target: authorUserId,
+    metadata: { entries: entries.length },
+  });
+  return ok({ agentRunId, kind: "diary_reflection" });
+}
+
+/**
+ * Weekly operating review: roll the week's signals, decisions, risks, and
+ * actions into an honest operating picture, persisted to operating_reviews.
+ */
+async function runWeeklyOperatingReview(
+  ctx: TenantContext,
+): Promise<Result<AgentRunResult>> {
+  const agentRunId = randomUUID();
+  const secret = createSupabaseSecretClient();
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [signalsRes, decisionsRes, risksRes, actionsRes] = await Promise.all([
+    secret
+      .from("signals")
+      .select("category, rationale, priority_tier")
+      .eq("tenant_id", ctx.tenantId)
+      .gte("classified_at", since)
+      .limit(40),
+    secret
+      .from("decisions")
+      .select("title, status")
+      .eq("tenant_id", ctx.tenantId)
+      .gte("created_at", since)
+      .limit(40),
+    secret
+      .from("risks")
+      .select("title, severity, status")
+      .eq("tenant_id", ctx.tenantId)
+      .gte("created_at", since)
+      .limit(40),
+    secret
+      .from("suggested_actions")
+      .select("title, status")
+      .eq("tenant_id", ctx.tenantId)
+      .gte("created_at", since)
+      .limit(40),
+  ]);
+
+  const lines: string[] = [];
+  for (const s of signalsRes.data ?? [])
+    lines.push(
+      `Signal [${s.category}/${s.priority_tier ?? "—"}]: ${s.rationale ?? ""}`,
+    );
+  for (const d of decisionsRes.data ?? [])
+    lines.push(`Decision [${d.status}]: ${d.title}`);
+  for (const r of risksRes.data ?? [])
+    lines.push(`Risk [${r.severity}/${r.status}]: ${r.title}`);
+  for (const a of actionsRes.data ?? [])
+    lines.push(`Action [${a.status}]: ${a.title}`);
+
+  if (lines.length === 0) {
+    return ok({ agentRunId, kind: "weekly_operating_review" });
+  }
+
+  const context: RetrievalContextItem[] = lines
+    .slice(0, 60)
+    .map((line, index) => ({
+      sourceItemId: `item-${index + 1}`,
+      summary: clamp(line, 400),
+      occurredAt: new Date().toISOString(),
+    }));
+
+  let result;
+  try {
+    result = await invoke(ctx, "reasoning", "weekly_operating_review", context);
+  } catch {
+    return ok({ agentRunId, kind: "weekly_operating_review" });
+  }
+  if (!result.ok) return ok({ agentRunId, kind: "weekly_operating_review" });
+  const parsed = ReviewSchema.safeParse(result.value.output);
+  if (!parsed.success)
+    return ok({ agentRunId, kind: "weekly_operating_review" });
+  const rv = parsed.data;
+
+  await secret.from("operating_reviews").upsert(
+    {
+      tenant_id: ctx.tenantId,
+      week_start_date: weekStartDate(),
+      summary: clamp(rv.summary, 2000),
+      moved: rv.moved,
+      stalled: rv.stalled,
+      decisions: rv.decisions,
+      open_risks: rv.openRisks,
+      next_focus: rv.nextFocus,
+      prompt_version_id: result.value.promptVersionDbId,
+      generated_at: new Date().toISOString(),
+    },
+    { onConflict: "tenant_id,week_start_date" },
+  );
+
+  await auditService.record(ctx, {
+    action: "pipeline.weekly_operating_review.run",
+    target: ctx.tenantId,
+    metadata: { considered: lines.length },
+  });
+  return ok({ agentRunId, kind: "weekly_operating_review" });
+}
+
+/**
+ * Run the full intelligence batch over a tenant's recent items: classify, rank,
+ * triage, extract actions/decisions/risks, build people memory, and synthesise
+ * topics. Each step is best-effort — one failing never blocks the others or the
+ * briefing that follows. Returns a single result; per-step counts are audited.
+ */
+async function runIntelligenceBatch(
+  ctx: TenantContext,
+): Promise<Result<AgentRunResult>> {
+  const agentRunId = randomUUID();
+  await runSignalClassification(ctx);
+  await runSignalRanking(ctx);
+  await runSignalTriage(ctx);
+  await runActionExtraction(ctx);
+  await runDecisionExtraction(ctx);
+  await runRiskDetection(ctx);
+  await runPeopleMemory(ctx);
+  await runTopicSynthesis(ctx);
+  await auditService.record(ctx, {
+    action: "pipeline.intelligence_batch.run",
+    target: ctx.tenantId,
+    metadata: {},
+  });
+  return ok({ agentRunId, kind: "intelligence_batch" });
+}
+
 export const agentOrchestrationService: AgentOrchestrationService = {
   async run(ctx, req) {
     switch (req.kind) {
       case "daily_memo":
         return runDailyMemo(ctx);
+      case "signal_classification":
+        return runSignalClassification(ctx);
+      case "signal_ranking":
+        return runSignalRanking(ctx);
+      case "signal_triage":
+        return runSignalTriage(ctx);
+      case "action_extraction":
+        return runActionExtraction(ctx);
+      case "decision_extraction":
+        return runDecisionExtraction(ctx);
+      case "risk_detection":
+        return runRiskDetection(ctx);
+      case "people_memory":
+        return runPeopleMemory(ctx);
+      case "topic_synthesis":
+        return runTopicSynthesis(ctx);
+      case "diary_reflection":
+        return runDiaryReflection(
+          ctx,
+          (req.input?.userId as string | undefined) ?? ctx.userId,
+        );
+      case "weekly_operating_review":
+        return runWeeklyOperatingReview(ctx);
+      case "intelligence_batch":
+        return runIntelligenceBatch(ctx);
       default:
-        return err(new NotImplementedError(`agent-orchestration.run:${req.kind}`));
+        return err(
+          new NotImplementedError(`agent-orchestration.run:${req.kind}`),
+        );
     }
   },
 };
