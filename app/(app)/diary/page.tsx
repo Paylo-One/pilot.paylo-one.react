@@ -11,7 +11,7 @@
 import { requireTenantContext } from "@/modules/identity-tenant/server";
 import { diaryService } from "@/modules/diary";
 import {
-  DiaryComposer,
+  DiaryCapture,
   DiaryTimeline,
   WeeklyDiarySummary,
   type DiaryEntryView,
@@ -58,28 +58,31 @@ export default async function DiaryPage() {
 
   return (
     <main className="workspace__content">
-      <div className="page-head">
-        <p className="eyebrow">Diary</p>
-        <h1 className="page-head__title">Your Private Diary</h1>
-        <p className="page-head__lead">
-          Capture what happened, what matters, what needs attention, and what
-          should be remembered. Private to you unless you choose to turn a note
-          into an action.
-        </p>
-      </div>
+      <div className="diary">
+        <header className="diary__masthead">
+          <p className="eyebrow">Diary</p>
+          <h1 className="diary__title">Your day, remembered clearly.</h1>
+          <p className="diary__lead">
+            Keep the decisions, risks, and moments that shouldn&rsquo;t slip.
+            Write them or speak them — they stay private to you.
+          </p>
+          <p className="diary__statusline">
+            <span className="dot dot--ready" aria-hidden="true" />
+            Private to you · only you can read this
+          </p>
+        </header>
 
-      <DiaryComposer />
+        <DiaryCapture />
 
-      <WeeklyDiarySummary summaries={summaries} entryCount={entries.length} />
+        <WeeklyDiarySummary summaries={summaries} entryCount={entries.length} />
 
-      <div style={{ marginTop: "var(--space-xl)" }}>
         {!result.ok ? (
-          <>
-            <p className="eyebrow">Daily record</p>
-            <p className="scaffold-note" style={{ marginTop: "var(--space-md)" }}>
-              We couldn&rsquo;t load your entries just now. Please try again.
+          <div className="diary-empty">
+            <p className="diary-empty__title">We couldn&rsquo;t load your record</p>
+            <p className="diary-empty__body">
+              Your entries are safe. Refresh the page to try again.
             </p>
-          </>
+          </div>
         ) : (
           <DiaryTimeline entries={entries} />
         )}

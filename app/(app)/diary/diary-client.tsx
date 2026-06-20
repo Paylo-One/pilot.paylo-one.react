@@ -3,12 +3,15 @@
 /**
  * Client interactivity for the Private Diary surface.
  *
- * The surface prioritises today's capture and the latest weekly recap. The
- * timeline remains browseable, but actions and risks are promoted only by clear
- * operator intent.
+ * The diary is one continuous record, not a form. A single capture surface lets
+ * the author write or speak a thought — speech is transcribed straight into the
+ * same editor — choose its kind, and keep it. Saved entries read back as a
+ * calm, day-grouped thread. Everything here is private to the author (RLS +
+ * author-scoped); nothing is fed to an agent this pass.
  */
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -87,6 +90,13 @@ function clamp(text: string, max = 180): string {
   return `${clean.slice(0, max - 1)}…`;
 }
 
+function formatDuration(seconds: number): string {
+  const safe = Math.max(0, Math.round(seconds));
+  const m = Math.floor(safe / 60);
+  const s = safe % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 /** A small, time-aware prompt: its label is both the chip and the placeholder. */
 interface Prompt {
   label: string;
@@ -96,31 +106,31 @@ interface Prompt {
 type Period = "default" | "morning" | "afternoon" | "evening";
 
 const GREETING: Record<Period, string> = {
-  default: "Capture what matters today.",
-  morning: "Set the day up clearly.",
-  afternoon: "Record what has moved.",
-  evening: "Close the day with a clear record.",
+  default: "Capture what matters",
+  morning: "Start the day with a clear head",
+  afternoon: "Note what has moved since this morning",
+  evening: "Close the day before it blurs",
 };
 
 const PROMPTS: Record<Period, Prompt[]> = {
   default: [
-    { label: "What happened that should be remembered?", type: "note" },
+    { label: "What should be remembered?", type: "note" },
     { label: "What did you decide?", type: "decision" },
     { label: "What needs attention next?", type: "follow_up" },
   ],
   morning: [
     { label: "What matters most today?", type: "note" },
     { label: "What needs a decision?", type: "decision" },
-    { label: "What risk needs watching?", type: "risk" },
+    { label: "What risk are you watching?", type: "risk" },
   ],
   afternoon: [
-    { label: "What has changed since this morning?", type: "note" },
+    { label: "What changed since this morning?", type: "note" },
     { label: "What did you decide?", type: "decision" },
-    { label: "What needs follow-up?", type: "follow_up" },
+    { label: "What needs following up?", type: "follow_up" },
   ],
   evening: [
     { label: "What happened today?", type: "reflection" },
-    { label: "What should not be forgotten?", type: "note" },
+    { label: "What can't be forgotten?", type: "note" },
     { label: "What still feels unresolved?", type: "risk" },
   ],
 };
@@ -129,6 +139,20 @@ function periodFor(hour: number): Period {
   if (hour < 12) return "morning";
   if (hour < 17) return "afternoon";
   return "evening";
+}
+
+/** Light, on-device read of the text — a hint the author can take or ignore. */
+function suggestType(text: string): DiaryEntryType | null {
+  const t = text.toLowerCase();
+  if (t.trim().length < 12) return null;
+  if (/\b(decided|decision|chose|agreed|going with|settled on|will go)\b/.test(t)) return "decision";
+  if (/\b(risk|worried|concern|exposure|blocker|might fail|could go wrong)\b/.test(t)) return "risk";
+  if (/\b(follow[- ]?up|chase|check in|circle back|remind me|get back to)\b/.test(t)) return "follow_up";
+  if (/\b(idea|what if|could we|maybe we should|worth trying)\b/.test(t)) return "idea";
+  if (/\b(met with|spoke with|call with|meeting|sync|stand[- ]?up|1:1)\b/.test(t)) return "meeting";
+  if (/\b(need to|must|to[- ]?do|action|send|draft|email|schedule)\b/.test(t)) return "action";
+  if (/\b(learned|realised|realized|grateful|reflecting|in hindsight)\b/.test(t)) return "reflection";
+  return null;
 }
 
 const subscribeNoop = () => () => {};
@@ -145,22 +169,61 @@ function TypeChip({ type }: { type: DiaryEntryType }) {
   return <span className={`status status--${meta.tone}`}>{meta.label}</span>;
 }
 
+/* --- Icons ---------------------------------------------------------------- */
+
 function MicIcon() {
   return (
-    <svg
-      width="15"
-      height="15"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect x="9" y="2" width="6" height="12" rx="3" />
       <path d="M5 10a7 7 0 0 0 14 0M12 17v4" />
     </svg>
+  );
+}
+function StopIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+    </svg>
+  );
+}
+function PauseIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <rect x="6" y="5" width="4" height="14" rx="1" />
+      <rect x="14" y="5" width="4" height="14" rx="1" />
+    </svg>
+  );
+}
+function ResumeIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M8 5v14l11-7z" />
+    </svg>
+  );
+}
+function LockIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="11" width="18" height="11" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  );
+}
+function SparkIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8" />
+    </svg>
+  );
+}
+
+function Waveform({ active }: { active: boolean }) {
+  return (
+    <span className={`diary-wave${active ? " diary-wave--active" : ""}`} aria-hidden="true">
+      {[0, 1, 2, 3, 4].map((i) => (
+        <span key={i} className="diary-wave__bar" />
+      ))}
+    </span>
   );
 }
 
@@ -170,242 +233,39 @@ function toAudioFile(blob: Blob): File {
   return new File([blob], `diary-voice-note.${extension}`, { type });
 }
 
-function VoiceNoteCapture() {
+type RecState = "idle" | "recording" | "paused";
+type MicState = "ready" | "denied" | "unsupported";
+
+/**
+ * The single capture surface. Type, or speak and have it transcribed into the
+ * same editor; choose a kind; keep it. One save path, one record, text or voice.
+ */
+export function DiaryCapture() {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const startedAtRef = useRef<number | null>(null);
   const previewUrlRef = useRef<string | null>(null);
+  const timerRef = useRef<number | null>(null);
+  const baseSecondsRef = useRef(0);
+  const resumedAtRef = useRef(0);
 
-  const [recording, setRecording] = useState(false);
+  const [text, setText] = useState("");
+  const [type, setType] = useState<DiaryEntryType>(DEFAULT_DIARY_ENTRY_TYPE);
+  const [typeTouched, setTypeTouched] = useState(false);
+  const [placeholder, setPlaceholder] = useState<string | null>(null);
+
+  const [recState, setRecState] = useState<RecState>("idle");
+  const [micState, setMicState] = useState<MicState>("ready");
+  const [elapsed, setElapsed] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [durationSeconds, setDurationSeconds] = useState(0);
-  const [transcript, setTranscript] = useState("");
-  const [type, setType] = useState<DiaryEntryType>("note");
+
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [saved, setSaved] = useState(false);
+  const [pending, startSaving] = useTransition();
   const [transcribing, startTranscribing] = useTransition();
-
-  useEffect(
-    () => () => {
-      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-      mediaRecorderRef.current?.stream.getTracks().forEach((track) => track.stop());
-    },
-    [],
-  );
-
-  async function startRecording() {
-    setError(null);
-    setNotice(null);
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      setError("Voice recording is not available in this browser.");
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      chunksRef.current = [];
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) chunksRef.current.push(event.data);
-      };
-      recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, {
-          type: recorder.mimeType || "audio/webm",
-        });
-        if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-        const nextUrl = URL.createObjectURL(blob);
-        previewUrlRef.current = nextUrl;
-        setAudioBlob(blob);
-        setPreviewUrl(nextUrl);
-        setDurationSeconds(
-          startedAtRef.current
-            ? Math.round((Date.now() - startedAtRef.current) / 1000)
-            : 0,
-        );
-        stream.getTracks().forEach((track) => track.stop());
-      };
-      mediaRecorderRef.current = recorder;
-      startedAtRef.current = Date.now();
-      recorder.start();
-      setTranscript("");
-      setAudioBlob(null);
-      setPreviewUrl(null);
-      setDurationSeconds(0);
-      setRecording(true);
-    } catch {
-      setError("Allow microphone access to record a private voice note.");
-    }
-  }
-
-  function stopRecording() {
-    mediaRecorderRef.current?.stop();
-    setRecording(false);
-  }
-
-  function transcribe() {
-    if (!audioBlob) {
-      setError("Record a voice note before transcribing.");
-      return;
-    }
-    setError(null);
-    setNotice(null);
-    const formData = new FormData();
-    formData.set("audio", toAudioFile(audioBlob));
-    startTranscribing(async () => {
-      const result = await transcribeVoiceNoteAction(formData);
-      if (result.ok && result.transcript) {
-        setTranscript(result.transcript);
-        setNotice("Transcript ready. Edit it before saving if needed.");
-      } else {
-        setError(result.error ?? "Could not transcribe this recording.");
-      }
-    });
-  }
-
-  function saveVoiceNote() {
-    if (!audioBlob) {
-      setError("Record a voice note before saving.");
-      return;
-    }
-    if (!transcript.trim()) {
-      setError("Transcribe the recording or add a short transcript before saving.");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.set("audio", toAudioFile(audioBlob));
-    formData.set("transcript", transcript);
-    formData.set("body", transcript);
-    formData.set("entryType", type);
-    formData.set("durationSeconds", String(durationSeconds));
-
-    setError(null);
-    setNotice(null);
-    startTransition(async () => {
-      const result = await createVoiceEntryAction(initialDiaryFormState, formData);
-      if (result.ok) {
-        setTranscript("");
-        setAudioBlob(null);
-        setPreviewUrl(null);
-        setDurationSeconds(0);
-        setType("note");
-        setNotice("Voice note saved to your diary.");
-      } else {
-        setError(result.error ?? "Could not save this voice note.");
-      }
-    });
-  }
-
-  return (
-    <div className="diary-voice">
-      <div className="diary-voice__head">
-        <div>
-          <p className="eyebrow">Voice note</p>
-          <p className="diary-helper">
-            Capture the thought now. Keep the transcript short, private, and editable.
-          </p>
-        </div>
-        {recording ? (
-          <span className="status status--risk">Recording</span>
-        ) : (
-          <span className="status status--neutral">Private</span>
-        )}
-      </div>
-
-      <div className="diary-voice__controls">
-        {!recording ? (
-          <button
-            type="button"
-            className="btn btn--secondary"
-            onClick={startRecording}
-            disabled={pending || transcribing}
-          >
-            <MicIcon />
-            Start Recording
-          </button>
-        ) : (
-          <button type="button" className="btn btn--primary" onClick={stopRecording}>
-            Stop Recording
-          </button>
-        )}
-
-        <button
-          type="button"
-          className="btn btn--ghost"
-          onClick={transcribe}
-          disabled={!audioBlob || transcribing || pending}
-        >
-          {transcribing ? "Transcribing…" : "Transcribe Recording"}
-        </button>
-      </div>
-
-      {previewUrl ? (
-        <audio className="diary-voice__audio" src={previewUrl} controls />
-      ) : null}
-
-      {audioBlob ? (
-        <div className="diary-voice__edit">
-          <label className="diary-type-field">
-            <span className="field__label">Type</span>
-            <select
-              className="input diary-type-select"
-              value={type}
-              onChange={(event) => setType(event.target.value as DiaryEntryType)}
-              disabled={pending}
-            >
-              {DIARY_ENTRY_TYPES.map((value) => (
-                <option key={value} value={value}>
-                  {DIARY_TYPE_META[value].label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span className="field__label">Transcript</span>
-            <textarea
-              className="textarea"
-              rows={4}
-              value={transcript}
-              onChange={(event) => setTranscript(event.target.value)}
-              placeholder="Edit the transcript before saving…"
-            />
-          </label>
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={saveVoiceNote}
-            disabled={pending}
-          >
-            {pending ? "Saving…" : "Save Voice Note"}
-          </button>
-        </div>
-      ) : null}
-
-      {error ? (
-        <p className="form-message form-message--error" aria-live="polite">
-          {error}
-        </p>
-      ) : null}
-      {notice ? (
-        <p className="form-message" aria-live="polite">
-          {notice}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-/** Composer: greeting, guided prompts, type selector, text capture, and voice. */
-export function DiaryComposer() {
-  const formRef = useRef<HTMLFormElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const [type, setType] = useState<DiaryEntryType>(DEFAULT_DIARY_ENTRY_TYPE);
-  const [placeholder, setPlaceholder] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
 
   const isClient = useIsClient();
   const period = useMemo<Period>(
@@ -413,82 +273,360 @@ export function DiaryComposer() {
     [isClient],
   );
 
+  const stopTimer = useCallback(() => {
+    if (timerRef.current !== null) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  useEffect(
+    () => () => {
+      stopTimer();
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      mediaRecorderRef.current?.stream.getTracks().forEach((track) => track.stop());
+    },
+    [stopTimer],
+  );
+
+  const suggestion = useMemo(() => suggestType(text), [text]);
+  const showSuggestion = !typeTouched && suggestion !== null && suggestion !== type;
+
   function choosePrompt(prompt: Prompt) {
     setType(prompt.type);
+    setTypeTouched(true);
     setPlaceholder(prompt.label);
     textareaRef.current?.focus();
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    startTransition(async () => {
-      const result = await createEntryAction(initialDiaryFormState, formData);
-      if (result.ok) {
-        setError(null);
-        setType(DEFAULT_DIARY_ENTRY_TYPE);
-        setPlaceholder(null);
-        formRef.current?.reset();
+  function selectType(next: DiaryEntryType) {
+    setType(next);
+    setTypeTouched(true);
+  }
+
+  function offline(): boolean {
+    return typeof navigator !== "undefined" && navigator.onLine === false;
+  }
+
+  function tick() {
+    setElapsed(baseSecondsRef.current + (Date.now() - resumedAtRef.current) / 1000);
+  }
+
+  function applyTranscript(transcript: string) {
+    setText((prev) => {
+      const base = prev.trim();
+      return base ? `${base}\n\n${transcript}` : transcript;
+    });
+  }
+
+  function runTranscription(blob: Blob) {
+    if (offline()) {
+      setError("You're offline. Reconnect to transcribe — or type the note and save it now.");
+      return;
+    }
+    setError(null);
+    const formData = new FormData();
+    formData.set("audio", toAudioFile(blob));
+    startTranscribing(async () => {
+      const result = await transcribeVoiceNoteAction(formData);
+      if (result.ok && result.transcript) {
+        applyTranscript(result.transcript);
+        setNotice("Added to your entry. Edit it however you like before saving.");
+        textareaRef.current?.focus();
       } else {
-        setError(result.error ?? "Add a few words before saving.");
+        setError(
+          result.error ??
+            "Couldn't turn that recording into words. The audio is kept — try again, or type the note.",
+        );
       }
     });
   }
 
+  async function startRecording() {
+    setError(null);
+    setNotice(null);
+    setSaved(false);
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setMicState("unsupported");
+      setError("This browser can't record audio. You can still type your entry.");
+      return;
+    }
+    if (offline()) {
+      setError("You're offline. You can still type an entry and save it once you reconnect.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setMicState("ready");
+      const recorder = new MediaRecorder(stream);
+      chunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+        const nextUrl = URL.createObjectURL(blob);
+        previewUrlRef.current = nextUrl;
+        setAudioBlob(blob);
+        setPreviewUrl(nextUrl);
+        setDurationSeconds(baseSecondsRef.current);
+        stream.getTracks().forEach((track) => track.stop());
+        runTranscription(blob);
+      };
+
+      mediaRecorderRef.current = recorder;
+      baseSecondsRef.current = 0;
+      resumedAtRef.current = Date.now();
+      setElapsed(0);
+      setAudioBlob(null);
+      setPreviewUrl(null);
+      recorder.start();
+      setRecState("recording");
+      stopTimer();
+      timerRef.current = window.setInterval(tick, 200);
+    } catch (cause) {
+      const name = cause instanceof DOMException ? cause.name : "";
+      if (name === "NotFoundError" || name === "OverconstrainedError") {
+        setMicState("unsupported");
+        setError("No microphone was found. Plug one in, or type your entry instead.");
+      } else {
+        setMicState("denied");
+        setError("Microphone access is off. Allow it in your browser, or type your entry instead.");
+      }
+    }
+  }
+
+  function pauseRecording() {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recState !== "recording") return;
+    recorder.pause();
+    baseSecondsRef.current += (Date.now() - resumedAtRef.current) / 1000;
+    stopTimer();
+    setElapsed(baseSecondsRef.current);
+    setRecState("paused");
+  }
+
+  function resumeRecording() {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recState !== "paused") return;
+    recorder.resume();
+    resumedAtRef.current = Date.now();
+    setRecState("recording");
+    stopTimer();
+    timerRef.current = window.setInterval(tick, 200);
+  }
+
+  function stopRecording() {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) return;
+    if (recState === "recording") {
+      baseSecondsRef.current += (Date.now() - resumedAtRef.current) / 1000;
+    }
+    stopTimer();
+    setElapsed(baseSecondsRef.current);
+    recorder.stop();
+    setRecState("idle");
+  }
+
+  function discardRecording() {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+    setAudioBlob(null);
+    setPreviewUrl(null);
+    setDurationSeconds(0);
+    setElapsed(0);
+    setNotice(null);
+  }
+
+  function resetAfterSave() {
+    setText("");
+    setType(DEFAULT_DIARY_ENTRY_TYPE);
+    setTypeTouched(false);
+    setPlaceholder(null);
+    discardRecording();
+    setError(null);
+  }
+
+  function save() {
+    const body = text.trim();
+    if (!body) {
+      setError(
+        audioBlob
+          ? "Add a line of text — transcribe the recording or jot the gist — before saving."
+          : "Write a line, or record a thought, before saving.",
+      );
+      textareaRef.current?.focus();
+      return;
+    }
+    if (offline()) {
+      setError("You're offline. Your words are safe here — save again once you reconnect.");
+      return;
+    }
+    setError(null);
+    setNotice(null);
+
+    startSaving(async () => {
+      if (audioBlob) {
+        const formData = new FormData();
+        formData.set("audio", toAudioFile(audioBlob));
+        formData.set("transcript", body);
+        formData.set("body", body);
+        formData.set("entryType", type);
+        formData.set("durationSeconds", String(Math.round(durationSeconds)));
+        const result = await createVoiceEntryAction(initialDiaryFormState, formData);
+        if (result.ok) {
+          resetAfterSave();
+          setSaved(true);
+        } else {
+          setError(result.error ?? "Couldn't save this entry. Try again in a moment.");
+        }
+        return;
+      }
+
+      const formData = new FormData();
+      formData.set("body", body);
+      formData.set("entryType", type);
+      const result = await createEntryAction(initialDiaryFormState, formData);
+      if (result.ok) {
+        resetAfterSave();
+        setSaved(true);
+      } else {
+        setError(result.error ?? "Couldn't save this entry. Try again in a moment.");
+      }
+    });
+  }
+
+  const recording = recState !== "idle";
+  const busy = pending || transcribing;
+
   return (
-    <section className="diary-capture">
-      <form ref={formRef} onSubmit={handleSubmit} className="card diary-capture__text">
-        <div className="card-head">
-          <div>
-            <p className="eyebrow">{GREETING[period]}</p>
-            <p className="diary-helper">
-              A line is enough. Capture the decision, risk, follow-up, or detail
-              that should not disappear.
-            </p>
-          </div>
-          <span className="status status--neutral">Private</span>
+    <section className="diary-capture" aria-label="Write a diary entry">
+      <div className="diary-capture__head">
+        <div>
+          <p className="diary-capture__greeting">{GREETING[period]}.</p>
+          <p className="diary-capture__hint">
+            Write it, speak it, or turn it into an action. One honest line is enough.
+          </p>
         </div>
+        <span className="diary-lock" title="Only you can read your diary">
+          <LockIcon />
+          Private
+        </span>
+      </div>
 
-        <div className="diary-prompts">
-          {PROMPTS[period].map((prompt) => (
-            <button
-              key={prompt.label}
-              type="button"
-              className={`diary-prompt${
-                placeholder === prompt.label ? " diary-prompt--active" : ""
-              }`}
-              onClick={() => choosePrompt(prompt)}
-            >
-              {prompt.label}
-            </button>
-          ))}
-        </div>
+      <div className="diary-prompts" role="group" aria-label="Prompts to get started">
+        {PROMPTS[period].map((prompt) => (
+          <button
+            key={prompt.label}
+            type="button"
+            className={`diary-prompt${placeholder === prompt.label ? " diary-prompt--active" : ""}`}
+            onClick={() => choosePrompt(prompt)}
+          >
+            {prompt.label}
+          </button>
+        ))}
+      </div>
 
+      <div className={`diary-editor${recording ? " diary-editor--recording" : ""}`}>
+        <label className="sr-only" htmlFor="diary-body">
+          Your diary entry
+        </label>
         <textarea
           id="diary-body"
           ref={textareaRef}
-          name="body"
+          value={text}
+          onChange={(event) => {
+            setText(event.target.value);
+            if (saved) setSaved(false);
+          }}
           rows={5}
-          required
-          placeholder={placeholder ?? "Write what should be remembered…"}
-          className="textarea"
+          placeholder={placeholder ?? "Write freely, or tap the mic to speak it…"}
+          className="diary-editor__input"
           autoComplete="off"
+          disabled={transcribing}
         />
-        <input type="hidden" name="entryType" value={type} />
-
-        {error ? (
-          <p className="form-message form-message--error" aria-live="polite">
-            {error}
-          </p>
+        {transcribing ? (
+          <div className="diary-editor__overlay" aria-hidden="true">
+            <Waveform active />
+            <span>Turning your words into text…</span>
+          </div>
         ) : null}
+      </div>
 
-        <div className="diary-composer__controls">
+      {showSuggestion ? (
+        <button
+          type="button"
+          className="diary-suggest"
+          onClick={() => selectType(suggestion)}
+        >
+          <SparkIcon />
+          This reads like a <strong>{DIARY_TYPE_META[suggestion].label}</strong>. Use it?
+        </button>
+      ) : null}
+
+      <div className="diary-capture__toolbar">
+        <div className="diary-capture__voice">
+          {recState === "idle" && !audioBlob ? (
+            <button type="button" className="btn btn--secondary" onClick={startRecording} disabled={busy}>
+              <MicIcon />
+              Record a voice note
+            </button>
+          ) : null}
+
+          {recording ? (
+            <div className="diary-rec" role="status" aria-live="polite">
+              <span className={`diary-rec__dot${recState === "paused" ? " diary-rec__dot--paused" : ""}`} />
+              <span className="diary-rec__time">{formatDuration(elapsed)}</span>
+              <Waveform active={recState === "recording"} />
+              {recState === "recording" ? (
+                <button type="button" className="btn btn--ghost btn--sm" onClick={pauseRecording} aria-label="Pause recording">
+                  <PauseIcon />
+                  Pause
+                </button>
+              ) : (
+                <button type="button" className="btn btn--ghost btn--sm" onClick={resumeRecording} aria-label="Resume recording">
+                  <ResumeIcon />
+                  Resume
+                </button>
+              )}
+              <button type="button" className="btn btn--primary btn--sm" onClick={stopRecording}>
+                <StopIcon />
+                Stop
+              </button>
+            </div>
+          ) : null}
+
+          {!recording && audioBlob ? (
+            <div className="diary-clip">
+              {previewUrl ? <audio className="diary-clip__audio" src={previewUrl} controls /> : null}
+              <span className="diary-clip__meta">{formatDuration(durationSeconds)}</span>
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                onClick={() => audioBlob && runTranscription(audioBlob)}
+                disabled={busy}
+              >
+                {transcribing ? "Transcribing…" : "Transcribe again"}
+              </button>
+              <button type="button" className="btn btn--ghost btn--sm" onClick={discardRecording} disabled={busy}>
+                Remove
+              </button>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="diary-capture__commit">
           <label className="diary-type-field">
-            <span className="field__label">Type</span>
+            <span className="field__label">Kind</span>
             <select
               className="input diary-type-select"
               value={type}
-              onChange={(event) => setType(event.target.value as DiaryEntryType)}
+              onChange={(event) => selectType(event.target.value as DiaryEntryType)}
+              disabled={busy}
             >
               {DIARY_ENTRY_TYPES.map((value) => (
                 <option key={value} value={value}>
@@ -497,16 +635,32 @@ export function DiaryComposer() {
               ))}
             </select>
           </label>
-
-          <div className="diary-composer__actions">
-            <button type="submit" className="btn btn--primary" disabled={pending}>
-              {pending ? "Saving…" : "Save Entry"}
-            </button>
-          </div>
+          <button type="button" className="btn btn--primary" onClick={save} disabled={busy}>
+            {pending ? "Saving…" : "Save to diary"}
+          </button>
         </div>
-      </form>
+      </div>
 
-      <VoiceNoteCapture />
+      {micState === "denied" ? (
+        <p className="diary-capture__status diary-capture__status--error" aria-live="polite">
+          Microphone access is off. Turn it on in your browser settings to record — or just keep typing.
+        </p>
+      ) : null}
+      {error ? (
+        <p className="diary-capture__status diary-capture__status--error" aria-live="polite">
+          {error}
+        </p>
+      ) : null}
+      {notice && !error ? (
+        <p className="diary-capture__status" aria-live="polite">
+          {notice}
+        </p>
+      ) : null}
+      {saved && !error && !notice ? (
+        <p className="diary-capture__status diary-capture__status--ok" aria-live="polite">
+          Kept. It&rsquo;s in your record below.
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -522,7 +676,7 @@ function SummaryList({ title, items }: { title: string; items: string[] }) {
           ))}
         </ul>
       ) : (
-        <p>No clear signal yet.</p>
+        <p>Nothing stood out.</p>
       )}
     </div>
   );
@@ -546,8 +700,8 @@ export function WeeklyDiarySummary({
       const result = await generateWeeklySummaryAction();
       setMessage(
         result.ok
-          ? "Weekly summary prepared."
-          : result.error ?? "Could not prepare the weekly summary.",
+          ? "Your week is gathered below."
+          : result.error ?? "Couldn't gather the week just now. Try again in a moment.",
       );
     });
   }
@@ -556,11 +710,11 @@ export function WeeklyDiarySummary({
     <section className="diary-summary">
       <div className="diary-summary__head">
         <div>
-          <p className="eyebrow">Weekly summary</p>
-          <h2>This week, in one place</h2>
+          <p className="eyebrow">The week, gathered</p>
+          <h2>Everything that mattered, in one place</h2>
           <p>
-            A clean recap of the week&rsquo;s reflections, decisions, risks, and
-            follow-ups, so the daily record does not become another feed.
+            A calm recap of the week&rsquo;s reflections, decisions, risks, and
+            follow-ups — so the daily record stays a record, not another feed.
           </p>
         </div>
         <button
@@ -569,7 +723,7 @@ export function WeeklyDiarySummary({
           onClick={generateSummary}
           disabled={pending || entryCount === 0}
         >
-          {pending ? "Preparing…" : latest ? "Update Summary" : "Prepare Summary"}
+          {pending ? "Gathering…" : latest ? "Refresh the week" : "Gather the week"}
         </button>
       </div>
 
@@ -587,18 +741,18 @@ export function WeeklyDiarySummary({
             {` · ${latest.entryCount} entries`}
           </p>
           <div className="diary-summary__grid">
-            <SummaryList title="Key Reflections" items={latest.keyReflections} />
-            <SummaryList title="Important Decisions" items={latest.importantDecisions} />
-            <SummaryList title="Notable Risks" items={latest.notableRisks} />
-            <SummaryList title="Follow-ups Created" items={latest.followUpsCreated} />
-            <SummaryList title="Recurring Themes" items={latest.recurringThemes} />
-            <SummaryList title="Attention Next Week" items={latest.nextWeekAttention} />
+            <SummaryList title="Reflections" items={latest.keyReflections} />
+            <SummaryList title="Decisions" items={latest.importantDecisions} />
+            <SummaryList title="Risks" items={latest.notableRisks} />
+            <SummaryList title="Follow-ups" items={latest.followUpsCreated} />
+            <SummaryList title="Recurring themes" items={latest.recurringThemes} />
+            <SummaryList title="Next week" items={latest.nextWeekAttention} />
           </div>
         </>
       ) : (
         <p className="diary-empty-note">
-          No weekly summary yet. Capture a few entries, then prepare a summary
-          when the week has enough signal.
+          Nothing to gather yet. Keep a few entries through the week, then gather
+          them here when there&rsquo;s enough to look back on.
         </p>
       )}
     </section>
@@ -638,20 +792,20 @@ function FollowUpActionPanel({ entry }: { entry: DiaryEntryView }) {
       const result = await createDiaryFollowUpAction(formData);
       setMessage(
         result.ok
-          ? "Action created. It now appears under Actions."
-          : result.error ?? "Could not create the action.",
+          ? "Done — it's waiting for you in Actions."
+          : result.error ?? "Couldn't create the action. Try again in a moment.",
       );
     });
   }
 
   return (
     <details className="diary-followup">
-      <summary>Create a Follow-up</summary>
+      <summary>Turn this into an action</summary>
       <form onSubmit={createAction} className="diary-followup__form">
         <input type="hidden" name="id" value={entry.id} />
         {suggestions.length > 0 ? (
           <div className="diary-followup__suggestions">
-            <span className="field__label">Suggested from this entry</span>
+            <span className="field__label">From this entry</span>
             {suggestions.map((suggestion) => (
               <button
                 key={suggestion}
@@ -665,7 +819,7 @@ function FollowUpActionPanel({ entry }: { entry: DiaryEntryView }) {
           </div>
         ) : null}
         <label className="field">
-          <span className="field__label">Action title</span>
+          <span className="field__label">What needs doing</span>
           <input
             className="input"
             name="title"
@@ -676,8 +830,8 @@ function FollowUpActionPanel({ entry }: { entry: DiaryEntryView }) {
             required
           />
         </label>
-        <button type="submit" className="btn btn--secondary" disabled={pending}>
-          {pending ? "Creating…" : "Create Action"}
+        <button type="submit" className="btn btn--secondary btn--sm" disabled={pending}>
+          {pending ? "Creating…" : "Create action"}
         </button>
       </form>
       {message ? (
@@ -703,27 +857,26 @@ function RiskControls({ entry }: { entry: DiaryEntryView }) {
       const result = await resolveRiskEntryAction(formData);
       setMessage(
         result.ok
-          ? "Risk resolved. It will no longer appear as active in the briefing."
-          : result.error ?? "Could not resolve this risk.",
+          ? "Resolved. It will drop out of your briefing."
+          : result.error ?? "Couldn't resolve this risk. Try again in a moment.",
       );
     });
   }
 
+  if (!active) {
+    return (
+      <div className="diary-risk">
+        <span className="status status--ok">Resolved</span>
+      </div>
+    );
+  }
+
   return (
     <div className="diary-risk">
-      <span className={`status status--${active ? "risk" : "ok"}`}>
-        {active ? "Active Risk" : "Resolved Risk"}
-      </span>
-      {active ? (
-        <button
-          type="button"
-          className="btn btn--ghost"
-          onClick={resolveRisk}
-          disabled={pending}
-        >
-          {pending ? "Resolving…" : "Mark Resolved"}
-        </button>
-      ) : null}
+      <span className="status status--risk">Watching</span>
+      <button type="button" className="btn btn--ghost btn--sm" onClick={resolveRisk} disabled={pending}>
+        {pending ? "Resolving…" : "Mark resolved"}
+      </button>
       {message ? (
         <p className="form-message" aria-live="polite">
           {message}
@@ -733,7 +886,7 @@ function RiskControls({ entry }: { entry: DiaryEntryView }) {
   );
 }
 
-/** A single entry: read view with edit/delete, or an inline edit form. */
+/** A single entry in the thread: read view with quiet tools, or an edit form. */
 function DiaryEntryItem({ entry }: { entry: DiaryEntryView }) {
   const [editing, setEditing] = useState(false);
   const [type, setType] = useState<DiaryEntryType>(entry.entryType);
@@ -752,7 +905,7 @@ function DiaryEntryItem({ entry }: { entry: DiaryEntryView }) {
         setError(null);
         setEditing(false);
       } else {
-        setError(result.error ?? "Could not save changes.");
+        setError(result.error ?? "Couldn't save your changes.");
       }
     });
   }
@@ -765,95 +918,95 @@ function DiaryEntryItem({ entry }: { entry: DiaryEntryView }) {
 
   return (
     <li className="diary-entry">
-      <div className="diary-entry__meta">
-        <span>{created ? timeFormat.format(created) : entry.createdAt}</span>
-        {edited ? <span>· edited</span> : null}
-        <TypeChip type={editing ? type : entry.entryType} />
-        {entry.kind === "voice" ? <span className="status status--info">Voice</span> : null}
+      <div className="diary-entry__rail" aria-hidden="true">
+        <span className={`diary-entry__node diary-entry__node--${DIARY_TYPE_META[entry.entryType].tone}`} />
       </div>
-
-      {editing ? (
-        <form onSubmit={handleEditSubmit}>
-          <input type="hidden" name="id" value={entry.id} />
-          <input type="hidden" name="prevEntryType" value={entry.entryType} />
-          <input type="hidden" name="entryType" value={type} />
-          <textarea
-            name="body"
-            rows={4}
-            required
-            defaultValue={displayText(entry)}
-            className="textarea"
-          />
-          <div className="diary-entry__edit-row">
-            <label className="diary-type-field">
-              <span className="field__label">Type</span>
-              <select
-                className="input diary-type-select"
-                value={type}
-                onChange={(event) => setType(event.target.value as DiaryEntryType)}
-              >
-                {DIARY_ENTRY_TYPES.map((value) => (
-                  <option key={value} value={value}>
-                    {DIARY_TYPE_META[value].label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          {error ? (
-            <p className="form-message form-message--error" aria-live="polite">
-              {error}
-            </p>
-          ) : null}
-          <div className="diary-entry__controls">
-            <button type="submit" className="btn btn--primary" disabled={pending}>
-              {pending ? "Saving…" : "Save Changes"}
-            </button>
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={cancelEdit}
-              disabled={pending}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      ) : (
-        <>
-          <p className="diary-entry__body">{displayText(entry)}</p>
+      <div className="diary-entry__main">
+        <div className="diary-entry__meta">
+          <time>{created ? timeFormat.format(created) : entry.createdAt}</time>
+          <TypeChip type={editing ? type : entry.entryType} />
           {entry.kind === "voice" ? (
-            <p className="diary-helper">
-              Original audio saved privately
-              {entry.audioDurationSeconds ? ` · ${entry.audioDurationSeconds}s` : ""}.
-            </p>
+            <span className="diary-entry__voice">
+              <MicIcon />
+              Voice
+            </span>
           ) : null}
-          <RiskControls entry={entry} />
-          <FollowUpActionPanel entry={entry} />
-          <div className="diary-entry__controls">
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={() => setEditing(true)}
-            >
-              Edit
-            </button>
-            <form
-              action={deleteEntryAction}
-              onSubmit={(event) => {
-                if (!window.confirm("Delete this entry? This cannot be undone.")) {
-                  event.preventDefault();
-                }
-              }}
-            >
-              <input type="hidden" name="id" value={entry.id} />
-              <button type="submit" className="btn btn--ghost">
-                Delete
+          {edited ? <span className="diary-entry__edited">edited</span> : null}
+        </div>
+
+        {editing ? (
+          <form onSubmit={handleEditSubmit} className="diary-entry__form">
+            <input type="hidden" name="id" value={entry.id} />
+            <input type="hidden" name="prevEntryType" value={entry.entryType} />
+            <input type="hidden" name="entryType" value={type} />
+            <textarea
+              name="body"
+              rows={4}
+              required
+              defaultValue={displayText(entry)}
+              className="textarea"
+            />
+            <div className="diary-entry__edit-row">
+              <label className="diary-type-field">
+                <span className="field__label">Kind</span>
+                <select
+                  className="input diary-type-select"
+                  value={type}
+                  onChange={(event) => setType(event.target.value as DiaryEntryType)}
+                >
+                  {DIARY_ENTRY_TYPES.map((value) => (
+                    <option key={value} value={value}>
+                      {DIARY_TYPE_META[value].label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {error ? (
+              <p className="form-message form-message--error" aria-live="polite">
+                {error}
+              </p>
+            ) : null}
+            <div className="diary-entry__controls">
+              <button type="submit" className="btn btn--primary btn--sm" disabled={pending}>
+                {pending ? "Saving…" : "Save changes"}
               </button>
-            </form>
-          </div>
-        </>
-      )}
+              <button type="button" className="btn btn--ghost btn--sm" onClick={cancelEdit} disabled={pending}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <>
+            <p className="diary-entry__body">{displayText(entry)}</p>
+            {entry.kind === "voice" && entry.audioDurationSeconds ? (
+              <p className="diary-entry__note">
+                Audio kept privately · {formatDuration(entry.audioDurationSeconds)}
+              </p>
+            ) : null}
+            <RiskControls entry={entry} />
+            <FollowUpActionPanel entry={entry} />
+            <div className="diary-entry__controls diary-entry__controls--quiet">
+              <button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditing(true)}>
+                Edit
+              </button>
+              <form
+                action={deleteEntryAction}
+                onSubmit={(event) => {
+                  if (!window.confirm("Delete this entry? This can't be undone.")) {
+                    event.preventDefault();
+                  }
+                }}
+              >
+                <input type="hidden" name="id" value={entry.id} />
+                <button type="submit" className="btn btn--ghost btn--sm">
+                  Delete
+                </button>
+              </form>
+            </div>
+          </>
+        )}
+      </div>
     </li>
   );
 }
@@ -866,15 +1019,13 @@ function dayLabel(date: Date, now: number | null): string {
     d.setHours(0, 0, 0, 0);
     return d.getTime();
   };
-  const diffDays = Math.round(
-    (startOf(now) - startOf(date.getTime())) / 86_400_000,
-  );
+  const diffDays = Math.round((startOf(now) - startOf(date.getTime())) / 86_400_000);
   if (diffDays === 0) return "Today";
   if (diffDays === 1) return "Yesterday";
   return dayFormat.format(date);
 }
 
-/** Filter + search + day-grouped timeline of the author's entries. */
+/** Filter + search + day-grouped thread of the author's entries. */
 export function DiaryTimeline({ entries }: { entries: DiaryEntryView[] }) {
   const [filter, setFilter] = useState<DiaryEntryType | "all">("all");
   const [query, setQuery] = useState("");
@@ -917,19 +1068,16 @@ export function DiaryTimeline({ entries }: { entries: DiaryEntryView[] }) {
     <div className="diary-timeline">
       <div className="diary-timeline__head">
         <div>
-          <p className="eyebrow">Daily record</p>
-          <p className="diary-helper">
-            Browse the underlying notes when you need detail. The weekly summary
-            keeps the main surface clean.
-          </p>
+          <p className="eyebrow">Your record</p>
+          <h2 className="diary-timeline__title">Everything you&rsquo;ve kept</h2>
         </div>
         {hasEntries ? (
-          <label className="field">
-            <span className="field__label">Search</span>
+          <label className="field diary-search-field">
+            <span className="sr-only">Search your diary</span>
             <input
               type="search"
               className="input diary-search"
-              placeholder="Search entries…"
+              placeholder="Search your entries…"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               autoComplete="off"
@@ -939,12 +1087,10 @@ export function DiaryTimeline({ entries }: { entries: DiaryEntryView[] }) {
       </div>
 
       {hasEntries ? (
-        <div className="segmented diary-filter" role="group" aria-label="Filter by type">
+        <div className="segmented diary-filter" role="group" aria-label="Filter by kind">
           <button
             type="button"
-            className={`segmented__option${
-              filter === "all" ? " segmented__option--active" : ""
-            }`}
+            className={`segmented__option${filter === "all" ? " segmented__option--active" : ""}`}
             onClick={() => setFilter("all")}
           >
             All
@@ -953,9 +1099,7 @@ export function DiaryTimeline({ entries }: { entries: DiaryEntryView[] }) {
             <button
               key={value}
               type="button"
-              className={`segmented__option${
-                filter === value ? " segmented__option--active" : ""
-              }`}
+              className={`segmented__option${filter === value ? " segmented__option--active" : ""}`}
               onClick={() => setFilter(value)}
             >
               {DIARY_TYPE_META[value].label}
@@ -965,21 +1109,25 @@ export function DiaryTimeline({ entries }: { entries: DiaryEntryView[] }) {
       ) : null}
 
       {!hasEntries ? (
-        <div className="empty diary-empty">
-          <p className="empty__title">Start the private record</p>
-          <p className="empty__body">
-            Use the diary to capture what happened, what you decided, what needs
-            attention, and what should be remembered. One useful line is enough.
-          </p>
-          <p className="empty__body diary-empty__next">
-            Pick a prompt above, record a voice note, or write the first entry.
+        <div className="diary-empty">
+          <span className="diary-empty__mark" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+            </svg>
+          </span>
+          <p className="diary-empty__title">Your diary starts with one line</p>
+          <p className="diary-empty__body">
+            Keep what happened, what you decided, what you&rsquo;re watching, and
+            what shouldn&rsquo;t slip. Pick a prompt above, speak it, or just start
+            writing — it stays private to you.
           </p>
         </div>
       ) : groups.length === 0 ? (
-        <div className="empty diary-empty">
-          <p className="empty__title">No entries match</p>
-          <p className="empty__body">
-            Clear the search or filter to return to the full daily record.
+        <div className="diary-empty">
+          <p className="diary-empty__title">Nothing matches that</p>
+          <p className="diary-empty__body">
+            Clear the search or filter to see your full record again.
           </p>
         </div>
       ) : (
@@ -987,7 +1135,7 @@ export function DiaryTimeline({ entries }: { entries: DiaryEntryView[] }) {
           {groups.map((group) => (
             <section key={group.key} className="diary-day">
               <p className="diary-day__label">{group.label}</p>
-              <ul className="stack">
+              <ul className="diary-thread">
                 {group.items.map((entry) => (
                   <DiaryEntryItem key={entry.id} entry={entry} />
                 ))}
@@ -997,7 +1145,11 @@ export function DiaryTimeline({ entries }: { entries: DiaryEntryView[] }) {
         </div>
       )}
 
-      {filtering ? <p className="diary-helper">{filtered.length} matching entries.</p> : null}
+      {filtering && groups.length > 0 ? (
+        <p className="diary-timeline__count">
+          {filtered.length} {filtered.length === 1 ? "entry" : "entries"}
+        </p>
+      ) : null}
     </div>
   );
 }
