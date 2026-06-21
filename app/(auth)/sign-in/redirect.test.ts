@@ -13,6 +13,24 @@ describe("magicLinkRedirectUrl", () => {
     );
   });
 
+  it("threads a referral code through the link so onboarding can recover it", () => {
+    expect(
+      magicLinkRedirectUrl("https://app.paylo.one", "/onboarding", "ABC123"),
+    ).toBe(
+      "https://app.paylo.one/auth/confirm?next=%2Fonboarding%3Fref%3DABC123",
+    );
+    // Decoding `next` once (as /auth/confirm does) yields the recoverable path.
+    expect(
+      decodeURIComponent("%2Fonboarding%3Fref%3DABC123"),
+    ).toBe("/onboarding?ref=ABC123");
+  });
+
+  it("omits ref when no referral code is supplied", () => {
+    expect(magicLinkRedirectUrl("https://app.paylo.one", "/onboarding")).toBe(
+      "https://app.paylo.one/auth/confirm?next=%2Fonboarding",
+    );
+  });
+
   it("falls back for external and protocol-relative destinations", () => {
     expect(
       magicLinkRedirectUrl("https://app.paylo.one", "https://example.com"),

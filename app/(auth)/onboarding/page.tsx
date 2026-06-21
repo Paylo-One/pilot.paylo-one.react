@@ -22,14 +22,23 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function OnboardingPage() {
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ref?: string }>;
+}) {
   const user = await getSignedInUser();
   if (!user) redirect("/sign-in");
 
   const existing = await findPrimaryTenantSlug(user.userId);
   if (existing) redirect(tenantBaseUrl(existing));
 
-  const referralCode = (await cookies()).get(REFERRAL_COOKIE)?.value;
+  // The apex `paylo_ref` cookie is the primary carrier, but it can be lost over
+  // the magic-link round-trip; `?ref=` (threaded through the link) is the
+  // fallback. Re-validated below regardless of source.
+  const cookieRef = (await cookies()).get(REFERRAL_COOKIE)?.value;
+  const { ref: urlRef } = await searchParams;
+  const referralCode = cookieRef ?? urlRef;
   if (!referralCode) redirect("/invite-unavailable?reason=referral-required");
 
   const validation = await referralService.validateCode(referralCode);
@@ -61,7 +70,7 @@ export default async function OnboardingPage() {
         reference stays isolated inside this workspace.
       </p>
 
-      <OnboardingForm apexSuffix={activeApex()} />
+      <OnboardingForm apexSuffix={activeApex()} referralCode={referralCode} />
     </>
   );
 }

@@ -7,7 +7,14 @@ const initial: OnboardingState = { error: null };
 
 type WizardStep = 1 | 2 | 3;
 
-export function OnboardingForm({ apexSuffix }: { apexSuffix: string }) {
+export function OnboardingForm({
+  apexSuffix,
+  referralCode,
+}: {
+  apexSuffix: string;
+  /** Threaded into the action so referral capture survives a lost cookie. */
+  referralCode: string;
+}) {
   const [state, formAction, pending] = useActionState(createWorkspace, initial);
   const [step, setStep] = useState<WizardStep>(1);
   const [workspaceName, setWorkspaceName] = useState("");
@@ -24,6 +31,7 @@ export function OnboardingForm({ apexSuffix }: { apexSuffix: string }) {
 
   return (
     <form className="card onboarding-wizard" action={formAction}>
+      <input type="hidden" name="referralCode" value={referralCode} />
       <ol className="onboarding-wizard__progress" aria-label="Workspace setup progress">
         {["Workspace", "Address", "Confirm"].map((label, index) => {
           const number = (index + 1) as WizardStep;

@@ -51,7 +51,10 @@ export async function createWorkspace(
   if (!user) redirect("/sign-in");
 
   const cookieStore = await cookies();
-  const referralCode = cookieStore.get(REFERRAL_COOKIE)?.value;
+  // Cookie is primary; the hidden form field (seeded from the magic link's
+  // `?ref=`) is the fallback when the cookie was lost over the email round-trip.
+  const formReferral = (formData.get("referralCode") as string | null) ?? undefined;
+  const referralCode = cookieStore.get(REFERRAL_COOKIE)?.value ?? formReferral;
   if (!referralCode) redirect("/invite-unavailable?reason=referral-required");
 
   const referralValidation = await referralService.validateCode(referralCode);

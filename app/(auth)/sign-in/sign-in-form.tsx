@@ -101,9 +101,16 @@ function readableError(
 export function SignInForm({
   mode = "sign-in",
   nextPath = "/onboarding",
+  referralCode,
 }: {
   mode?: "sign-in" | "registration";
   nextPath?: string;
+  /**
+   * Registration only: the validated referral code, threaded into the magic
+   * link so onboarding can recover it if the `paylo_ref` cookie is lost across
+   * the email round-trip. Ignored for ordinary sign-in.
+   */
+  referralCode?: string;
 }) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("idle");
@@ -149,7 +156,11 @@ export function SignInForm({
     setStatus("sending");
     try {
       const supabase = createSupabaseBrowserClient();
-      const emailRedirectTo = magicLinkRedirectUrl(window.location.origin, nextPath);
+      const emailRedirectTo = magicLinkRedirectUrl(
+        window.location.origin,
+        nextPath,
+        mode === "registration" ? referralCode : undefined,
+      );
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
