@@ -111,6 +111,51 @@ function mapClient(row: any): McpClient {
   };
 }
 
+function registrationError(message: string, detail?: Record<string, unknown>) {
+  return new ValidationError(message, detail);
+}
+
+function normaliseClientName(value: unknown): string {
+  const name = typeof value === "string" ? value.trim() : "";
+  return name.slice(0, 120) || "MCP Client";
+}
+
+function validateDynamicRedirectUris(value: unknown): Result<string[]> {
+  if (!Array.isArray(value) || value.length === 0) {
+    return err(registrationError("Dynamic MCP clients must provide redirect_uris."));
+  }
+  if (value.length > 10) {
+    return err(registrationError("Dynamic MCP clients may register up to 10 redirect URIs."));
+  }
+
+  const redirectUris: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") {
+      return err(registrationError("Every redirect URI must be a string."));
+    }
+    let url: URL;
+    try {
+      url = new URL(item);
+    } catch {
+      return err(registrationError("Every redirect URI must be a valid URL."));
+    }
+    const isLocalhost =
+      url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    if (url.protocol !== "https:" && !(isLocalhost && url.protocol === "http:")) {
+      return err(
+        registrationError(
+          "Redirect URIs must use HTTPS, except localhost development callbacks.",
+        ),
+      );
+    }
+    if (url.hash) {
+      return err(registrationError("Redirect URIs must not include fragments."));
+    }
+    redirectUris.push(url.toString());
+  }
+  return ok([...new Set(redirectUris)]);
+}
+
 async function getClientByClientId(clientId: string): Promise<McpClient | null> {
   const secret = createSupabaseSecretClient();
   const { data, error } = await secret
@@ -122,6 +167,80 @@ async function getClientByClientId(clientId: string): Promise<McpClient | null> 
     .maybeSingle();
   if (error) throw new Error(error.message);
   return data ? mapClient(data) : null;
+}
+
+export interface DynamicClientRegistrationResponse {
+  readonly client_id: string;
+  readonly client_id_issued_at: number;
+  readonly client_secret_expires_at: 0;
+  readonly redirect_uris: readonly string[];
+  readonly token_endpoint_auth_method: "none";
+  readonly grant_types: readonly ["authorization_code", "refresh_token"];
+  readonly response_types: readonly ["code"];
+  readonly client_name: string;
+  readonly client_uri?: string;
+  readonly scope: string;
+}
+
+export async function registerDynamicMcpClient(
+  metadata: Record<string, unknown>,
+): Promise<Result<DynamicClientRegistrationResponse>> {
+  const redirectUris = validateDynamicRedirectUris(metadata.redirect_uris);
+  if (!redirectUris.ok) return redirectUris;
+
+  const authMethod =
+    typeof metadata.token_endpoint_auth_method === "string"
+      ? metadata.token_endpoint_auth_method
+      : "none";
+  if (authMethod !== "none") {
+    return err(
+      registrationError("Pilot dynamic MCP registration supports public PKCE clients only."),
+    );
+  }
+
+  const requestedScope = typeof metadata.scope === "string" ? metadata.scope : "";
+  const rawScopes = requestedScope
+    .split(/\s+/)
+    .map((scope) => scope.trim())
+    .filter(Boolean);
+  const scopesResult =
+    rawScopes.length > 0
+      ? assertKnownScopes(rawScopes)
+      : ok([...ALL_MCP_SCOPES]);
+  if (!scopesResult.ok) return scopesResult;
+
+  const now = Math.floor(Date.now() / 1000);
+  const clientId = createOpaqueToken("plo_mcp_client");
+  const clientName = normaliseClientName(metadata.client_name);
+  const clientUri =
+    typeof metadata.client_uri === "string" && metadata.client_uri.startsWith("https://")
+      ? metadata.client_uri
+      : undefined;
+
+  const secret = createSupabaseSecretClient();
+  const { error } = await secret.from("mcp_oauth_clients").insert({
+    client_id: clientId,
+    name: clientName,
+    description: "Dynamically registered MCP OAuth client.",
+    client_type: "public",
+    redirect_uris: redirectUris.value,
+    allowed_scopes: scopesResult.value,
+    status: "active",
+  });
+  if (error) return err(new AppError("internal", error.message));
+
+  return ok({
+    client_id: clientId,
+    client_id_issued_at: now,
+    client_secret_expires_at: 0,
+    redirect_uris: redirectUris.value,
+    token_endpoint_auth_method: "none",
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"],
+    client_name: clientName,
+    ...(clientUri ? { client_uri: clientUri } : {}),
+    scope: scopesResult.value.join(" "),
+  });
 }
 
 async function validateClientSecret(input: {

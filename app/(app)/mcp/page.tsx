@@ -169,8 +169,9 @@ export default async function ToolLayerPage() {
         </div>
         <p className="action-card__rationale">
           Use these details in a client that supports remote MCP servers with
-          OAuth. The client will open Pilot for approval, ask you to choose a
-          workspace, then receive a scoped token for that workspace only.
+          OAuth. Claude, Warp, and similar clients can register automatically;
+          Pilot will then open for approval, ask you to choose a workspace, and
+          issue a scoped token for that workspace only.
         </p>
         <div className="stack" style={{ gap: "var(--space-sm)", marginTop: "var(--space-md)" }}>
           <div className="meta-row">
@@ -178,7 +179,7 @@ export default async function ToolLayerPage() {
             <span className="meta-row__value mono">{issuer}/api/mcp</span>
           </div>
           <div className="meta-row">
-            <span className="meta-row__key">2. Use OAuth discovery</span>
+            <span className="meta-row__key">2. Let the client register</span>
             <span className="meta-row__value mono">
               {issuer}/.well-known/oauth-authorization-server
             </span>
@@ -208,8 +209,9 @@ export default async function ToolLayerPage() {
           </div>
         </div>
         <p className="action-card__rationale">
-          Approved clients use OAuth with PKCE and short-lived bearer tokens.
-          Public clients never receive a shared secret.
+          Approved clients use OAuth with dynamic client registration, PKCE,
+          and short-lived bearer tokens. Public clients never receive a shared
+          secret.
         </p>
         <div className="stack" style={{ gap: "var(--space-sm)", marginTop: "var(--space-md)" }}>
           <div className="meta-row">
@@ -224,6 +226,12 @@ export default async function ToolLayerPage() {
             <span className="meta-row__key">Metadata</span>
             <span className="meta-row__value mono">
               {issuer}/.well-known/oauth-authorization-server
+            </span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">Registration</span>
+            <span className="meta-row__value mono">
+              {issuer}/api/mcp/oauth/register
             </span>
           </div>
         </div>

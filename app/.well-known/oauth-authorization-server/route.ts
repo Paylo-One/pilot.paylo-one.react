@@ -8,6 +8,7 @@ export async function GET() {
     issuer,
     authorization_endpoint: `${issuer}/mcp/authorize`,
     token_endpoint: `${issuer}/api/mcp/oauth/token`,
+    registration_endpoint: `${issuer}/api/mcp/oauth/register`,
     revocation_endpoint: `${issuer}/api/mcp/oauth/revoke`,
     introspection_endpoint: `${issuer}/api/mcp/oauth/introspect`,
     response_types_supported: ["code"],

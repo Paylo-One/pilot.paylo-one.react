@@ -1,9 +1,24 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { insertMock } = vi.hoisted(() => ({
+  insertMock: vi.fn(),
+}));
+
+vi.mock("@/lib/supabase/secret", () => ({
+  createSupabaseSecretClient: () => ({
+    from: () => ({
+      insert: insertMock,
+    }),
+  }),
+}));
+
 import {
+  ALL_MCP_SCOPES,
   assertKnownScopes,
   hasScopes,
   parseScopes,
+  registerDynamicMcpClient,
   validateRedirectUri,
   verifyPkce,
   type McpClient,
@@ -30,6 +45,11 @@ const client: McpClient = {
 };
 
 describe("MCP OAuth helpers", () => {
+  beforeEach(() => {
+    insertMock.mockReset();
+    insertMock.mockResolvedValue({ error: null });
+  });
+
   it("parses only known scopes and removes duplicates", () => {
     expect(parseScopes("memory:read memory:read unknown actions:read")).toEqual([
       "memory:read",
@@ -74,5 +94,57 @@ describe("MCP OAuth helpers", () => {
         method: "S256",
       }),
     ).toBe(false);
+  });
+
+  it("registers public dynamic MCP clients with their callback URI and requested scopes", async () => {
+    const result = await registerDynamicMcpClient({
+      redirect_uris: ["http://127.0.0.1:6274/oauth/callback"],
+      token_endpoint_auth_method: "none",
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      client_name: "Claude",
+      scope: "memory:read actions:read",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(insertMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        client_type: "public",
+        name: "Claude",
+        redirect_uris: ["http://127.0.0.1:6274/oauth/callback"],
+        allowed_scopes: ["memory:read", "actions:read"],
+      }),
+    );
+    if (result.ok) {
+      expect(result.value.client_id).toMatch(/^plo_mcp_client_/);
+      expect(result.value.scope).toBe("memory:read actions:read");
+      expect(result.value.token_endpoint_auth_method).toBe("none");
+    }
+  });
+
+  it("defaults dynamic clients to the supported Pilot MCP scopes when no scope is supplied", async () => {
+    const result = await registerDynamicMcpClient({
+      redirect_uris: ["http://localhost:3334/oauth/callback"],
+      token_endpoint_auth_method: "none",
+      client_name: "Warp",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(insertMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        allowed_scopes: ALL_MCP_SCOPES,
+      }),
+    );
+  });
+
+  it("rejects dynamic clients with unsafe redirect URIs", async () => {
+    const result = await registerDynamicMcpClient({
+      redirect_uris: ["http://example.com/oauth/callback"],
+      token_endpoint_auth_method: "none",
+      client_name: "Unsafe Client",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(insertMock).not.toHaveBeenCalled();
   });
 });

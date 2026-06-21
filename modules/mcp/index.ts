@@ -22,6 +22,7 @@ export {
   listMcpGrants,
   parseScopes,
   recordMcpAudit,
+  registerDynamicMcpClient,
   revokeGrant,
   revokeTokenOrGrant,
   rotateRefreshToken,
