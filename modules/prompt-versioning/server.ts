@@ -18,7 +18,13 @@ import "server-only";
  * inside the Gateway, matching the metering write's pattern.
  */
 
-import { ValidationError, err, ok, type Result, type TenantContext } from "@/modules/shared";
+import {
+  ValidationError,
+  err,
+  ok,
+  type Result,
+  type TenantContext,
+} from "@/modules/shared";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseSecretClient } from "@/lib/supabase/secret";
 import {
@@ -36,17 +42,21 @@ import {
   type TenantPromptSummary,
 } from "./index";
 import { DEFAULT_PROMPT_CATALOGUE, getPromptDefault } from "./defaults";
+import { getActiveManifestoBody } from "@/modules/manager-manifesto/server";
+import { getLinkedSkillsForPrompt } from "@/modules/custom-skills/server";
+import { MANIFESTO_INJECTION_CHAR_CAP } from "@/modules/manager-manifesto";
+import { SKILL_INJECTION_CHAR_CAP } from "@/modules/custom-skills";
 
 // --- Row mapping --------------------------------------------------------------
 
 const PROMPT_SELECT =
-  "id, template_key, name, description, workflow, catalogue_version, archived_at, created_by, created_at, updated_at";
+  "id, template_key, name, description, workflow, purpose, catalogue_version, archived_at, created_by, created_at, updated_at";
 
 const VERSION_SELECT =
   "id, tenant_prompt_id, version_number, content, input_variables, output_format, model_settings, status, change_note, restored_from_version_id, created_by, created_at, activated_at, archived_at";
 
 const TEST_RUN_SELECT =
-  "id, tenant_prompt_id, prompt_version_id, input_kind, input_payload, model_id, model_settings, status, output, validation, error, latency_ms, total_tokens, created_at";
+  "id, tenant_prompt_id, prompt_version_id, input_kind, input_payload, model_id, model_settings, status, output, validation, error, latency_ms, total_tokens, evaluation, compared_version_id, created_at";
 
 interface PromptRow {
   id: string;
@@ -54,6 +64,7 @@ interface PromptRow {
   name: string;
   description: string | null;
   workflow: string;
+  purpose: string;
   catalogue_version: string;
   archived_at: string | null;
   created_by: string | null;
@@ -92,16 +103,21 @@ interface TestRunRow {
   error: string | null;
   latency_ms: number | null;
   total_tokens: number | null;
+  evaluation: unknown;
+  compared_version_id: string | null;
   created_at: string;
 }
 
-function mapPromptRow(row: PromptRow): Omit<TenantPromptSummary, "activeVersionNumber" | "versionCount"> {
+function mapPromptRow(
+  row: PromptRow,
+): Omit<TenantPromptSummary, "activeVersionNumber" | "versionCount"> {
   return {
     id: row.id,
     templateKey: row.template_key as PromptTemplateKey,
     name: row.name,
     description: row.description,
     workflow: row.workflow,
+    purpose: row.purpose,
     catalogueVersion: row.catalogue_version,
     archivedAt: row.archived_at,
     createdBy: row.created_by,
@@ -116,7 +132,8 @@ function mapVersionRow(row: VersionRow): StoredPromptVersion {
     tenantPromptId: row.tenant_prompt_id,
     versionNumber: row.version_number,
     content: row.content,
-    inputVariables: (row.input_variables ?? []) as readonly PromptInputVariable[],
+    inputVariables: (row.input_variables ??
+      []) as readonly PromptInputVariable[],
     outputFormat: (row.output_format ?? {}) as PromptOutputFormat,
     modelSettings: (row.model_settings ?? {}) as PromptModelSettings,
     status: row.status as StoredVersionStatus,
@@ -144,6 +161,8 @@ function mapTestRunRow(row: TestRunRow): StoredTestRun {
     error: row.error,
     latencyMs: row.latency_ms,
     totalTokens: row.total_tokens,
+    evaluation: row.evaluation ?? null,
+    comparedVersionId: row.compared_version_id,
     createdAt: row.created_at,
   };
 }
@@ -176,10 +195,16 @@ function resolvedFromStored(
       promptVersion: `v${version.versionNumber}`,
       agentVersion: base.version.agentVersion,
       systemPrompt: version.content,
-      modelPolicy: { policyName: version.modelSettings.policyName ?? base.version.modelPolicy.policyName },
-      temperature: version.modelSettings.temperature ?? base.version.temperature,
+      modelPolicy: {
+        policyName:
+          version.modelSettings.policyName ??
+          base.version.modelPolicy.policyName,
+      },
+      temperature:
+        version.modelSettings.temperature ?? base.version.temperature,
       maxTokens: version.modelSettings.maxTokens ?? base.version.maxTokens,
-      structuredOutputSchemaId: version.outputFormat.schemaId ?? base.version.structuredOutputSchemaId,
+      structuredOutputSchemaId:
+        version.outputFormat.schemaId ?? base.version.structuredOutputSchemaId,
       retrievalPolicy: base.version.retrievalPolicy,
       sourceReferencePolicy: base.version.sourceReferencePolicy,
       status: version.status,
@@ -187,6 +212,68 @@ function resolvedFromStored(
       promptVersionDbId: version.id,
     },
   };
+}
+
+function clampText(text: string, max: number): string {
+  const trimmed = text.trim();
+  return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed;
+}
+
+/**
+ * Compose the final system instruction: the workspace's active Manager
+ * Manifesto, then any Custom Skills linked to this prompt, then the prompt's
+ * own content — each in a clearly delimited section. This is what makes the
+ * manifesto and skills genuinely shape every governed AI output. Both reads
+ * are best-effort (they never throw); on failure the prompt content is used
+ * unchanged so inference never breaks.
+ */
+async function composeSystemPrompt(
+  tenantId: string,
+  tenantPromptId: string | null,
+  baseSystemPrompt: string,
+): Promise<string> {
+  const [manifesto, skills] = await Promise.all([
+    getActiveManifestoBody(tenantId),
+    tenantPromptId
+      ? getLinkedSkillsForPrompt(tenantId, tenantPromptId)
+      : Promise.resolve([]),
+  ]);
+
+  const blocks: string[] = [];
+  if (manifesto) {
+    blocks.push(
+      [
+        "# Manager Manifesto",
+        "The operator's standing guidance for how to interpret and present their information. Honour it throughout.",
+        "",
+        clampText(manifesto, MANIFESTO_INJECTION_CHAR_CAP),
+      ].join("\n"),
+    );
+  }
+  for (const skill of skills) {
+    blocks.push(
+      [
+        "# Skill — " + skill.name,
+        clampText(skill.instructions, SKILL_INJECTION_CHAR_CAP),
+      ].join("\n"),
+    );
+  }
+  blocks.push(["# Task", baseSystemPrompt].join("\n"));
+  return blocks.join("\n\n---\n\n");
+}
+
+/** Build a composed ResolvedPrompt from a base one (manifesto + skills folded in). */
+async function withComposedSystemPrompt(
+  resolved: ResolvedPrompt,
+  tenantId: string,
+  tenantPromptId: string | null,
+): Promise<ResolvedPrompt> {
+  const systemPrompt = await composeSystemPrompt(
+    tenantId,
+    tenantPromptId,
+    resolved.version.systemPrompt,
+  );
+  return { ...resolved, version: { ...resolved.version, systemPrompt } };
 }
 
 /**
@@ -202,7 +289,9 @@ export const promptVersioningService: PromptVersioningService = {
         const secret = createSupabaseSecretClient();
         const { data, error } = await secret
           .from("prompt_versions")
-          .select(`${VERSION_SELECT}, tenant_prompts!inner(template_key, name, description)`)
+          .select(
+            `${VERSION_SELECT}, tenant_prompts!inner(template_key, name, description)`,
+          )
           .eq("id", req.promptVersionId)
           .eq("tenant_id", ctx.tenantId)
           .maybeSingle();
@@ -219,12 +308,17 @@ export const promptVersioningService: PromptVersioningService = {
           name: string;
           description: string | null;
         };
+        const resolvedPin = resolvedFromStored(
+          prompt.template_key,
+          prompt.name,
+          prompt.description,
+          mapVersionRow(data as unknown as VersionRow),
+        );
         return ok(
-          resolvedFromStored(
-            prompt.template_key,
-            prompt.name,
-            prompt.description,
-            mapVersionRow(data as unknown as VersionRow),
+          await withComposedSystemPrompt(
+            resolvedPin,
+            ctx.tenantId,
+            (data as unknown as VersionRow).tenant_prompt_id,
           ),
         );
       } catch (cause) {
@@ -242,7 +336,9 @@ export const promptVersioningService: PromptVersioningService = {
       const secret = createSupabaseSecretClient();
       const { data, error } = await secret
         .from("prompt_versions")
-        .select(`${VERSION_SELECT}, tenant_prompts!inner(template_key, name, description, archived_at)`)
+        .select(
+          `${VERSION_SELECT}, tenant_prompts!inner(template_key, name, description, archived_at)`,
+        )
         .eq("tenant_id", ctx.tenantId)
         .eq("status", "active")
         .eq("tenant_prompts.template_key", req.promptTemplateId)
@@ -262,7 +358,10 @@ export const promptVersioningService: PromptVersioningService = {
             prompt.description,
             mapVersionRow(data as unknown as VersionRow),
           );
-          if (req.promptVersion && req.promptVersion !== resolved.version.promptVersion) {
+          if (
+            req.promptVersion &&
+            req.promptVersion !== resolved.version.promptVersion
+          ) {
             return err(
               new ValidationError("requested prompt version is not available", {
                 promptTemplateId: req.promptTemplateId,
@@ -271,7 +370,13 @@ export const promptVersioningService: PromptVersioningService = {
               }),
             );
           }
-          return ok(resolved);
+          return ok(
+            await withComposedSystemPrompt(
+              resolved,
+              ctx.tenantId,
+              (data as unknown as VersionRow).tenant_prompt_id,
+            ),
+          );
         }
       }
     } catch (cause) {
@@ -284,7 +389,10 @@ export const promptVersioningService: PromptVersioningService = {
 
     // 3) In-code default / generic fallback (exact pre-DB behaviour).
     const resolved = fallbackResolve(req);
-    if (req.promptVersion && req.promptVersion !== resolved.version.promptVersion) {
+    if (
+      req.promptVersion &&
+      req.promptVersion !== resolved.version.promptVersion
+    ) {
       return err(
         new ValidationError("requested prompt version is not available", {
           promptTemplateId: req.promptTemplateId,
@@ -293,7 +401,9 @@ export const promptVersioningService: PromptVersioningService = {
         }),
       );
     }
-    return ok(resolved);
+    // The manifesto still composes in even when no stored prompt served the
+    // call (un-seeded tenant / DB failure), so behaviour stays consistent.
+    return ok(await withComposedSystemPrompt(resolved, ctx.tenantId, null));
   },
 };
 
@@ -304,7 +414,10 @@ export const promptVersioningService: PromptVersioningService = {
  * (tenant, template_key) rows are left untouched; version 1 (active) is created
  * only for newly inserted prompts. Used at provisioning and as lazy backfill.
  */
-export async function seedTenantPrompts(tenantId: string, userId?: string): Promise<void> {
+export async function seedTenantPrompts(
+  tenantId: string,
+  userId?: string,
+): Promise<void> {
   const secret = createSupabaseSecretClient();
 
   const { data: inserted, error } = await secret
@@ -316,6 +429,7 @@ export async function seedTenantPrompts(tenantId: string, userId?: string): Prom
         name: d.name,
         description: d.description,
         workflow: d.workflow,
+        purpose: d.purpose,
         catalogue_version: d.catalogueVersion,
         created_by: userId ?? null,
       })),
@@ -327,7 +441,9 @@ export async function seedTenantPrompts(tenantId: string, userId?: string): Prom
 
   const { error: versionError } = await secret.from("prompt_versions").insert(
     inserted.map((row) => {
-      const d = DEFAULT_PROMPT_CATALOGUE.find((c) => c.templateKey === row.template_key)!;
+      const d = DEFAULT_PROMPT_CATALOGUE.find(
+        (c) => c.templateKey === row.template_key,
+      )!;
       return {
         tenant_id: tenantId,
         tenant_prompt_id: row.id,
@@ -428,8 +544,9 @@ export async function getPromptVersion(
     .maybeSingle();
   if (error) return err(new ValidationError(error.message));
   if (!data) return err(new ValidationError("prompt version not found"));
-  const templateKey = (data.tenant_prompts as unknown as { template_key: string })
-    .template_key as PromptTemplateKey;
+  const templateKey = (
+    data.tenant_prompts as unknown as { template_key: string }
+  ).template_key as PromptTemplateKey;
   return ok({ ...mapVersionRow(data as unknown as VersionRow), templateKey });
 }
 
@@ -453,7 +570,10 @@ export async function listTestRuns(
 // --- Mutations (SECRET client, explicit tenant predicates) -----------------------
 
 /** Guard: the tenant prompt must belong to the caller's tenant. */
-async function assertPromptOwned(tenantId: string, tenantPromptId: string): Promise<Result<void>> {
+async function assertPromptOwned(
+  tenantId: string,
+  tenantPromptId: string,
+): Promise<Result<void>> {
   const secret = createSupabaseSecretClient();
   const { data, error } = await secret
     .from("tenant_prompts")
@@ -493,7 +613,8 @@ export async function createPromptVersion(
     .limit(1)
     .maybeSingle();
   if (maxError) return err(new ValidationError(maxError.message));
-  const versionNumber = ((latest?.version_number as number | undefined) ?? 0) + 1;
+  const versionNumber =
+    ((latest?.version_number as number | undefined) ?? 0) + 1;
 
   const { data, error } = await secret
     .from("prompt_versions")
@@ -512,7 +633,8 @@ export async function createPromptVersion(
     })
     .select("id")
     .single();
-  if (error || !data) return err(new ValidationError(error?.message ?? "version_create_failed"));
+  if (error || !data)
+    return err(new ValidationError(error?.message ?? "version_create_failed"));
   return ok({ versionId: data.id as string, versionNumber });
 }
 
@@ -542,7 +664,13 @@ export async function activatePromptVersion(
 export async function resetPromptToDefault(
   ctx: TenantContext,
   tenantPromptId: string,
-): Promise<Result<{ versionId: string; versionNumber: number; templateKey: PromptTemplateKey }>> {
+): Promise<
+  Result<{
+    versionId: string;
+    versionNumber: number;
+    templateKey: PromptTemplateKey;
+  }>
+> {
   const secret = createSupabaseSecretClient();
 
   // Ownership check + the template key the default catalogue is keyed by.
@@ -560,7 +688,11 @@ export async function resetPromptToDefault(
   try {
     def = getPromptDefault(templateKey);
   } catch (cause) {
-    return err(new ValidationError(cause instanceof Error ? cause.message : "unknown prompt template"));
+    return err(
+      new ValidationError(
+        cause instanceof Error ? cause.message : "unknown prompt template",
+      ),
+    );
   }
 
   // Append the default as a new version (append-only — never overwrites).
@@ -607,7 +739,8 @@ export async function archivePromptVersion(
     .eq("tenant_id", ctx.tenantId)
     .select("id");
   if (error) return err(new ValidationError(error.message));
-  if (!data || data.length === 0) return err(new ValidationError("prompt version not found"));
+  if (!data || data.length === 0)
+    return err(new ValidationError("prompt version not found"));
   return ok(undefined);
 }
 
@@ -630,7 +763,8 @@ export async function updatePromptMeta(
     .eq("tenant_id", ctx.tenantId)
     .select("id");
   if (error) return err(new ValidationError(error.message));
-  if (!data || data.length === 0) return err(new ValidationError("prompt not found"));
+  if (!data || data.length === 0)
+    return err(new ValidationError("prompt not found"));
   return ok(undefined);
 }
 
@@ -648,7 +782,8 @@ export async function setPromptArchived(
     .eq("tenant_id", ctx.tenantId)
     .select("id");
   if (error) return err(new ValidationError(error.message));
-  if (!data || data.length === 0) return err(new ValidationError("prompt not found"));
+  if (!data || data.length === 0)
+    return err(new ValidationError("prompt not found"));
   return ok(undefined);
 }
 
@@ -666,6 +801,8 @@ export interface RecordTestRunInput {
   readonly error: string | null;
   readonly latencyMs: number | null;
   readonly totalTokens: number | null;
+  readonly evaluation?: unknown;
+  readonly comparedVersionId?: string | null;
 }
 
 /** Persist a test run (append-only evidence; failures are valid records). */
@@ -692,9 +829,12 @@ export async function recordTestRun(
       error: input.error,
       latency_ms: input.latencyMs,
       total_tokens: input.totalTokens,
+      evaluation: input.evaluation ?? null,
+      compared_version_id: input.comparedVersionId ?? null,
     })
     .select("id")
     .single();
-  if (error || !data) return err(new ValidationError(error?.message ?? "test_run_record_failed"));
+  if (error || !data)
+    return err(new ValidationError(error?.message ?? "test_run_record_failed"));
   return ok({ testRunId: data.id as string });
 }

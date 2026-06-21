@@ -105,8 +105,8 @@ const GROUPS: NavGroup[] = [
         ),
       },
       {
-        href: "/prompts",
-        label: "Prompts",
+        href: "/intelligence",
+        label: "Intelligence",
         icon: (
           <svg {...ICON_PROPS}>
             <rect x="3" y="4" width="18" height="16" rx="2" />
@@ -136,7 +136,12 @@ const GROUPS: NavGroup[] = [
           <svg {...ICON_PROPS}>
             <path d="M4 6h16M4 12h16M4 18h16" />
             <circle cx="9" cy="6" r="2" fill="var(--colour-surface-command)" />
-            <circle cx="15" cy="12" r="2" fill="var(--colour-surface-command)" />
+            <circle
+              cx="15"
+              cy="12"
+              r="2"
+              fill="var(--colour-surface-command)"
+            />
             <circle cx="8" cy="18" r="2" fill="var(--colour-surface-command)" />
           </svg>
         ),
