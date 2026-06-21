@@ -16,10 +16,15 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const id = body?.id ?? null;
   const method = String(body?.method ?? "");
+  const isNotification = body && body.id === undefined;
   const auth = await validateBearerToken(request.headers.get("authorization"));
 
   if (!auth.ok) {
     return jsonRpcError(id, -32001, auth.error.message, 401);
+  }
+
+  if (isNotification) {
+    return new NextResponse(null, { status: 202 });
   }
 
   if (method === "initialize") {
@@ -60,4 +65,8 @@ export async function POST(request: Request) {
   }
 
   return jsonRpcError(id, -32601, "Unknown MCP method.");
+}
+
+export async function GET() {
+  return new NextResponse(null, { status: 405 });
 }
