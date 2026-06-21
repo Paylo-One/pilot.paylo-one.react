@@ -56,9 +56,9 @@ export default function RequestAccessPage() {
         className="text-secondary measure"
         style={{ fontSize: "var(--text-body)", marginBottom: "var(--space-xl)" }}
       >
-        Paylo.one is invite-only while we are in private beta. Tell us a little
-        about yourself and what you want to get on top of, and we will be in
-        touch if it is a fit. It takes under a minute.
+        Paylo One is invite-only, so we can keep the early network small and
+        considered. Tell us a little about yourself and what you want to get on
+        top of, and we will be in touch if it is a fit. It takes under a minute.
       </p>
 
       <RequestAccessForm />

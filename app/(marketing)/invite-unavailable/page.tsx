@@ -25,27 +25,27 @@ interface InviteUnavailablePageProps {
 const COPY = {
   "limit-reached": {
     eyebrow: "Invitation limit reached",
-    title: "This referral has no invitations left",
+    title: "This invitation has been fully used",
     body:
-      "The available places on this referral have already been used. Ask the person who shared it whether they can send you another valid referral.",
+      "Every place on this private invitation has been taken. Ask the person who shared it whether they have another. Strong members are sometimes given more to pass on.",
   },
   "referral-required": {
-    eyebrow: "Invitation required",
-    title: "A valid referral is required to register",
+    eyebrow: "Invite-only",
+    title: "Paylo One is invite-only",
     body:
-      "Paylo.one is currently invite-only. Open the personal referral link you were sent, or request access if you do not have one.",
+      "Access is granted through a personal invitation, not open sign-up. Open the link you were sent, or request access and we will be in touch if it is a fit.",
   },
   invalid: {
-    eyebrow: "Invalid invitation",
-    title: "This referral link is not valid",
+    eyebrow: "Invitation not recognised",
+    title: "We don't recognise this invitation",
     body:
-      "The link may be incomplete or no longer active. Ask the person who shared it to check the referral and send it again.",
+      "The link may be incomplete or no longer active. Ask the person who shared it to send their invitation again.",
   },
   unavailable: {
     eyebrow: "Invitation unavailable",
-    title: "We could not verify this referral",
+    title: "We couldn't check this invitation",
     body:
-      "The referral could not be checked right now. Try the original link again, or request access if the problem continues.",
+      "Something went wrong verifying the invitation. Try the original link again, or request access if it keeps happening.",
   },
 } as const;
 

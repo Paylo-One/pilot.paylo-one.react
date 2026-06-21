@@ -52,8 +52,9 @@ export default async function RegisterPage() {
           fontSize: "var(--text-small)",
         }}
       >
-        Your referral is valid. We will send a one-time link to verify your
-        identity, then help you choose your workspace name and Paylo.one address.
+        Your invitation is valid. Welcome. We will send a one-time link to
+        verify your identity, then help you choose your workspace name and
+        Paylo.one address.
       </p>
 
       <SignInForm mode="registration" />

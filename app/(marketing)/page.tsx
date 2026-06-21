@@ -69,8 +69,9 @@ export default async function AppApexLanding() {
       </ul>
 
       <p className="text-tertiary" style={{ fontSize: "var(--text-small)", marginBottom: "var(--space-lg)" }}>
-        Your workspace is private to you. Access is invite-only while we are in
-        private beta.
+        Paylo One is invite-only. We are building a focused network of
+        thoughtful operators, founders, and managers who care about clarity,
+        memory, and better decisions. Your workspace is always private to you.
       </p>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-sm)" }}>

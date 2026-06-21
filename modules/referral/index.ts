@@ -47,7 +47,8 @@ export type ReferralReservationOutcome =
   | "reserved"
   | "not_found"
   | "self_referral"
-  | "exhausted";
+  | "exhausted"
+  | "suspended";
 
 /** Apex-scoped cookie carrying a validated referral through authentication. */
 export const REFERRAL_COOKIE = "paylo_ref";
@@ -62,7 +63,12 @@ export interface ReferralOverview {
   readonly allocation: number;
   readonly used: number;
   readonly remaining: number;
+  /** Admin pause state only. Exhaustion is reported via `limitReached`. */
   readonly status: ReferralStatus;
+  /** True when every invitation has been used (derived, never stored). */
+  readonly limitReached: boolean;
+  /** Operator-supplied note shown when an admin has paused the link. */
+  readonly suspendedReason: string | null;
 }
 
 /** One person who joined through the owner's code (serialisable for the UI). */
@@ -104,9 +110,11 @@ interface ReferralCodeRow {
   code: string;
   allocation: number;
   status: ReferralStatus;
+  suspended_reason: string | null;
 }
 
-const CODE_COLUMNS = "id, owner_user_id, tenant_id, code, allocation, status";
+const CODE_COLUMNS =
+  "id, owner_user_id, tenant_id, code, allocation, status, suspended_reason";
 
 type SecretClient = ReturnType<typeof createSupabaseSecretClient>;
 
@@ -176,7 +184,13 @@ export interface ReferralService {
   ): Promise<Result<void>>;
   /** Release a pending reservation when provisioning fails. */
   releaseReservation(reservationId: string): Promise<Result<void>>;
-  /** Grant additional invitation uses (re-activates a suspended code). */
+  /**
+   * Grant additional invitation uses. Raising the allocation above the used
+   * count automatically un-blocks an exhausted link (exhaustion is derived).
+   * It does NOT lift an admin pause — that is a separate, deliberate action.
+   * Admin grants flow through the `admin_grant_referral_allocation` RPC; this
+   * helper remains for owner-side or scripted top-ups.
+   */
   topUp(ownerUserId: string, additional: number): Promise<Result<void>>;
 }
 
@@ -248,6 +262,8 @@ export const referralService: ReferralService = {
       used,
       remaining,
       status: codeRow.status,
+      limitReached: used >= codeRow.allocation,
+      suspendedReason: codeRow.suspended_reason,
     });
   },
 
@@ -375,32 +391,16 @@ export const referralService: ReferralService = {
   },
 
   async releaseReservation(reservationId) {
+    // Deleting the pending usage frees the slot. Status no longer needs
+    // touching: `reserve_referral` never auto-suspends on exhaustion (that is
+    // derived from usage count), and admin pauses are deliberate.
     const secret = createSupabaseSecretClient();
-    const { data, error } = await secret
+    const { error } = await secret
       .from("referral_usages")
       .delete()
       .eq("id", reservationId)
-      .eq("onboarding_status", "pending")
-      .select("referral_code_id")
-      .maybeSingle();
+      .eq("onboarding_status", "pending");
     if (error) return err(new AppError("internal", error.message));
-
-    if (data?.referral_code_id) {
-      const { data: code } = await secret
-        .from("referral_codes")
-        .select("id, allocation")
-        .eq("id", data.referral_code_id)
-        .maybeSingle();
-      if (code) {
-        const used = await countUsages(secret, code.id as string);
-        if (used < (code.allocation as number)) {
-          await secret
-            .from("referral_codes")
-            .update({ status: "active", updated_at: new Date().toISOString() })
-            .eq("id", code.id);
-        }
-      }
-    }
     return ok(undefined);
   },
 
@@ -422,7 +422,6 @@ export const referralService: ReferralService = {
       .from("referral_codes")
       .update({
         allocation: codeRow.allocation + additional,
-        status: "active",
         updated_at: new Date().toISOString(),
       })
       .eq("id", codeRow.id);

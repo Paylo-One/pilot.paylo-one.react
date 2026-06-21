@@ -31,6 +31,8 @@ import {
   IMPORTANCE_TONE,
 } from "@/modules/people/people.types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { referralService } from "@/modules/referral";
+import { InvitationStrip } from "@/components/invitations/invitation-strip";
 import { RefinementActions } from "@/components/refinement/refinement-actions";
 import { FeedbackChip } from "@/components/refinement/feedback-chip";
 import { NewsFeedbackBar } from "@/components/news/news-feedback-bar";
@@ -514,7 +516,7 @@ export default async function BriefingPage() {
   const ctx = await requireTenantContext();
   const supabase = await createSupabaseServerClient();
 
-  const [briefing, peopleInFocus, actions, activeRisksResult, profileResult, connectionsResult] =
+  const [briefing, peopleInFocus, actions, activeRisksResult, profileResult, connectionsResult, referralResult] =
     await Promise.all([
       getLatestBriefing(ctx),
       getPeopleInFocus(),
@@ -526,7 +528,10 @@ export default async function BriefingPage() {
         .eq("user_id", ctx.userId)
         .maybeSingle(),
       supabase.from("source_connections").select("id, auto_refresh_enabled"),
+      referralService.getOverview(ctx),
     ]);
+
+  const referral = referralResult.ok ? referralResult.value : null;
 
   const profile = profileResult?.data;
   const connections = connectionsResult?.data ?? [];
@@ -687,6 +692,9 @@ export default async function BriefingPage() {
             <TriageItem href="#memo" count={briefing.externalSignals.length} label="New signals" tone="muted" />
           ) : null}
         </nav>
+
+        {/* -- Invite-only access -- */}
+        {referral ? <InvitationStrip overview={referral} /> : null}
 
         {/* -- Priority lane -- */}
         <AttentionSection items={attention} hasAnyActions={actions.length > 0} />

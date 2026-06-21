@@ -128,7 +128,8 @@ export async function createWorkspace(
     });
     redirect(
       `/invite-unavailable?reason=${
-        reservation.value.outcome === "exhausted"
+        reservation.value.outcome === "exhausted" ||
+        reservation.value.outcome === "suspended"
           ? "limit-reached"
           : "invalid"
       }`,

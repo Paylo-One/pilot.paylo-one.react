@@ -30,7 +30,6 @@ import {
 import { PasskeysCard } from "./passkeys-card";
 import { ByoModelCard } from "@/components/settings/byo-model-card";
 import { OnboardingLauncher } from "@/components/settings/onboarding-launcher";
-import { ReferralCard } from "./referral-card";
 import { SettingsNav } from "./settings-nav";
 
 type SectionTag = "active" | "read-only" | "planned";
@@ -119,18 +118,23 @@ export default async function SettingsPage() {
     briefingTime: (profile?.briefing_time as string | null)?.slice(0, 5) ?? "",
   };
 
-  // Referral: the signed-in user's personal code + who has joined through it.
-  const [referralOverviewRes, referralUsagesRes] = await Promise.all([
-    referralService.getOverview(ctx),
-    referralService.listUsages(ctx),
-  ]);
+  // Invitations: a slim summary here; the full experience lives at /invitations.
+  const referralOverviewRes = await referralService.getOverview(ctx);
   const referral = referralOverviewRes.ok ? referralOverviewRes.value : null;
-  const referralUsages = referralUsagesRes.ok ? referralUsagesRes.value : [];
+  const invitationSummary = referral
+    ? referral.status === "suspended"
+      ? "Link paused"
+      : referral.limitReached
+        ? "Invitation limit reached"
+        : `${referral.remaining} ${
+            referral.remaining === 1 ? "invitation" : "invitations"
+          } available`
+    : null;
 
   const sections = [
     { id: "workspace", label: "Workspace" },
     { id: "intelligence", label: "Intelligence" },
-    { id: "referral", label: "Referral" },
+    { id: "invitations", label: "Invitations" },
     { id: "security", label: "Security & privacy" },
     { id: "tools", label: "Tool access & trust" },
   ];
@@ -222,22 +226,54 @@ export default async function SettingsPage() {
           </div>
         </SectionCard>
 
-        {/* ===== Referral ================================================= */}
-        <GroupHeading id="referral">Referral</GroupHeading>
+        {/* ===== Invitations ============================================= */}
+        <GroupHeading id="invitations">Invitations</GroupHeading>
 
         <SectionCard
-          label="Referral"
-          title="Invite people to Paylo.one"
+          label="Invitations"
+          title="Your private invitation link"
           tag="active"
         >
-          {referral ? (
-            <ReferralCard overview={referral} usages={referralUsages} />
-          ) : (
-            <p className="action-card__rationale">
-              Your reference will be ready in a moment. Refresh to see your
-              invitation link.
-            </p>
-          )}
+          <p
+            className="action-card__rationale"
+            style={{ marginBottom: "var(--space-md)" }}
+          >
+            Paylo One is invite-only. Your link lets the people you choose
+            request their own workspace. Manage it, copy it, and see who&rsquo;s
+            joined on the Invitations page.
+          </p>
+          <div className="meta-row">
+            <span className="meta-row__key">Status</span>
+            <span
+              className="meta-row__value"
+              style={{
+                display: "flex",
+                gap: "var(--space-sm)",
+                alignItems: "center",
+                justifyContent: "flex-end",
+                flexWrap: "wrap",
+              }}
+            >
+              {invitationSummary ? (
+                <span
+                  className={`status status--${
+                    referral?.status === "suspended"
+                      ? "neutral"
+                      : referral?.limitReached
+                        ? "warn"
+                        : "ok"
+                  }`}
+                >
+                  {invitationSummary}
+                </span>
+              ) : (
+                <span className="status status--info">Preparing</span>
+              )}
+              <a className="btn btn--ghost btn--sm" href="/invitations">
+                Manage invitations
+              </a>
+            </span>
+          </div>
         </SectionCard>
 
         {/* ===== Security & privacy ======================================= */}
