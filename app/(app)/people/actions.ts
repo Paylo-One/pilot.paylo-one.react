@@ -20,6 +20,7 @@ import {
   removeTag,
   applyTagBehaviour,
   setPersonCompany,
+  setPersonSelf,
   generateLinkSuggestions,
   confirmSuggestion,
   rejectSuggestion,
@@ -187,6 +188,28 @@ export async function setPersonCompanyAction(input: {
     return { ok: true, error: null };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Set company failed." };
+  }
+}
+
+/** Mark or unmark a person as the operator themselves ("This is me"). */
+export async function setPersonSelfAction(input: {
+  personId: string;
+  isSelf: boolean;
+}): Promise<Result> {
+  const ctx = await requireTenantContext();
+  if (!input?.personId) return { ok: false, error: "Missing person." };
+  try {
+    await setPersonSelf(ctx.tenantId, input.personId, input.isSelf);
+    await auditService.record(ctx, {
+      action: "person.self.set",
+      target: input.personId,
+      metadata: { isSelf: input.isSelf },
+    });
+    revalidatePath("/people");
+    revalidatePath(`/people/${input.personId}`);
+    return { ok: true, error: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Update failed." };
   }
 }
 

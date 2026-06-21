@@ -26,6 +26,7 @@ import { refreshSupabaseSession } from "@/lib/supabase/proxy";
 
 /** Header used to pass the (untrusted) routing slug to the app layer. */
 export const TENANT_SLUG_HEADER = "x-paylo-tenant-slug";
+export const REQUEST_PATH_HEADER = "x-paylo-request-path";
 
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   // Use the platform-provided host only. Do NOT read X-Forwarded-Host here.
@@ -41,6 +42,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   // loaders can re-derive { userId, tenantId, role } and verify tenant_users
   // membership (session<->tenant binding). RLS is the database backstop.
   const requestHeaders = new Headers(request.headers);
+  requestHeaders.set(REQUEST_PATH_HEADER, request.nextUrl.pathname);
   if (decision.kind === "tenant") {
     requestHeaders.set(TENANT_SLUG_HEADER, decision.slug);
   } else {

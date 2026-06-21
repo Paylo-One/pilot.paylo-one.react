@@ -27,6 +27,7 @@ import { appHostBaseUrl, tenantBaseUrl } from "@/lib/config";
 import { isSelectableSubdomain } from "@/lib/tenant/host";
 import { seedTenantPrompts } from "@/modules/prompt-versioning/server";
 import { referralService } from "@/modules/referral";
+import { createTrialBillingAccess } from "@/modules/billing/access";
 
 /** Header set by proxy.ts for a valid tenant subdomain (untrusted hint). */
 const TENANT_SLUG_HEADER = "x-paylo-tenant-slug";
@@ -288,6 +289,21 @@ export async function provisionTenantForUser(input: {
     target: slug,
     metadata: { via: "onboarding" },
   });
+
+  try {
+    await createTrialBillingAccess({
+      tenantId: tenant.id as string,
+      userId: input.userId,
+    });
+  } catch {
+    await secret.from("audit_events").insert({
+      tenant_id: tenant.id,
+      user_id: input.userId,
+      action: "billing.trial_initialisation_failed",
+      target: tenant.id,
+      metadata: { via: "onboarding" },
+    });
+  }
 
   // Every new owner gets their own referral code. Best-effort: Settings also
   // lazily creates it on first read, so a failure here must not block signup.

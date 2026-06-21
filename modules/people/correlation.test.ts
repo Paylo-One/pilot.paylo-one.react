@@ -12,6 +12,7 @@ function person(overrides: Partial<Person> & Pick<Person, "id" | "displayName">)
     relationshipType: "other",
     importance: "normal",
     status: "active",
+    isSelf: false,
     emails: [],
     phones: [],
     tags: [],

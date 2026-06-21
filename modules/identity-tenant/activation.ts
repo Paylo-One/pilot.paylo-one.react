@@ -5,6 +5,7 @@ import { createSupabaseSecretClient } from "@/lib/supabase/secret";
 import { tenantBaseUrl } from "@/lib/config";
 import { seedTenantPrompts } from "@/modules/prompt-versioning/server";
 import { referralService } from "@/modules/referral";
+import { createTrialBillingAccess } from "@/modules/billing/access";
 
 export type ActivationInvitationStatus =
   | "pending"
@@ -128,6 +129,21 @@ export async function activatePreparedTenant(input: {
   };
 
   if (result.created) {
+    try {
+      await createTrialBillingAccess({
+        tenantId: result.tenantId,
+        userId: input.userId,
+      });
+    } catch {
+      await secret.from("audit_events").insert({
+        tenant_id: result.tenantId,
+        user_id: input.userId,
+        action: "billing.trial_initialisation_failed",
+        target: result.tenantId,
+        metadata: { via: "admin_owner_activation" },
+      });
+    }
+
     try {
       await seedTenantPrompts(result.tenantId, input.userId);
       await secret.from("audit_events").insert({

@@ -132,27 +132,35 @@ describe("resolveEntitlements — account state", () => {
     expect(ent.maxBriefingsPerDay).toBe(0);
   });
 
-  it("keeps plan entitlements but pauses AI/ingestion in past_due", async () => {
+  it("collapses past_due to the locked baseline", async () => {
     withDb({ tenant_subscriptions: subRow("plan_executive", "past_due") });
     const ent = await resolveOrThrow();
-    expect(ent.maxConnectedSources).toBe(PLAN_ENTITLEMENTS.plan_executive.maxConnectedSources);
-    expect(ent.aiPaused).toBe(true);
-    expect(ent.ingestionPaused).toBe(true);
+    expect(ent.maxConnectedSources).toBe(0);
+    expect(ent.canCreateActions).toBe(false);
   });
 
-  it("keeps plan entitlements and pauses in grace", async () => {
+  it("collapses grace to the locked baseline", async () => {
     withDb({ tenant_subscriptions: subRow("plan_command", "grace") });
     const ent = await resolveOrThrow();
-    expect(ent.canUseRealtimeMonitoring).toBe(true);
-    expect(ent.aiPaused).toBe(true);
+    expect(ent.maxConnectedSources).toBe(0);
+    expect(ent.canUseRealtimeMonitoring).toBe(false);
   });
 
-  it("keeps full plan access (no pause) for cancelled-but-in-period", async () => {
+  it("collapses cancelled to the locked baseline", async () => {
     withDb({ tenant_subscriptions: subRow("plan_executive", "cancelled") });
     const ent = await resolveOrThrow();
-    expect(ent.maxConnectedSources).toBe(PLAN_ENTITLEMENTS.plan_executive.maxConnectedSources);
-    expect(ent.aiPaused).toBeUndefined();
-    expect(ent.ingestionPaused).toBeUndefined();
+    expect(ent.maxConnectedSources).toBe(0);
+    expect(ent.canUseBYOAgent).toBe(false);
+  });
+
+  it("collapses unpaid and incomplete to the locked baseline", async () => {
+    withDb({ tenant_subscriptions: subRow("plan_executive", "unpaid") });
+    const unpaid = await resolveOrThrow();
+    expect(unpaid.maxConnectedSources).toBe(0);
+
+    withDb({ tenant_subscriptions: subRow("plan_executive", "incomplete") });
+    const incomplete = await resolveOrThrow();
+    expect(incomplete.canCreateActions).toBe(false);
   });
 });
 

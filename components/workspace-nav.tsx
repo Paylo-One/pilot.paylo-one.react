@@ -149,6 +149,16 @@ const GROUPS: NavGroup[] = [
           </svg>
         ),
       },
+      {
+        href: "/billing",
+        label: "Billing",
+        icon: (
+          <svg {...ICON_PROPS}>
+            <path d="M4 7h16v10H4z" />
+            <path d="M4 10h16M8 15h4" />
+          </svg>
+        ),
+      },
     ],
   },
 ];

@@ -49,6 +49,41 @@ export function supabaseSecretKey(): string {
   return key;
 }
 
+/** Stripe secret key. Server-only; never expose to client bundles. */
+export function stripeSecretKey(): string {
+  const key = process.env.STRIPE_SECRET_KEY?.trim();
+  if (!key) throw new Error("STRIPE_SECRET_KEY is not set");
+  return key;
+}
+
+/** Stripe publishable key. Safe for client use when needed by Stripe.js. */
+export function stripePublishableKey(): string {
+  const key = process.env.STRIPE_PUBLISHABLE_KEY?.trim();
+  if (!key) throw new Error("STRIPE_PUBLISHABLE_KEY is not set");
+  return key;
+}
+
+/** Stripe webhook signing secret for /api/webhooks/stripe. */
+export function stripeWebhookSecret(): string {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
+  if (!secret) throw new Error("STRIPE_WEBHOOK_SECRET is not set");
+  return secret;
+}
+
+/** Configured Basic monthly recurring price in Stripe. */
+export function stripePriceBasicMonthly(): string {
+  const id = process.env.STRIPE_PRICE_BASIC_MONTHLY?.trim();
+  if (!id) throw new Error("STRIPE_PRICE_BASIC_MONTHLY is not set");
+  return id;
+}
+
+/** Configured Basic product in Stripe. */
+export function stripeProductBasic(): string {
+  const id = process.env.STRIPE_PRODUCT_BASIC?.trim();
+  if (!id) throw new Error("STRIPE_PRODUCT_BASIC is not set");
+  return id;
+}
+
 /** Dev server port (used to build absolute cross-host URLs locally). */
 export function devPort(): string {
   return process.env.PORT?.trim() || "3000";

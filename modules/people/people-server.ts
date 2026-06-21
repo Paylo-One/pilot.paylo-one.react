@@ -46,6 +46,7 @@ interface PersonRow {
   relationship_type: string;
   importance_level: string;
   status: string;
+  is_self: boolean;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -66,7 +67,7 @@ interface TagRow {
 }
 
 const PEOPLE_COLS =
-  "id, display_name, role_title, organisation, company_id, relationship_type, importance_level, status, notes, created_at, updated_at";
+  "id, display_name, role_title, organisation, company_id, relationship_type, importance_level, status, is_self, notes, created_at, updated_at";
 const IDENTITY_COLS =
   "id, person_id, source_type, identity_type, identity_value, provider_user_id, confidence, verified_by_user";
 const TAG_COLS = "person_id, tag";
@@ -100,6 +101,7 @@ function assemble(
     relationshipType: row.relationship_type as RelationshipType,
     importance: row.importance_level as PersonImportanceLevel,
     status: row.status as PersonStatus,
+    isSelf: row.is_self,
     emails: identities.filter((i) => i.identityType === "email").map((i) => i.identityValue),
     phones: identities.filter((i) => i.identityType === "phone").map((i) => i.identityValue),
     tags,
@@ -625,6 +627,37 @@ export async function setPersonCompany(
       evidenceSummary: "Set by you on the person record.",
     });
   }
+}
+
+// --- Self ("This is me") ----------------------------------------------------
+
+/**
+ * Mark (or unmark) a person as the operator themselves. At most one self per
+ * tenant: setting a new self first clears any existing one (the partial unique
+ * index `people_one_self_per_tenant` is the backstop).
+ */
+export async function setPersonSelf(
+  tenantId: string,
+  personId: string,
+  isSelf: boolean,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  if (isSelf) {
+    // Clear any other self in the tenant before claiming it (avoids the
+    // single-self unique-index conflict when reassigning).
+    const { error: clearErr } = await supabase
+      .from("people")
+      .update({ is_self: false })
+      .eq("tenant_id", tenantId)
+      .eq("is_self", true)
+      .neq("id", personId);
+    if (clearErr) throw new Error(clearErr.message);
+  }
+  const { error } = await supabase
+    .from("people")
+    .update({ is_self: isSelf })
+    .eq("id", personId);
+  if (error) throw new Error(error.message);
 }
 
 // --- Tag behaviour ----------------------------------------------------------

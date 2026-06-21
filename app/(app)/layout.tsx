@@ -16,10 +16,12 @@
  * multi-tenancy-design.md, authentication-architecture.md §8.
  */
 
+import { headers } from "next/headers";
 import {
   requireTenantContext,
   getSignedInUser,
 } from "@/modules/identity-tenant/server";
+import { enforceBillingAccessForPath } from "@/modules/billing/access-guard";
 import { BrandMark } from "@/components/brand-mark";
 import { PayloWordmark } from "@/components/paylo-wordmark";
 import { WorkspaceNav } from "@/components/workspace-nav";
@@ -40,6 +42,11 @@ export default async function AppLayout({
 }) {
   // Fails closed (redirects) when not signed in / not a member of this tenant.
   const ctx = await requireTenantContext();
+  const requestHeaders = await headers();
+  await enforceBillingAccessForPath(
+    ctx,
+    requestHeaders.get("x-paylo-request-path"),
+  );
   const user = await getSignedInUser();
 
   const supabase = await createSupabaseServerClient();

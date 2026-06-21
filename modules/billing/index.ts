@@ -52,6 +52,12 @@ export {
   requireWithinLimit,
   type EntitlementDenial,
 } from "./guards";
+export {
+  mapStripeSubscriptionStatus,
+  isBillingAccessAllowed,
+  type BillingStatus,
+  type BillingAccessStatus,
+} from "./status";
 
 /**
  * The billing service surface. `getStatus` is preserved for existing callers

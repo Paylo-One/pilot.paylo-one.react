@@ -56,9 +56,6 @@ const GRANDFATHER_PLAN: PlanKey = "plan_executive";
 const LIVE_STATUSES: ReadonlySet<SubscriptionStatus> = new Set([
   "trialing",
   "active",
-  "past_due",
-  "grace",
-  "cancelled", // access continues until current_period_end, then → expired
 ]);
 
 /** Statuses in which new AI/ingestion is paused but existing data stays readable. */

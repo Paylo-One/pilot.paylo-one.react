@@ -717,7 +717,7 @@ async function getPersonContext(auth: McpAuthContext, args: unknown) {
   let personQuery = secret
     .from("people")
     .select(
-      "id, display_name, role_title, organisation, company_id, relationship_type, importance_level, status, notes, created_at, updated_at",
+      "id, display_name, role_title, organisation, company_id, relationship_type, importance_level, status, is_self, notes, created_at, updated_at",
     )
     .eq("tenant_id", auth.tenantId)
     .limit(1);
@@ -830,6 +830,7 @@ async function getPersonContext(auth: McpAuthContext, args: unknown) {
       relationshipType: person.relationship_type,
       importance: person.importance_level,
       status: person.status,
+      isSelf: person.is_self ?? false,
       notes: excerpt(person.notes, 500),
       whyImportant,
       connections: (graph as any).edges,

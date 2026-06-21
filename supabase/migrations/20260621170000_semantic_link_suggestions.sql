@@ -7,7 +7,7 @@
 
 create extension if not exists vector;
 
-create table public.knowledge_embeddings (
+create table if not exists public.knowledge_embeddings (
   id              uuid primary key default gen_random_uuid(),
   tenant_id       uuid not null references public.tenants(id) on delete cascade,
   entity_type     text not null
@@ -24,16 +24,17 @@ create table public.knowledge_embeddings (
   unique (tenant_id, entity_type, entity_id, embedding_model)
 );
 
-create index knowledge_embeddings_tenant_entity_idx
+create index if not exists knowledge_embeddings_tenant_entity_idx
   on public.knowledge_embeddings (tenant_id, entity_type, entity_id);
 
-create index knowledge_embeddings_tenant_visibility_idx
+create index if not exists knowledge_embeddings_tenant_visibility_idx
   on public.knowledge_embeddings (tenant_id, visibility);
 
-create index knowledge_embeddings_embedding_hnsw_idx
+create index if not exists knowledge_embeddings_embedding_hnsw_idx
   on public.knowledge_embeddings
   using hnsw (embedding vector_cosine_ops);
 
+drop trigger if exists knowledge_embeddings_set_updated_at on public.knowledge_embeddings;
 create trigger knowledge_embeddings_set_updated_at before update on public.knowledge_embeddings
   for each row execute function public.set_updated_at();
 
@@ -42,6 +43,7 @@ grant all on table public.knowledge_embeddings to service_role;
 
 alter table public.knowledge_embeddings enable row level security;
 
+drop policy if exists kemb_select on public.knowledge_embeddings;
 create policy kemb_select on public.knowledge_embeddings
   for select to authenticated
   using (

@@ -44,7 +44,10 @@ export function PersonCard({
           {initials(person.displayName)}
         </span>
         <div className="person-card__id">
-          <p className="person-card__name">{person.displayName}</p>
+          <p className="person-card__name">
+            {person.displayName}
+            {person.isSelf ? <span className="self-badge">You</span> : null}
+          </p>
           <p className="integration__kind">
             {person.roleTitle ?? "—"}
             {person.organisation ? ` · ${person.organisation}` : ""}

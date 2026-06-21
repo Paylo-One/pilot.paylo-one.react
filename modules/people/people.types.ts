@@ -114,6 +114,8 @@ export interface Person {
   readonly relationshipType: RelationshipType;
   readonly importance: PersonImportanceLevel;
   readonly status: PersonStatus;
+  /** True when this record is the operator themselves ("This is me"). */
+  readonly isSelf: boolean;
   readonly emails: string[];
   readonly phones: string[];
   readonly tags: PersonTag[];

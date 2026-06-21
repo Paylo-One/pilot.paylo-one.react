@@ -36,6 +36,8 @@ export type SubscriptionStatus =
   | "grace"
   | "suspended"
   | "cancelled"
+  | "unpaid"
+  | "incomplete"
   | "expired";
 
 export type MonitoringFrequency =

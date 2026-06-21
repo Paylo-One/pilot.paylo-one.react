@@ -25,6 +25,7 @@ import {
   updatePersonAction,
   deletePersonAction,
   setPersonCompanyAction,
+  setPersonSelfAction,
 } from "@/app/(app)/people/actions";
 import { PersonIdentityList } from "@/components/people/person-identity-list";
 import { PersonSignalList } from "@/components/people/person-signal-list";
@@ -52,8 +53,11 @@ export function PersonDetail({
 
       <div className="person-page__head">
         <div>
-          <p className="eyebrow">Person</p>
-          <h1 className="page-head__title">{person.displayName}</h1>
+          <p className="eyebrow">{person.isSelf ? "You" : "Person"}</p>
+          <h1 className="page-head__title">
+            {person.displayName}
+            {person.isSelf ? <span className="self-badge">You</span> : null}
+          </h1>
           <p className="integration__kind">
             {RELATIONSHIP_LABELS[person.relationshipType]}
             {person.roleTitle ? ` · ${person.roleTitle}` : ""}
@@ -93,6 +97,21 @@ export function PersonDetail({
               ))}
             </select>
           </label>
+          <button
+            type="button"
+            className={`btn btn--sm ${person.isSelf ? "btn--accent-outline" : "btn--ghost"}`}
+            disabled={pending}
+            aria-pressed={person.isSelf}
+            title={person.isSelf ? "This person is marked as you" : "Mark this person as yourself"}
+            onClick={() => {
+              startTransition(async () => {
+                const res = await setPersonSelfAction({ personId: person.id, isSelf: !person.isSelf });
+                if (res.ok) router.refresh();
+              });
+            }}
+          >
+            {person.isSelf ? "This is you" : "This is me"}
+          </button>
           <button
             type="button"
             className="btn btn--ghost btn--sm"
