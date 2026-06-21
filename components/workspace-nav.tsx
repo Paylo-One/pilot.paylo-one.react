@@ -109,8 +109,10 @@ const GROUPS: NavGroup[] = [
         label: "Intelligence",
         icon: (
           <svg {...ICON_PROPS}>
-            <rect x="3" y="4" width="18" height="16" rx="2" />
-            <path d="m7 9 3 3-3 3M12 15h5" />
+            <rect x="7" y="7" width="10" height="10" rx="2" />
+            <path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3" />
+            <path d="M10 12h4M12 10v4" />
+            <path d="M19 3l.6 1.4L21 5l-1.4.6L19 7l-.6-1.4L17 5l1.4-.6L19 3Z" />
           </svg>
         ),
       },
