@@ -105,8 +105,8 @@ const GROUPS: NavGroup[] = [
         ),
       },
       {
-        href: "/prompts",
-        label: "Prompts",
+        href: "/intelligence",
+        label: "Intelligence",
         icon: (
           <svg {...ICON_PROPS} fill="currentColor" stroke="none">
             <path d="M8.6 4.4 10.5 9l4.6 1.9-4.6 1.9-1.9 4.6-1.9-4.6-4.6-1.9L6.7 9l1.9-4.6Z" />
