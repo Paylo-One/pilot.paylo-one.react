@@ -77,11 +77,40 @@ export function stripePriceBasicMonthly(): string {
   return id;
 }
 
+/** Configured Basic annual recurring price in Stripe. */
+export function stripePriceBasicAnnual(): string {
+  const id = process.env.STRIPE_PRICE_BASIC_ANNUAL?.trim();
+  if (!id) throw new Error("STRIPE_PRICE_BASIC_ANNUAL is not set");
+  return id;
+}
+
+/** Configured Executive monthly recurring price in Stripe. */
+export function stripePriceExecutiveMonthly(): string {
+  const id = process.env.STRIPE_PRICE_EXECUTIVE_MONTHLY?.trim();
+  if (!id) throw new Error("STRIPE_PRICE_EXECUTIVE_MONTHLY is not set");
+  return id;
+}
+
+/** Configured Executive annual recurring price in Stripe. */
+export function stripePriceExecutiveAnnual(): string {
+  const id = process.env.STRIPE_PRICE_EXECUTIVE_ANNUAL?.trim();
+  if (!id) throw new Error("STRIPE_PRICE_EXECUTIVE_ANNUAL is not set");
+  return id;
+}
+
 /** Configured Basic product in Stripe. */
 export function stripeProductBasic(): string {
   const id = process.env.STRIPE_PRODUCT_BASIC?.trim();
   if (!id) throw new Error("STRIPE_PRODUCT_BASIC is not set");
   return id;
+}
+
+/**
+ * Configured Executive product in Stripe. Optional when both prices live under
+ * the same Product; falls back to STRIPE_PRODUCT_BASIC.
+ */
+export function stripeProductExecutive(): string {
+  return process.env.STRIPE_PRODUCT_EXECUTIVE?.trim() || stripeProductBasic();
 }
 
 /** Dev server port (used to build absolute cross-host URLs locally). */

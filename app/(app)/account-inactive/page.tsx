@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { requireTenantContext } from "@/modules/identity-tenant/server";
 import { getBillingAccess } from "@/modules/billing/access";
+import { configuredPlanFromPriceId } from "@/modules/billing/stripe";
 import { BillingActions } from "../billing/billing-actions";
 
 export default async function AccountInactivePage() {
   const ctx = await requireTenantContext();
   const access = await getBillingAccess(ctx.tenantId);
+  const configuredPlan = configuredPlanFromPriceId(access?.stripePriceId);
 
   return (
     <main className="workspace__content">
@@ -32,7 +34,10 @@ export default async function AccountInactivePage() {
           Choose a plan, update payment details, or restart your subscription to
           restore access to briefing, actions, diary, sources, and intelligence.
         </p>
-        <BillingActions canManage={!!access?.stripeCustomerId} />
+        <BillingActions
+          canManage={!!access?.stripeCustomerId}
+          currentPriceOption={configuredPlan?.priceOption.key ?? null}
+        />
         <p className="action-card__rationale" style={{ marginTop: "var(--space-md)" }}>
           <Link href="/billing">View billing details</Link>
         </p>

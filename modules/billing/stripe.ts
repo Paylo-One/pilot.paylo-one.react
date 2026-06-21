@@ -2,11 +2,26 @@ import "server-only";
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import {
+  stripePriceBasicAnnual,
   stripePriceBasicMonthly,
+  stripePriceExecutiveAnnual,
+  stripePriceExecutiveMonthly,
   stripeProductBasic,
+  stripeProductExecutive,
   stripeSecretKey,
   stripeWebhookSecret,
 } from "@/lib/config";
+import {
+  STRIPE_BILLING_TIERS,
+  STRIPE_BILLING_PRICE_OPTIONS,
+  stripePriceOptionForKey,
+  stripeTierForKey,
+  type StripeBillingInterval,
+  type StripeBillingPriceOption,
+  type StripeBillingTier,
+  type StripeBillingTierKey,
+} from "./stripe-plans";
+import type { PlanKey } from "./plans";
 
 export const STRIPE_MANAGED_PAYMENTS_VERSION = "2026-02-25.preview";
 
@@ -18,6 +33,14 @@ export interface StripePrice {
   readonly unit_amount: number | null;
   readonly currency: string;
   readonly recurring?: { interval?: string } | null;
+}
+
+export interface ConfiguredStripePlan {
+  readonly tier: StripeBillingTier;
+  readonly priceOption: StripeBillingPriceOption;
+  readonly planKey: PlanKey;
+  readonly productId: string;
+  readonly priceId: string;
 }
 
 export interface StripeProduct {
@@ -184,6 +207,9 @@ export const stripeApi = {
     cancelUrl: string;
     tenantId: string;
     userId: string;
+    planKey: PlanKey;
+    priceOptionKey: string;
+    interval: StripeBillingInterval;
   }) {
     return stripeRequest<StripeCheckoutSession>(
       "POST",
@@ -198,11 +224,17 @@ export const stripeApi = {
         metadata: {
           tenant_id: input.tenantId,
           user_id: input.userId,
+          plan_key: input.planKey,
+          billing_price_option: input.priceOptionKey,
+          billing_interval: input.interval,
         },
         subscription_data: {
           metadata: {
             tenant_id: input.tenantId,
             user_id: input.userId,
+            plan_key: input.planKey,
+            billing_price_option: input.priceOptionKey,
+            billing_interval: input.interval,
           },
         },
       },
@@ -227,12 +259,29 @@ export const stripeApi = {
   },
 };
 
-export async function configuredStripePlan(): Promise<{
-  productId: string;
-  priceId: string;
-}> {
-  const productId = stripeProductBasic();
-  const priceId = stripePriceBasicMonthly();
+function configuredProductIdForTier(tier: StripeBillingTier): string {
+  if (tier.key === "executive") return stripeProductExecutive();
+  return stripeProductBasic();
+}
+
+function configuredPriceIdForOption(option: StripeBillingPriceOption): string {
+  switch (option.key) {
+    case "operator_monthly":
+      return stripePriceBasicMonthly();
+    case "operator_annual":
+      return stripePriceBasicAnnual();
+    case "executive_monthly":
+      return stripePriceExecutiveMonthly();
+    case "executive_annual":
+      return stripePriceExecutiveAnnual();
+  }
+}
+
+async function verifyStripePlan(option: StripeBillingPriceOption): Promise<ConfiguredStripePlan> {
+  const tier = stripeTierForKey(option.tierKey);
+  if (!tier) throw new Error("Unknown billing tier.");
+  const productId = configuredProductIdForTier(tier);
+  const priceId = configuredPriceIdForOption(option);
   const [product, price] = await Promise.all([
     stripeApi.retrieveProduct(productId),
     stripeApi.retrievePrice(priceId),
@@ -240,12 +289,50 @@ export async function configuredStripePlan(): Promise<{
   const priceProductId =
     typeof price.product === "string" ? price.product : price.product.id;
   if (priceProductId !== product.id) {
-    throw new Error("Configured Stripe price does not belong to the configured product.");
+    throw new Error(`Configured Stripe price for ${tier.name} does not belong to the configured product.`);
   }
-  if (price.unit_amount !== 1000 || price.currency !== "usd" || price.recurring?.interval !== "month") {
-    throw new Error("Configured Stripe price is not the Paylo One monthly USD subscription.");
+  const expectedInterval = option.interval === "annual" ? "year" : "month";
+  if (price.recurring?.interval !== expectedInterval) {
+    throw new Error(
+      `Configured Stripe price for ${option.label} is not a ${expectedInterval}ly subscription.`,
+    );
   }
-  return { productId: product.id, priceId: price.id };
+  return {
+    tier,
+    priceOption: option,
+    planKey: tier.planKey,
+    productId: product.id,
+    priceId: price.id,
+  };
+}
+
+export async function configuredStripePlan(
+  priceOptionKey = "operator_monthly",
+): Promise<ConfiguredStripePlan> {
+  const option = stripePriceOptionForKey(priceOptionKey);
+  if (!option) throw new Error("Unknown billing price option.");
+  return verifyStripePlan(option);
+}
+
+export async function configuredStripePlans(): Promise<ConfiguredStripePlan[]> {
+  return Promise.all(STRIPE_BILLING_PRICE_OPTIONS.map((option) => verifyStripePlan(option)));
+}
+
+export function configuredPlanFromPriceId(priceId: string | null | undefined): {
+  tier: StripeBillingTier;
+  priceOption: StripeBillingPriceOption;
+  planKey: PlanKey;
+} | null {
+  if (!priceId) return null;
+  for (const priceOption of STRIPE_BILLING_PRICE_OPTIONS) {
+    const tier = stripeTierForKey(priceOption.tierKey);
+    if (!tier) continue;
+    const configuredPriceId = process.env[priceOption.priceEnv]?.trim();
+    if (configuredPriceId && configuredPriceId === priceId) {
+      return { tier, priceOption, planKey: tier.planKey };
+    }
+  }
+  return null;
 }
 
 export async function createOrVerifyManagedPaymentsPlan(): Promise<{
@@ -256,7 +343,7 @@ export async function createOrVerifyManagedPaymentsPlan(): Promise<{
   const productId = process.env.STRIPE_PRODUCT_BASIC?.trim();
   const priceId = process.env.STRIPE_PRICE_BASIC_MONTHLY?.trim();
   if (productId && priceId) {
-    const verified = await configuredStripePlan();
+    const verified = await configuredStripePlan("operator_monthly");
     return { ...verified, created: false };
   }
 

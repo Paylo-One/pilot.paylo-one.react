@@ -3,6 +3,7 @@ import {
   getSignedInUser,
 } from "@/modules/identity-tenant/server";
 import { getBillingAccess } from "@/modules/billing/access";
+import { configuredPlanFromPriceId } from "@/modules/billing/stripe";
 import { BillingActions } from "./billing-actions";
 
 function formatDate(value: string | null): string {
@@ -31,6 +32,8 @@ export default async function BillingPage() {
   const ctx = await requireTenantContext();
   const user = await getSignedInUser();
   const access = await getBillingAccess(ctx.tenantId);
+  const configuredPlan = configuredPlanFromPriceId(access?.stripePriceId);
+  const currentPlanName = configuredPlan?.tier.name ?? "Personal Operator";
 
   return (
     <main className="workspace__content">
@@ -76,7 +79,7 @@ export default async function BillingPage() {
             <div className="card-head">
               <div>
                 <p className="eyebrow">Current plan</p>
-                <h2 className="card__title">Paylo One Personal Operator</h2>
+                <h2 className="card__title">Paylo One {currentPlanName}</h2>
               </div>
               <span
                 className={`status ${
@@ -121,7 +124,10 @@ export default async function BillingPage() {
             ) : null}
 
             <div style={{ marginTop: "var(--space-md)" }}>
-              <BillingActions canManage={!!access.stripeCustomerId} />
+              <BillingActions
+                canManage={!!access.stripeCustomerId}
+                currentPriceOption={configuredPlan?.priceOption.key ?? null}
+              />
             </div>
           </section>
         </div>

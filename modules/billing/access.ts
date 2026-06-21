@@ -9,12 +9,15 @@ import {
   type BillingStatus,
 } from "./status";
 import {
+  configuredPlanFromPriceId,
   configuredStripePlan,
   stripeApi,
   type StripeCheckoutSession,
   type StripeInvoice,
   type StripeSubscription,
 } from "./stripe";
+import type { PlanKey } from "./plans";
+import type { StripeBillingPriceOption } from "./stripe-plans";
 
 export interface BillingAccessRecord {
   readonly tenantId: string;
@@ -213,6 +216,7 @@ export async function getOrCreateStripeCustomer(input: {
 export async function createSubscriptionCheckout(input: {
   ctx: TenantContext;
   email: string | null;
+  priceOptionKey: StripeBillingPriceOption["key"];
   successUrl: string;
   cancelUrl: string;
 }): Promise<StripeCheckoutSession> {
@@ -220,7 +224,7 @@ export async function createSubscriptionCheckout(input: {
     ctx: input.ctx,
     email: input.email,
   });
-  const plan = await configuredStripePlan();
+  const plan = await configuredStripePlan(input.priceOptionKey);
   const session = await stripeApi.createCheckoutSession({
     customerId,
     priceId: plan.priceId,
@@ -228,6 +232,9 @@ export async function createSubscriptionCheckout(input: {
     cancelUrl: input.cancelUrl,
     tenantId: input.ctx.tenantId,
     userId: input.ctx.userId,
+    planKey: plan.planKey,
+    priceOptionKey: plan.priceOption.key,
+    interval: plan.priceOption.interval,
   });
 
   const db = createSupabaseSecretClient();
@@ -260,6 +267,7 @@ async function upsertTenantSubscription(input: {
   userId: string | null;
   customerId: string;
   subscriptionId: string;
+  planKey: PlanKey;
   productId: string | null;
   priceId: string | null;
   billingStatus: BillingStatus;
@@ -273,7 +281,7 @@ async function upsertTenantSubscription(input: {
   const db = createSupabaseSecretClient();
   const status = tenantSubscriptionStatus(input.billingStatus);
   const payload = {
-    plan_key: "plan_operator",
+    plan_key: input.planKey,
     status,
     billing_interval: "month",
     owner_user_id: input.userId,
@@ -347,6 +355,11 @@ export async function syncStripeSubscription(input: {
       : price.product.id
     : null;
   const priceId = price?.id ?? null;
+  const configuredPlan = configuredPlanFromPriceId(priceId);
+  const planKey =
+    configuredPlan?.planKey ??
+    (input.subscription.metadata?.plan_key as PlanKey | undefined) ??
+    "plan_operator";
   const currentPeriodStart = isoFromUnix(input.subscription.current_period_start);
   const currentPeriodEnd = isoFromUnix(input.subscription.current_period_end);
   const cancelAtPeriodEnd = input.subscription.cancel_at_period_end ?? false;
@@ -399,6 +412,7 @@ export async function syncStripeSubscription(input: {
     userId: owner.userId,
     customerId,
     subscriptionId: input.subscription.id,
+    planKey,
     productId,
     priceId,
     billingStatus: mapped.billingStatus,
