@@ -105,14 +105,13 @@ const GROUPS: NavGroup[] = [
         ),
       },
       {
-        href: "/intelligence",
-        label: "Intelligence",
+        href: "/prompts",
+        label: "Prompts",
         icon: (
-          <svg {...ICON_PROPS}>
-            <rect x="7" y="7" width="10" height="10" rx="2" />
-            <path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3" />
-            <path d="M10 12h4M12 10v4" />
-            <path d="M19 3l.6 1.4L21 5l-1.4.6L19 7l-.6-1.4L17 5l1.4-.6L19 3Z" />
+          <svg {...ICON_PROPS} fill="currentColor" stroke="none">
+            <path d="M8.6 4.4 10.5 9l4.6 1.9-4.6 1.9-1.9 4.6-1.9-4.6-4.6-1.9L6.7 9l1.9-4.6Z" />
+            <path d="M17.2 2.2 18.4 5l2.8 1.2-2.8 1.2-1.2 2.8L16 7.4l-2.8-1.2L16 5l1.2-2.8Z" />
+            <path d="M16.6 14.1 18 17.4l3.3 1.4L18 20.2l-1.4 3.3-1.4-3.3-3.3-1.4 3.3-1.4 1.4-3.3Z" />
           </svg>
         ),
       },
@@ -138,12 +137,7 @@ const GROUPS: NavGroup[] = [
           <svg {...ICON_PROPS}>
             <path d="M4 6h16M4 12h16M4 18h16" />
             <circle cx="9" cy="6" r="2" fill="var(--colour-surface-command)" />
-            <circle
-              cx="15"
-              cy="12"
-              r="2"
-              fill="var(--colour-surface-command)"
-            />
+            <circle cx="15" cy="12" r="2" fill="var(--colour-surface-command)" />
             <circle cx="8" cy="18" r="2" fill="var(--colour-surface-command)" />
           </svg>
         ),
