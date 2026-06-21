@@ -11,6 +11,16 @@ describe("MCP tool catalogue", () => {
     expect(tools).not.toContain("search_diary");
   });
 
+  it("exposes company + relationship-graph tools under people:read", () => {
+    const tools = listMcpTools(["people:read"]).map((tool) => tool.name);
+    expect(tools).toContain("list_companies");
+    expect(tools).toContain("get_company_context");
+    expect(tools).toContain("get_relationship_graph");
+    const memoryOnly = listMcpTools(["memory:read"]).map((tool) => tool.name);
+    expect(memoryOnly).not.toContain("list_companies");
+    expect(memoryOnly).not.toContain("get_relationship_graph");
+  });
+
   it("documents required scopes for write-capable tools", () => {
     expect(getMcpToolDefinition("create_action")?.requiredScopes).toEqual([
       "actions:write",

@@ -20,11 +20,18 @@
  */
 
 import {
-  NotImplementedError,
+  randomUUID,
+} from "node:crypto";
+
+import {
+  AppError,
   PolicyDeniedError,
   err,
+  ok,
   type Result,
 } from "@/modules/shared";
+import { modelUsageCostService } from "@/modules/model-usage-cost";
+import { getAdapter } from "./adapters";
 import { livePipeline } from "./live-pipeline";
 import type { GatewayPipeline } from "./pipeline";
 import type {
@@ -34,6 +41,8 @@ import type {
   GatewayResult,
   ModelPolicy,
 } from "./types";
+
+export const DEFAULT_EMBEDDING_MODEL_ID = "text-embedding-3-small";
 
 /** The public Model Gateway interface used across the app. */
 export interface ModelGatewayService {
@@ -96,17 +105,42 @@ export function createModelGateway(
     },
 
     async embed(req) {
-      // Same policy-before-tokens contract as completions.
-      if (!hasModelSelector(req)) {
+      const modelId =
+        req.requestedModelId ??
+        req.modelPolicy?.orderedModelIds?.[0] ??
+        DEFAULT_EMBEDDING_MODEL_ID;
+      const modelInvocationId = randomUUID();
+      const adapter = getAdapter("openai");
+      try {
+        const raw = await adapter.embed({ modelId, inputs: req.inputs });
+        try {
+          await modelUsageCostService.record(req.ctx, {
+            tenantId: req.ctx.tenantId,
+            userId: req.ctx.userId,
+            modelId,
+            provider: "openai",
+            agentRunId: req.agentRunId,
+            modelInvocationId,
+            inputTokens: raw.inputTokens,
+            outputTokens: 0,
+            totalTokens: raw.inputTokens,
+            estimatedCostUsd: 0,
+            latencyMs: raw.latencyMs,
+            status: "ok",
+            promptTemplateKey: "semantic-linking-embeddings",
+            createdAt: new Date().toISOString(),
+          });
+        } catch {
+          /* metering failure is swallowed; embedding outcome stands */
+        }
+        return ok({ modelInvocationId, modelId, embeddings: raw.embeddings });
+      } catch (cause) {
         return err(
-          new PolicyDeniedError(
-            "embed request must specify a requestedModelId or a modelPolicy",
-            { dataClassification: req.dataClassification },
-          ),
+          cause instanceof Error
+            ? new AppError("internal", cause.message, { dataClassification: req.dataClassification })
+            : new AppError("internal", "embedding request failed", { dataClassification: req.dataClassification }),
         );
       }
-      // Provider boundary — no embedding adapter performs a real call yet.
-      throw new NotImplementedError("model-gateway.embed (provider boundary)");
     },
   };
 }

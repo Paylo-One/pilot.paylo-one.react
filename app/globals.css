@@ -5036,4 +5036,315 @@ button.actions-view:hover {
     border-bottom-color: var(--colour-accent);
   }
 }
+/* ==========================================================================
+   People & Companies — the relationship intelligence layer
+   ========================================================================== */
+
+.people-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+}
+.people-toolbar__search {
+  flex: 1 1 240px;
+  min-width: 200px;
+}
+.people-filter {
+  margin-top: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.people-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-md);
+}
+
+.person-card__avatar--company {
+  border-radius: var(--radius-sm);
+}
+
+/* Empty states — calm, instructive, never cute. */
+.people-empty {
+  padding: var(--space-xl) var(--space-md);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-md);
+  background: var(--colour-surface);
+  text-align: center;
+}
+.people-empty--dashed {
+  border-style: dashed;
+  padding: var(--space-lg) var(--space-md);
+  background: transparent;
+}
+.people-empty__title {
+  font-weight: 600;
+  color: var(--colour-text-primary);
+}
+.people-empty__body {
+  margin: var(--space-xs) auto 0;
+  max-width: 42ch;
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+}
+.people-empty-note {
+  font-size: var(--text-small);
+  color: var(--colour-text-tertiary);
+  max-width: 60ch;
+}
+
+/* Correlation inbox — guided refinement. */
+.inbox {
+  margin-top: var(--space-lg);
+}
+.inbox__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.inbox__groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  margin-top: var(--space-md);
+}
+.inbox__group-title {
+  font-size: var(--text-small);
+  font-weight: 600;
+  color: var(--colour-text-secondary);
+  margin-bottom: var(--space-sm);
+}
+
+/* Behavioural tags. */
+.tag-picker__current {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+}
+.tag-picker__none {
+  font-size: var(--text-small);
+  color: var(--colour-text-tertiary);
+}
+.tag-picker__note {
+  margin-top: var(--space-sm);
+  font-size: var(--text-small);
+  color: var(--colour-success);
+}
+.tag-picker__menu {
+  margin-top: var(--space-md);
+}
+.tag-picker__lead {
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+  margin-bottom: var(--space-sm);
+}
+.tag-picker__custom {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tag-chip--warn { border-color: var(--colour-warning); }
+.tag-chip--risk { border-color: var(--colour-danger); }
+.tag-chip--info { border-color: var(--colour-info); }
+.tag-chip__remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--colour-text-tertiary);
+  font-size: var(--text-body);
+  line-height: 1;
+  padding: 0;
+}
+.tag-chip__remove:hover {
+  color: var(--colour-text-primary);
+}
+
+.tag-menu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.tag-menu__item {
+  border-top: 1px solid var(--colour-border);
+  padding-top: var(--space-md);
+}
+.tag-menu__add {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-weight: 600;
+  color: var(--colour-text-primary);
+  font-size: var(--text-small);
+}
+.tag-menu__add:hover .tag-menu__label {
+  color: var(--colour-accent);
+}
+.tag-menu__desc {
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+  margin-top: 4px;
+}
+.tag-menu__where {
+  font-size: var(--text-label);
+  color: var(--colour-text-tertiary);
+  margin-top: 4px;
+}
+
+/* Relationship list. */
+.relationship-list {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.relationship-list__item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--colour-border);
+}
+.relationship-list__item:last-child {
+  border-bottom: none;
+}
+.relationship-list__link {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs);
+  text-decoration: none;
+}
+.relationship-list__kind {
+  color: var(--colour-text-tertiary);
+  font-size: var(--text-small);
+}
+.relationship-list__other {
+  color: var(--colour-text-primary);
+  font-weight: 600;
+}
+a.relationship-list__link:hover .relationship-list__other {
+  color: var(--colour-accent);
+}
+.relationship-list__type {
+  font-size: var(--text-label);
+  color: var(--colour-text-tertiary);
+}
+.relationship-list__evidence {
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+  margin-top: 2px;
+}
+
+/* Explainability panel. */
+.explain-panel {
+  margin-bottom: var(--space-lg);
+}
+.explain-panel__list {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-sm) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.explain-panel__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+}
+.explain-panel__bullet {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--colour-accent);
+  margin-top: 7px;
+  flex-shrink: 0;
+}
+.explain-panel__empty {
+  font-size: var(--text-small);
+  color: var(--colour-text-tertiary);
+  margin-top: var(--space-xs);
+}
+
+/* Person / company detail page. */
+.person-page__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin: var(--space-md) 0 var(--space-lg);
+}
+.person-page__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-md);
+}
+.person-page__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.person-page__field-label {
+  font-size: var(--text-label);
+  color: var(--colour-text-tertiary);
+}
+.person-page__notes {
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+  max-width: 72ch;
+  margin-bottom: var(--space-lg);
+}
+.person-page__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-lg);
+  margin-bottom: var(--space-lg);
+}
+.person-section {
+  padding: var(--space-lg) 0;
+  border-top: 1px solid var(--colour-border);
+}
+.person-section__lead {
+  font-size: var(--text-small);
+  color: var(--colour-text-tertiary);
+  margin: var(--space-xs) 0 var(--space-md);
+  max-width: 60ch;
+}
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
+}
+.inline-add {
+  display: flex;
+  gap: var(--space-sm);
+  max-width: 420px;
+}
+
 } /* end @layer components */

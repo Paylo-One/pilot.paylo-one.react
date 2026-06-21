@@ -1,43 +1,59 @@
 /**
- * People — the relationship layer. Manage the people Paylo.one correlates
- * information with across sources (Email, Teams, WhatsApp, GitHub, diary…), so
- * fragmented signals become relationship-aware operating intelligence.
+ * People & Companies — the relationship intelligence layer. Manage the people and
+ * companies Pilot correlates information with across sources (email, Teams,
+ * WhatsApp, GitHub, diary…), so fragmented signals become an understanding of who
+ * matters, why, and how they connect.
  *
- * Server Component: gated by tenant context (RLS shell). The directory itself
- * is scaffolded on typed mock data — People Context is not persisted yet.
- * Governance: architecture/people-context-architecture.md, services/people-context-service.md.
+ * Server Component: gated by tenant context (RLS shell). Loads people (with
+ * correlated signals), companies, and the correlation inbox (identity matches,
+ * proposed links, possible duplicates).
+ * Governance: docs/product/people-and-companies.md.
  */
 
 import { requireTenantContext } from "@/modules/identity-tenant/server";
 import { listPeople, listLinkSuggestions } from "@/modules/people/people-server";
-import { PeopleBrowser } from "./people-browser";
+import { listSuggestedLinks } from "@/modules/people/relationships";
+import { detectDuplicatePeople } from "@/modules/people/correlation";
+import { listCompanies } from "@/modules/companies/companies-server";
+import { PeopleSurface } from "@/components/people/people-surface";
 
 export default async function PeoplePage() {
   await requireTenantContext();
-  const [people, suggestions] = await Promise.all([listPeople(), listLinkSuggestions()]);
+  const [people, companies, identitySuggestions, suggestedLinks] = await Promise.all([
+    listPeople(),
+    listCompanies(),
+    listLinkSuggestions(),
+    listSuggestedLinks(),
+  ]);
+  const duplicates = detectDuplicatePeople(people);
 
   return (
     <main className="workspace__content">
       <div className="page-head">
-        <p className="eyebrow">People</p>
-        <h1 className="page-head__title">People context</h1>
+        <p className="eyebrow">People &amp; companies</p>
+        <h1 className="page-head__title">Your relationship layer</h1>
         <p className="page-head__lead">
-          The people behind your information. Paylo.one links emails, messages,
-          pull requests, diary notes, and actions to the people they involve — so
-          you can see who is connected to which decisions, projects, and risks.
-          You stay in control: confirm, correct, and refine every link.
+          The people and companies behind your work. Pilot links emails, messages,
+          pull requests, diary notes, and actions to the people and organisations
+          they involve, so you can see who matters, why, and how they connect. You
+          stay in control: confirm, correct, and refine every link.
         </p>
       </div>
 
-      <PeopleBrowser people={people} suggestions={suggestions} />
+      <PeopleSurface
+        people={people}
+        companies={companies}
+        identitySuggestions={identitySuggestions}
+        suggestedLinks={suggestedLinks}
+        duplicates={duplicates}
+      />
 
       <p className="scaffold-note" style={{ marginTop: "var(--space-xl)" }}>
-        People, and the way their accounts across different tools are linked, stay
-        private to your workspace. “Run correlation” looks at your recent items and
-        matches them to the right person: confident matches become signals, and
-        anything uncertain becomes a “same person?” suggestion for you to confirm.
-        Nothing is ever merged for you — you confirm every link, and once you do,
-        future items match automatically.
+        People, companies, and the way their accounts across tools connect stay
+        private to your workspace. Run correlation to match recent activity to the
+        right person or company: confident matches attach quietly, and anything
+        uncertain waits for you in Needs review. Nothing is ever merged or linked
+        for you.
       </p>
     </main>
   );

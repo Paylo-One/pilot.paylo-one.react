@@ -156,3 +156,77 @@ export function correlateSourceItems(
 
   return { signalsByPerson, suggestions: [...suggestionByIdentity.values()] };
 }
+
+// --- Duplicate detection ----------------------------------------------------
+
+/** A pair of person records that may be the same person (for the inbox). */
+export interface DuplicateSuggestion {
+  readonly personAId: string;
+  readonly personAName: string;
+  readonly personBId: string;
+  readonly personBName: string;
+  readonly confidence: number;
+  readonly reason: string;
+}
+
+function normaliseName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function identityValues(p: Person): Set<string> {
+  const set = new Set<string>();
+  for (const i of p.identities) set.add(`${i.identityType}:${i.identityValue.trim().toLowerCase()}`);
+  for (const e of p.emails) set.add(`email:${e.trim().toLowerCase()}`);
+  return set;
+}
+
+/**
+ * Find person records that may be duplicates: pairs sharing an identity value, an
+ * identical display name, or a clear name-subset. Pure (no I/O); the operator
+ * reviews — merges are never automatic (people-context-architecture.md §9).
+ */
+export function detectDuplicatePeople(
+  people: readonly Person[],
+): DuplicateSuggestion[] {
+  const out: DuplicateSuggestion[] = [];
+  for (let i = 0; i < people.length; i += 1) {
+    for (let j = i + 1; j < people.length; j += 1) {
+      const a = people[i];
+      const b = people[j];
+      if (!a || !b) continue;
+      const aIds = identityValues(a);
+      const shared = [...identityValues(b)].find((v) => aIds.has(v));
+      const aName = normaliseName(a.displayName);
+      const bName = normaliseName(b.displayName);
+
+      let confidence = 0;
+      let reason = "";
+      if (shared) {
+        confidence = 0.92;
+        reason = `Both records share the identity ${shared.split(":").slice(1).join(":")}.`;
+      } else if (aName && aName === bName) {
+        confidence = 0.7;
+        reason = "Both records have the same name.";
+      } else if (
+        aName.length >= 4 &&
+        bName.length >= 4 &&
+        (aName.includes(bName) || bName.includes(aName))
+      ) {
+        confidence = 0.5;
+        reason = "These names are very similar.";
+      }
+
+      if (confidence >= 0.5) {
+        out.push({
+          personAId: a.id,
+          personAName: a.displayName,
+          personBId: b.id,
+          personBName: b.displayName,
+          confidence,
+          reason,
+        });
+      }
+    }
+  }
+  return out.sort((x, y) => y.confidence - x.confidence);
+}

@@ -14,9 +14,8 @@
  * the `policy → assembly → route → post-process` pipeline.
  *
  * MVP status: the default `modelGateway` runs a live pipeline against the
- * hosted OpenAI adapter (completions). It still enforces policy/entitlement and
- * meters usage on every call. `embed` remains a provider-boundary stub
- * (NotImplementedError) until an embeddings path is needed.
+ * hosted OpenAI adapter for completions and embeddings. It still enforces
+ * policy/entitlement for completions and meters usage on every call.
  */
 
 export * from "./types";

@@ -17,20 +17,23 @@ import "server-only";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { SourceSystem } from "@/modules/shared";
-import type {
-  IdentityType,
-  Person,
-  PersonIdentity,
-  PersonImportanceLevel,
-  PersonLinkSuggestion,
-  PersonStatus,
-  RelationshipType,
-  SourceMappingSourceType,
+import {
+  IMPORTANCE_LABELS,
+  type IdentityType,
+  type Person,
+  type PersonIdentity,
+  type PersonImportanceLevel,
+  type PersonLinkSuggestion,
+  type PersonStatus,
+  type RelationshipType,
+  type SourceMappingSourceType,
 } from "./people.types";
 import {
   correlateSourceItems,
   type CorrelationItem,
 } from "./correlation";
+import { getTagDefinition } from "./people-tags";
+import { upsertEntityLink } from "./relationships";
 
 // --- Row shapes + mapping ---------------------------------------------------
 
@@ -39,6 +42,7 @@ interface PersonRow {
   display_name: string;
   role_title: string | null;
   organisation: string | null;
+  company_id: string | null;
   relationship_type: string;
   importance_level: string;
   status: string;
@@ -62,7 +66,7 @@ interface TagRow {
 }
 
 const PEOPLE_COLS =
-  "id, display_name, role_title, organisation, relationship_type, importance_level, status, notes, created_at, updated_at";
+  "id, display_name, role_title, organisation, company_id, relationship_type, importance_level, status, notes, created_at, updated_at";
 const IDENTITY_COLS =
   "id, person_id, source_type, identity_type, identity_value, provider_user_id, confidence, verified_by_user";
 const TAG_COLS = "person_id, tag";
@@ -84,12 +88,15 @@ function assemble(
   row: PersonRow,
   identities: PersonIdentity[],
   tags: string[],
+  companyName: string | null,
 ): Person {
   return {
     id: row.id,
     displayName: row.display_name,
     roleTitle: row.role_title,
     organisation: row.organisation,
+    companyId: row.company_id,
+    companyName,
     relationshipType: row.relationship_type as RelationshipType,
     importance: row.importance_level as PersonImportanceLevel,
     status: row.status as PersonStatus,
@@ -121,13 +128,23 @@ async function loadBasePeople(): Promise<Person[]> {
   const peopleRows = (peopleData ?? []) as PersonRow[];
   if (peopleRows.length === 0) return [];
 
-  const [{ data: idData, error: idErr }, { data: tagData, error: tagErr }] =
-    await Promise.all([
-      supabase.from("person_identities").select(IDENTITY_COLS),
-      supabase.from("person_tags").select(TAG_COLS),
-    ]);
+  const [
+    { data: idData, error: idErr },
+    { data: tagData, error: tagErr },
+    { data: companyData, error: companyErr },
+  ] = await Promise.all([
+    supabase.from("person_identities").select(IDENTITY_COLS),
+    supabase.from("person_tags").select(TAG_COLS),
+    supabase.from("companies").select("id, name"),
+  ]);
   if (idErr) throw new Error(idErr.message);
   if (tagErr) throw new Error(tagErr.message);
+  if (companyErr) throw new Error(companyErr.message);
+
+  const companyNames = new Map<string, string>();
+  for (const c of (companyData ?? []) as { id: string; name: string }[]) {
+    companyNames.set(c.id, c.name);
+  }
 
   const identitiesByPerson = new Map<string, PersonIdentity[]>();
   for (const row of (idData ?? []) as IdentityRow[]) {
@@ -143,7 +160,12 @@ async function loadBasePeople(): Promise<Person[]> {
   }
 
   return peopleRows.map((row) =>
-    assemble(row, identitiesByPerson.get(row.id) ?? [], tagsByPerson.get(row.id) ?? []),
+    assemble(
+      row,
+      identitiesByPerson.get(row.id) ?? [],
+      tagsByPerson.get(row.id) ?? [],
+      row.company_id ? companyNames.get(row.company_id) ?? null : null,
+    ),
   );
 }
 
@@ -569,4 +591,136 @@ export async function removeTag(personId: string, tag: string): Promise<void> {
     .eq("person_id", personId)
     .eq("tag", tag);
   if (error) throw new Error(error.message);
+}
+
+// --- Company link -----------------------------------------------------------
+
+/**
+ * Set (or clear) a person's resolved primary employer. Records a confirmed
+ * `works_at` edge in the graph so the link is explainable and queryable. Clearing
+ * (companyId null) removes the column value; the historical edge is left intact.
+ */
+export async function setPersonCompany(
+  tenantId: string,
+  personId: string,
+  companyId: string | null,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("people")
+    .update({ company_id: companyId })
+    .eq("id", personId);
+  if (error) throw new Error(error.message);
+
+  if (companyId) {
+    await upsertEntityLink(tenantId, {
+      sourceType: "person",
+      sourceId: personId,
+      targetType: "company",
+      targetId: companyId,
+      relationshipType: "works_at",
+      confidence: 1,
+      origin: "user",
+      status: "confirmed",
+      evidenceSummary: "Set by you on the person record.",
+    });
+  }
+}
+
+// --- Tag behaviour ----------------------------------------------------------
+
+const IMPORTANCE_ORDER: Record<PersonImportanceLevel, number> = {
+  low: 0,
+  normal: 1,
+  high: 2,
+  critical: 3,
+};
+
+interface PersonCore {
+  displayName: string;
+  importance: PersonImportanceLevel;
+}
+
+async function readPersonCore(personId: string): Promise<PersonCore | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("people")
+    .select("display_name, importance_level")
+    .eq("id", personId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return {
+    displayName: (data as { display_name: string }).display_name,
+    importance: (data as { importance_level: PersonImportanceLevel }).importance_level,
+  };
+}
+
+/**
+ * Apply the behavioural contract of a tag (people-tags.ts) as explicit,
+ * inspectable tenant state — never hidden model learning. Returns a plain-English
+ * list of what changed, so the UI can confirm the effect to the operator.
+ *
+ *  - raise_importance → raise people.importance_level to the tag's floor.
+ *  - suggest_action   → propose a follow-up action (created_from='people').
+ *  - reduce_noise     → add an exclude_from_memo refinement rule for the person.
+ *  - mark_sensitive / classify → recorded by the tag itself (no side effects yet).
+ */
+export async function applyTagBehaviour(
+  ctx: { tenantId: string; userId: string },
+  personId: string,
+  tagSlug: string,
+): Promise<string[]> {
+  const def = getTagDefinition(tagSlug);
+  if (!def || !def.behaviour.wired) return [];
+  const supabase = await createSupabaseServerClient();
+  const effects: string[] = [];
+
+  switch (def.behaviour.kind) {
+    case "raise_importance": {
+      const floor = def.behaviour.importanceFloor ?? "high";
+      const core = await readPersonCore(personId);
+      if (core && IMPORTANCE_ORDER[core.importance] < IMPORTANCE_ORDER[floor]) {
+        await supabase.from("people").update({ importance_level: floor }).eq("id", personId);
+        effects.push(`Importance raised to ${IMPORTANCE_LABELS[floor]} for your briefing.`);
+      }
+      break;
+    }
+    case "suggest_action": {
+      const core = await readPersonCore(personId);
+      const name = core?.displayName ?? "this person";
+      const { error } = await supabase.from("suggested_actions").insert({
+        tenant_id: ctx.tenantId,
+        status: "suggested",
+        title: `Follow up with ${name}`,
+        rationale: `Flagged as a follow-up on the ${name} record.`,
+        created_from: "people",
+        person_id: personId,
+      });
+      if (error) throw new Error(error.message);
+      effects.push("A follow-up action has been proposed in Actions.");
+      break;
+    }
+    case "reduce_noise": {
+      const core = await readPersonCore(personId);
+      const name = core?.displayName ?? "this person";
+      const { error } = await supabase.from("refinement_rules").insert({
+        tenant_id: ctx.tenantId,
+        user_id: ctx.userId,
+        rule_type: "exclude_from_memo",
+        scope_type: "person",
+        scope_id: personId,
+        scope_label: name,
+        condition: "unless directly relevant",
+        statement: `Keep ${name} out of the daily briefing unless directly relevant.`,
+        priority: 40,
+      });
+      if (error) throw new Error(error.message);
+      effects.push("This person will stay out of your briefing unless directly relevant.");
+      break;
+    }
+    default:
+      break;
+  }
+  return effects;
 }

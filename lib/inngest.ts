@@ -2,6 +2,7 @@ import { Inngest, eventType, staticSchema } from "inngest";
 import { createSupabaseSecretClient } from "@/lib/supabase/secret";
 import type { TenantContext, TenantRole } from "@/modules/shared";
 import { agentOrchestrationService } from "@/modules/agent-orchestration";
+import { semanticLinkingService } from "@/modules/semantic-linking";
 import { getIntegrationAccessToken } from "@/modules/source-connection/server";
 import { syncActiveRepositories } from "@/modules/source-connection/github-repos";
 import { syncActiveResources as syncActiveNotionResources } from "@/modules/source-connection/notion";
@@ -532,6 +533,28 @@ export const intelligenceProcessFunction = inngest.createFunction(
         );
       }
       return { ok: result.ok };
+    });
+
+    await step.run("refresh-semantic-links", async () => {
+      const { ctx } = await resolveTenantJobContext(supabase, tenantId);
+      if (!ctx.userId) {
+        throw new Error(
+          `No owner/member found for tenant ${tenantId}; cannot process semantic links.`,
+        );
+      }
+      try {
+        const result = await semanticLinkingService.processTenant(ctx);
+        console.log(
+          `[intelligence/process] semantic links refreshed for tenant ${tenantId}: embedded=${result.embedded}, skipped=${result.skipped}, suggested=${result.suggestedLinks}`,
+        );
+        return result;
+      } catch (cause) {
+        console.error(
+          `[intelligence/process] semantic linking failed for tenant ${tenantId}:`,
+          cause instanceof Error ? cause.message : cause,
+        );
+        return { embedded: 0, skipped: 0, suggestedLinks: 0 };
+      }
     });
 
     // Hand off to the briefing, preserving the runId for idempotency/provenance.

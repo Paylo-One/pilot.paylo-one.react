@@ -28,6 +28,13 @@ interface NavItem {
   icon: React.ReactNode;
 }
 
+/**
+ * The People surface is the relationship layer (people + companies). The label
+ * is kept here as a single configurable constant — change it in one place to
+ * "People", "Relationships", etc. without touching the route.
+ */
+const PEOPLE_NAV_LABEL = "People & Companies";
+
 interface NavGroup {
   label: string;
   items: NavItem[];
@@ -79,7 +86,7 @@ const GROUPS: NavGroup[] = [
       },
       {
         href: "/people",
-        label: "People",
+        label: PEOPLE_NAV_LABEL,
         icon: (
           <svg {...ICON_PROPS}>
             <circle cx="9" cy="8" r="3" />

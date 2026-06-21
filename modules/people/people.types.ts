@@ -106,7 +106,11 @@ export interface Person {
   readonly id: string;
   readonly displayName: string;
   readonly roleTitle: string | null;
+  /** Free-text employer (pre-resolution). Backfilled from a confirmed company link. */
   readonly organisation: string | null;
+  /** Resolved primary employer (a Company), once linked. */
+  readonly companyId: string | null;
+  readonly companyName: string | null;
   readonly relationshipType: RelationshipType;
   readonly importance: PersonImportanceLevel;
   readonly status: PersonStatus;
@@ -193,3 +197,128 @@ export const IDENTITY_TYPE_LABELS: Record<IdentityType, string> = {
   notion: "Notion",
   alias: "Alias",
 };
+
+// --- Relationship graph (entity_links) --------------------------------------
+
+/** The kinds of entity the graph connects. */
+export type EntityType =
+  | "person"
+  | "company"
+  | "topic"
+  | "action"
+  | "decision"
+  | "diary_entry"
+  | "briefing"
+  | "source_item";
+
+/** Whether an edge was proposed by the system or confirmed by the operator. */
+export type LinkOrigin = "system" | "user";
+
+/** Lifecycle of a graph edge. Suggestions are confirmed, never auto-applied. */
+export type LinkStatus = "suggested" | "confirmed" | "rejected";
+
+/** How visible/usable an edge is (sensitive relationships default to guarded). */
+export type LinkVisibility = "normal" | "sensitive" | "hidden";
+
+/**
+ * The relationship kinds the graph understands. Stored as text on
+ * `entity_links.relationship_type`; this is the controlled vocabulary the UI and
+ * correlation use. Free-form kinds are tolerated but uncatalogued.
+ */
+export type RelationshipKind =
+  | "works_at"
+  | "founder_of"
+  | "reports_to"
+  | "collaborates_with"
+  | "client_of"
+  | "supplier_to"
+  | "investor_in"
+  | "introduced_by"
+  | "mentioned_with"
+  | "decision_owner"
+  | "action_owner"
+  | "related_to_topic"
+  | "frequent_correspondent"
+  | "same_company"
+  | "same_project"
+  | "same_meeting"
+  | "same_email_thread"
+  | "semantically_related";
+
+export const RELATIONSHIP_KIND_LABELS: Record<RelationshipKind, string> = {
+  works_at: "Works at",
+  founder_of: "Founder of",
+  reports_to: "Reports to",
+  collaborates_with: "Collaborates with",
+  client_of: "Client of",
+  supplier_to: "Supplier to",
+  investor_in: "Investor in",
+  introduced_by: "Introduced by",
+  mentioned_with: "Mentioned with",
+  decision_owner: "Decision owner",
+  action_owner: "Action owner",
+  related_to_topic: "Related to topic",
+  frequent_correspondent: "Frequent correspondent",
+  same_company: "Same company",
+  same_project: "Same project",
+  same_meeting: "Same meeting",
+  same_email_thread: "Same email thread",
+  semantically_related: "Semantically related",
+};
+
+/**
+ * A graph edge. Every edge is explainable: it carries a relationship kind,
+ * confidence, origin, an evidence summary, and provenance. Suggestions live here
+ * with `origin: "system"` and `status: "suggested"`.
+ */
+export interface EntityLink {
+  readonly id: string;
+  readonly sourceType: EntityType;
+  readonly sourceId: string;
+  readonly targetType: EntityType;
+  readonly targetId: string;
+  /** A controlled RelationshipKind in practice (stored as text). */
+  readonly relationshipType: string;
+  readonly confidence: number;
+  readonly origin: LinkOrigin;
+  readonly status: LinkStatus;
+  /** Plain-language "why this link was proposed". */
+  readonly evidenceSummary: string | null;
+  readonly sourceReference: string | null;
+  readonly visibility: LinkVisibility;
+  readonly firstSeenAt: string;
+  readonly lastSeenAt: string;
+}
+
+/**
+ * An edge resolved for display: the other endpoint's label and type, the kind,
+ * confidence, and whether it is confirmed or still a suggestion.
+ */
+export interface ResolvedRelationship {
+  readonly id: string;
+  readonly otherType: EntityType;
+  readonly otherId: string;
+  readonly otherLabel: string;
+  readonly relationshipType: string;
+  readonly relationshipLabel: string;
+  readonly confidence: number;
+  readonly origin: LinkOrigin;
+  readonly status: LinkStatus;
+  readonly evidenceSummary: string | null;
+}
+
+export const ENTITY_TYPE_LABELS: Record<EntityType, string> = {
+  person: "Person",
+  company: "Company",
+  topic: "Topic",
+  action: "Action",
+  decision: "Decision",
+  diary_entry: "Diary entry",
+  briefing: "Briefing",
+  source_item: "Source",
+};
+
+/** Human label for a relationship kind (catalogued label, else the raw value). */
+export function relationshipKindLabel(kind: string): string {
+  return (RELATIONSHIP_KIND_LABELS as Record<string, string>)[kind] ?? kind;
+}
