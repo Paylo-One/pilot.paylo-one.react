@@ -57,7 +57,7 @@ export default async function RegisterPage() {
         Paylo.one address.
       </p>
 
-      <SignInForm mode="registration" />
+      <SignInForm mode="registration" referralCode={referralCode} />
 
       <p className="scaffold-note" style={{ marginTop: "var(--space-lg)" }}>
         Already have a Paylo.one account?{" "}
