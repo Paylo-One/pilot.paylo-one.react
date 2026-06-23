@@ -401,6 +401,95 @@ export async function decideAction(
   return { ok: true };
 }
 
+export async function mergeDuplicateActions(input: {
+  primaryActionId: string;
+  duplicateActionIds: string[];
+  approvePrimary?: boolean;
+  reason?: string;
+}): Promise<ActionResponse> {
+  try {
+    const duplicateIds = Array.from(new Set(input.duplicateActionIds)).filter(
+      (id) => id && id !== input.primaryActionId,
+    );
+    if (!input.primaryActionId || duplicateIds.length === 0) {
+      return { ok: false, error: "Choose at least two actions to merge." };
+    }
+
+    const ctx = await requireTenantContext();
+    const supabase = await createSupabaseServerClient();
+    const now = new Date().toISOString();
+
+    const { data: primary, error: primaryError } = await supabase
+      .from("suggested_actions")
+      .select("id, title, status")
+      .eq("id", input.primaryActionId)
+      .eq("tenant_id", ctx.tenantId)
+      .maybeSingle();
+
+    if (primaryError) return { ok: false, error: primaryError.message };
+    if (!primary) return { ok: false, error: "Main action not found." };
+
+    const { data: duplicates, error: duplicatesError } = await supabase
+      .from("suggested_actions")
+      .select("id, title, status")
+      .eq("tenant_id", ctx.tenantId)
+      .in("id", duplicateIds);
+
+    if (duplicatesError) return { ok: false, error: duplicatesError.message };
+    if (!duplicates || duplicates.length === 0) {
+      return { ok: false, error: "Duplicate actions were not found." };
+    }
+
+    const { error: updateDuplicatesError } = await supabase
+      .from("suggested_actions")
+      .update({
+        status: "cancelled",
+        merged_into_action_id: input.primaryActionId,
+        cleanup_metadata: {
+          cleanup_type: "duplicate_merge",
+          merged_into_action_id: input.primaryActionId,
+          merged_at: now,
+          reason: input.reason || "Merged from possible duplicate review.",
+        },
+        completion_metadata: {
+          merged_into_action_id: input.primaryActionId,
+          merged_at: now,
+          reason: input.reason || "Merged from possible duplicate review.",
+        },
+      })
+      .eq("tenant_id", ctx.tenantId)
+      .in("id", duplicates.map((item) => item.id));
+
+    if (updateDuplicatesError) return { ok: false, error: updateDuplicatesError.message };
+
+    if (input.approvePrimary && primary.status === "inbox") {
+      const { error: approveError } = await supabase
+        .from("suggested_actions")
+        .update({ status: "planned" })
+        .eq("tenant_id", ctx.tenantId)
+        .eq("id", input.primaryActionId);
+      if (approveError) return { ok: false, error: approveError.message };
+    }
+
+    await auditService.record(ctx, {
+      action: input.approvePrimary ? "action.duplicates.merge_and_approve" : "action.duplicates.merge",
+      target: input.primaryActionId,
+      metadata: {
+        duplicateActionIds: duplicates.map((item) => item.id),
+        duplicateTitles: duplicates.map((item) => item.title),
+        primaryTitle: primary.title,
+        reason: input.reason,
+      },
+    });
+
+    revalidatePath("/actions");
+    revalidatePath("/briefing");
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err.message || "An unexpected error occurred." };
+  }
+}
+
 export async function suggestActionMetadata(
   title: string,
   description?: string,

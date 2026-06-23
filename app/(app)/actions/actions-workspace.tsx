@@ -1,25 +1,94 @@
 "use client";
 
-import { useMemo, useState, useEffect, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { SuggestedActionView, ActionStatus, ActionPriority } from "@/modules/action-extraction/server";
-import { createAction, suggestActionMetadata } from "./actions";
+import type {
+  SuggestedActionView,
+  ActionStatus,
+  ActionPriority,
+} from "@/modules/action-extraction/server";
+import {
+  createAction,
+  updateAction,
+  completeAction,
+  snoozeAction,
+  linkActionPerson,
+  mergeDuplicateActions,
+  suggestActionMetadata,
+} from "./actions";
 import type { PersonLinkOption } from "@/components/refinement/person-link-control";
+
+const ACTIVE_STATUSES = new Set<ActionStatus>([
+  "inbox",
+  "planned",
+  "in_progress",
+  "waiting",
+  "follow_up",
+]);
 
 const STATUS_META: Record<
   ActionStatus,
   { label: string; tone: "ok" | "info" | "warn" | "risk" | "neutral" }
 > = {
-  inbox: { label: "Inbox", tone: "warn" },
+  inbox: { label: "Needs approval", tone: "warn" },
   planned: { label: "Planned", tone: "info" },
-  in_progress: { label: "In Progress", tone: "ok" },
-  waiting: { label: "Waiting On", tone: "neutral" },
+  in_progress: { label: "In progress", tone: "ok" },
+  waiting: { label: "Waiting on", tone: "neutral" },
   follow_up: { label: "Follow-up", tone: "warn" },
   completed: { label: "Completed", tone: "ok" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
+  cancelled: { label: "Not an action", tone: "neutral" },
 };
 
-function formatDate(value: string): string {
+const PRIORITY_LABELS: Record<ActionPriority, string> = {
+  critical: "Critical",
+  high: "High",
+  normal: "Normal",
+  low: "Low",
+};
+
+const STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "by",
+  "for",
+  "from",
+  "in",
+  "of",
+  "on",
+  "or",
+  "the",
+  "to",
+  "with",
+  "follow",
+  "up",
+  "check",
+  "sync",
+  "align",
+]);
+
+type DuplicateGroup = {
+  readonly id: string;
+  readonly primary: SuggestedActionView;
+  readonly duplicates: SuggestedActionView[];
+  readonly confidence: "High" | "Medium";
+  readonly reason: string;
+};
+
+type CleanupSuggestion = {
+  readonly id: string;
+  readonly title: string;
+  readonly body: string;
+  readonly action?: SuggestedActionView;
+  readonly tone: "info" | "warn" | "risk";
+};
+
+function formatDate(value: string | null): string {
+  if (!value) return "No date";
   return new Intl.DateTimeFormat(undefined, {
     day: "numeric",
     month: "short",
@@ -27,605 +96,484 @@ function formatDate(value: string): string {
   }).format(new Date(value));
 }
 
-// Single Action Row Component
+function dateInput(value: string | null): string {
+  return value ? value.slice(0, 10) : "";
+}
+
+function addDays(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function active(action: SuggestedActionView): boolean {
+  return ACTIVE_STATUSES.has(action.status);
+}
+
+function tokensFor(action: SuggestedActionView): Set<string> {
+  const raw = `${action.title} ${action.description ?? ""} ${(action.topics ?? []).join(" ")}`;
+  const tokens = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 2 && !STOP_WORDS.has(token));
+  return new Set(tokens);
+}
+
+function similarity(a: SuggestedActionView, b: SuggestedActionView): number {
+  const aTokens = tokensFor(a);
+  const bTokens = tokensFor(b);
+  if (aTokens.size === 0 || bTokens.size === 0) return 0;
+  const overlap = [...aTokens].filter((token) => bTokens.has(token)).length;
+  const union = new Set([...aTokens, ...bTokens]).size;
+  let score = overlap / union;
+  if (a.personId && a.personId === b.personId) score += 0.16;
+  if ((a.topics ?? []).some((topic) => b.topics.includes(topic))) score += 0.14;
+  if (a.createdFrom === b.createdFrom) score += 0.04;
+  return Math.min(score, 1);
+}
+
+function attentionRank(action: SuggestedActionView): number {
+  let score = 0;
+  if (action.status === "inbox") score += 8;
+  if (action.priority === "critical") score += 7;
+  if (action.priority === "high") score += 5;
+  if (action.dueAt && new Date(action.dueAt) <= new Date()) score += 6;
+  if (action.followUpAt && new Date(action.followUpAt) <= new Date()) score += 4;
+  if (action.personId) score += 1;
+  return score;
+}
+
+function buildDuplicateGroups(actions: readonly SuggestedActionView[]): DuplicateGroup[] {
+  const candidates = actions.filter(active);
+  const used = new Set<string>();
+  const groups: DuplicateGroup[] = [];
+
+  for (const action of candidates) {
+    if (used.has(action.id)) continue;
+    const matches = candidates
+      .filter((candidate) => candidate.id !== action.id && !used.has(candidate.id))
+      .map((candidate) => ({ action: candidate, score: similarity(action, candidate) }))
+      .filter(({ score }) => score >= 0.48)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4);
+
+    if (matches.length === 0) continue;
+    const cluster = [action, ...matches.map((match) => match.action)].sort(
+      (a, b) => attentionRank(b) - attentionRank(a),
+    );
+    const [primary, ...duplicates] = cluster;
+    if (!primary || duplicates.length === 0) continue;
+    cluster.forEach((item) => used.add(item.id));
+    const topScore = matches[0]?.score ?? 0.48;
+    groups.push({
+      id: cluster.map((item) => item.id).sort().join(":"),
+      primary,
+      duplicates,
+      confidence: topScore >= 0.7 ? "High" : "Medium",
+      reason:
+        primary.personId && duplicates.some((item) => item.personId === primary.personId)
+          ? "Same person and overlapping wording."
+          : "Similar wording, topic, or source context.",
+    });
+  }
+
+  return groups;
+}
+
+function personName(people: readonly PersonLinkOption[], personId: string | null): string | null {
+  if (!personId) return null;
+  return people.find((person) => person.id === personId)?.displayName ?? null;
+}
+
+function statusClass(tone: "ok" | "info" | "warn" | "risk" | "neutral"): string {
+  if (tone === "neutral") return "status status--neutral";
+  return `status status--${tone}`;
+}
+
+function ActionCommandButton({
+  children,
+  onClick,
+  disabled,
+  kind = "quiet",
+}: {
+  readonly children: React.ReactNode;
+  readonly onClick: () => void;
+  readonly disabled?: boolean;
+  readonly kind?: "primary" | "quiet" | "danger";
+}) {
+  return (
+    <button
+      type="button"
+      className={`action-command action-command--${kind}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      disabled={disabled}
+    >
+      {children}
+    </button>
+  );
+}
+
 function ActionRow({
   action,
   people,
-  onClick,
+  selected,
+  pending,
+  onSelect,
+  onQuickStatus,
+  onComplete,
+  onSnooze,
 }: {
   readonly action: SuggestedActionView;
   readonly people: readonly PersonLinkOption[];
-  readonly onClick: () => void;
+  readonly selected: boolean;
+  readonly pending: boolean;
+  readonly onSelect: () => void;
+  readonly onQuickStatus: (status: ActionStatus) => void;
+  readonly onComplete: () => void;
+  readonly onSnooze: () => void;
 }) {
-  const status = STATUS_META[action.status] ?? {
-    label: action.status,
-    tone: "neutral" as const,
-  };
-
-  const isOverdue =
+  const status = STATUS_META[action.status];
+  const linkedPerson = personName(people, action.personId);
+  const overdue =
     action.dueAt &&
     new Date(action.dueAt) < new Date() &&
     action.status !== "completed" &&
     action.status !== "cancelled";
-
-  let attentionTone: "ok" | "info" | "warn" | "risk" | "neutral" = status.tone;
-  if (action.status !== "completed" && action.status !== "cancelled") {
-    if (isOverdue) {
-      attentionTone = "risk";
-    } else if (action.priority === "critical") {
-      attentionTone = "risk";
-    } else if (action.priority === "high") {
-      attentionTone = "warn";
-    } else if (action.status === "in_progress") {
-      attentionTone = "ok";
-    }
-  }
-
-  const linkedPerson = people.find((p) => p.id === action.personId);
+  const tone =
+    overdue || action.priority === "critical"
+      ? "risk"
+      : action.priority === "high"
+        ? "warn"
+        : status.tone;
 
   return (
-    <article className="action-row" style={{ cursor: "pointer" }} onClick={onClick}>
-      <span className={`action-row__attention action-row__attention--${attentionTone}`} aria-hidden="true" />
-      <div className="action-row__select" style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", background: "transparent", border: 0, padding: 0, textAlign: "left" }}>
-        <div style={{ flex: 1, minWidth: 0, paddingRight: "var(--space-md)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "4px" }}>
-            <span className="action-row__title" style={{ fontSize: "14px", fontWeight: 500, color: "var(--colour-text-primary)" }}>{action.title}</span>
-            {action.priority && action.priority !== "normal" && (
-              <span className={`status status--${action.priority === "critical" ? "risk" : "warn"}`} style={{ fontSize: "10px", padding: "1px 6px", textTransform: "uppercase" }}>
-                {action.priority}
-              </span>
-            )}
-            {isOverdue && (
-              <span className="status status--risk" style={{ fontSize: "10px", padding: "1px 6px", textTransform: "uppercase" }}>
-                Overdue
-              </span>
-            )}
-          </div>
-          <p className="action-row__context" style={{ fontSize: "12px", color: "var(--colour-text-secondary)", margin: 0, display: "flex", gap: "12px", flexWrap: "wrap" }}>
-            <span>{status.label}</span>
-            {action.dueAt ? <span style={{ color: isOverdue ? "var(--colour-danger)" : "inherit" }}>Due {formatDate(action.dueAt)}</span> : null}
-            {action.followUpAt ? <span>Follow-up {formatDate(action.followUpAt)}</span> : null}
-            {linkedPerson ? <span>Contact: {linkedPerson.displayName}</span> : null}
-            {action.topics && action.topics.length > 0 ? (
-              <span style={{ display: "flex", gap: "4px" }}>
-                {action.topics.map((t) => (
-                  <strong key={t} style={{ color: "var(--colour-accent-primary)" }}>#{t}</strong>
-                ))}
-              </span>
-            ) : null}
-          </p>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          {action.documents && action.documents.length > 0 && (
-            <span title={`${action.documents.length} Attachment(s)`} style={{ color: "var(--colour-text-muted)", display: "flex", alignItems: "center" }}>
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-              </svg>
-            </span>
-          )}
-          <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ color: "var(--colour-text-muted)" }}>
-            <path d="M7 3.5 L13.5 10 L7 16.5" />
-          </svg>
-        </div>
+    <article
+      className={`action-review-row${selected ? " action-review-row--selected" : ""}`}
+      onClick={onSelect}
+    >
+      <div className={`action-review-row__signal action-review-row__signal--${tone}`} />
+      <button type="button" className="action-review-row__main" onClick={onSelect}>
+        <span className="action-review-row__title">{action.title}</span>
+        <span className="action-review-row__meta">
+          <span>{status.label}</span>
+          {action.dueAt ? <span>{overdue ? "Overdue" : "Due"} {formatDate(action.dueAt)}</span> : null}
+          {action.followUpAt ? <span>Follow up {formatDate(action.followUpAt)}</span> : null}
+          {linkedPerson ? <span>With {linkedPerson}</span> : null}
+        </span>
+        {action.rationale ? <span className="action-review-row__reason">{action.rationale}</span> : null}
+      </button>
+      <div className="action-review-row__commands" aria-label={`Quick actions for ${action.title}`}>
+        {action.status === "inbox" ? (
+          <ActionCommandButton disabled={pending} kind="primary" onClick={() => onQuickStatus("planned")}>
+            Approve
+          </ActionCommandButton>
+        ) : null}
+        <ActionCommandButton disabled={pending} onClick={onComplete}>
+          Complete
+        </ActionCommandButton>
+        <ActionCommandButton disabled={pending} onClick={onSnooze}>
+          Snooze
+        </ActionCommandButton>
+        <ActionCommandButton disabled={pending} onClick={() => onQuickStatus("waiting")}>
+          Waiting
+        </ActionCommandButton>
+        <ActionCommandButton disabled={pending} kind="danger" onClick={() => onQuickStatus("cancelled")}>
+          Not an action
+        </ActionCommandButton>
       </div>
     </article>
   );
 }
 
-// Quick Capture Modal Component
-function QuickCaptureModal({
-  isOpen,
-  onClose,
-  people,
-  existingTopics,
+function DuplicateReviewCard({
+  group,
+  pending,
+  onSelect,
+  onMerge,
+  onDismiss,
+  onKeepSeparate,
 }: {
-  readonly isOpen: boolean;
-  readonly onClose: () => void;
-  readonly people: readonly PersonLinkOption[];
-  readonly existingTopics: readonly string[];
+  readonly group: DuplicateGroup;
+  readonly pending: boolean;
+  readonly onSelect: (action: SuggestedActionView) => void;
+  readonly onMerge: (approve: boolean) => void;
+  readonly onDismiss: () => void;
+  readonly onKeepSeparate: () => void;
 }) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [isSuggesting, setIsSuggesting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  return (
+    <section className="duplicate-review">
+      <div className="duplicate-review__head">
+        <div>
+          <p className="duplicate-review__label">Possible duplicate</p>
+          <h3>{group.primary.title}</h3>
+        </div>
+        <span className="status status--info">{group.confidence} confidence</span>
+      </div>
+      <p className="duplicate-review__why">This looks similar to {group.duplicates.length} other item{group.duplicates.length === 1 ? "" : "s"}. {group.reason}</p>
+      <div className="duplicate-review__items">
+        <button type="button" onClick={() => onSelect(group.primary)}>
+          <strong>Recommended action</strong>
+          <span>{group.primary.title}</span>
+        </button>
+        {group.duplicates.map((duplicate) => (
+          <button type="button" key={duplicate.id} onClick={() => onSelect(duplicate)}>
+            <strong>Duplicate candidate</strong>
+            <span>{duplicate.title}</span>
+          </button>
+        ))}
+      </div>
+      <div className="duplicate-review__commands">
+        <ActionCommandButton disabled={pending} kind="primary" onClick={() => onMerge(true)}>
+          Approve merged action
+        </ActionCommandButton>
+        <ActionCommandButton disabled={pending} onClick={() => onMerge(false)}>
+          Merge actions
+        </ActionCommandButton>
+        <ActionCommandButton disabled={pending} onClick={onDismiss}>
+          Dismiss duplicates
+        </ActionCommandButton>
+        <ActionCommandButton disabled={pending} onClick={onKeepSeparate}>
+          Keep separate
+        </ActionCommandButton>
+      </div>
+    </section>
+  );
+}
 
-  // Form Fields
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState<ActionPriority>("normal");
-  const [status, setStatus] = useState<ActionStatus>("inbox");
-  const [dueAt, setDueAt] = useState("");
-  const [followUpAt, setFollowUpAt] = useState("");
-  const [selectedPersonId, setSelectedPersonId] = useState("");
-  const [topics, setTopics] = useState<string[]>([]);
-  const [newTopic, setNewTopic] = useState("");
-  const [rationale, setRationale] = useState("");
+function CleanupPanel({
+  suggestions,
+  onSelect,
+}: {
+  readonly suggestions: readonly CleanupSuggestion[];
+  readonly onSelect: (action: SuggestedActionView) => void;
+}) {
+  if (suggestions.length === 0) {
+    return (
+      <section className="cleanup-panel cleanup-panel--quiet">
+        <p className="cleanup-panel__title">Your action list is clean.</p>
+        <p>New items will appear here when they need a decision.</p>
+      </section>
+    );
+  }
 
-  // AI Suggestions State
-  const [suggestions, setSuggestions] = useState<{
+  return (
+    <section className="cleanup-panel">
+      <div className="cleanup-panel__head">
+        <p className="cleanup-panel__label">Cleanup suggestions</p>
+        <span className="actions-count">{suggestions.length}</span>
+      </div>
+      <div className="cleanup-panel__list">
+        {suggestions.slice(0, 4).map((suggestion) => (
+          <button
+            key={suggestion.id}
+            type="button"
+            className={`cleanup-suggestion cleanup-suggestion--${suggestion.tone}`}
+            onClick={() => suggestion.action && onSelect(suggestion.action)}
+            disabled={!suggestion.action}
+          >
+            <strong>{suggestion.title}</strong>
+            <span>{suggestion.body}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ActionInspector({
+  action,
+  people,
+  pending,
+  suggestion,
+  suggestionPending,
+  onStatus,
+  onPriority,
+  onDueDate,
+  onFollowUpDate,
+  onPerson,
+  onSuggest,
+  onApplySuggestion,
+}: {
+  readonly action: SuggestedActionView | null;
+  readonly people: readonly PersonLinkOption[];
+  readonly pending: boolean;
+  readonly suggestion: {
     topics: string[];
     people: { id: string; displayName: string }[];
     dueAt: string | null;
     followUpAt: string | null;
     priority: ActionPriority;
     waitingOnSomeone: boolean;
-  } | null>(null);
-
-  // Esc key close
-  useEffect(() => {
-    function handleEsc(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    if (isOpen) {
-      window.addEventListener("keydown", handleEsc);
-    }
-    return () => window.removeEventListener("keydown", handleEsc);
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
-
-  async function handleSuggest() {
-    if (!title.trim()) {
-      setError("Please enter an action title before requesting suggestions.");
-      return;
-    }
-    setError(null);
-    setIsSuggesting(true);
-
-    try {
-      const res = await suggestActionMetadata(title, description || undefined);
-      if (res.ok && res.suggestions) {
-        setSuggestions(res.suggestions);
-      } else {
-        setError(res.error ?? "Failed to parse context.");
-      }
-    } catch (err: any) {
-      setError(err.message || "AI Suggestion engine encountered an error.");
-    } finally {
-      setIsSuggesting(false);
-    }
+  } | null;
+  readonly suggestionPending: boolean;
+  readonly onStatus: (status: ActionStatus) => void;
+  readonly onPriority: (priority: ActionPriority) => void;
+  readonly onDueDate: (value: string) => void;
+  readonly onFollowUpDate: (value: string) => void;
+  readonly onPerson: (personId: string | null) => void;
+  readonly onSuggest: () => void;
+  readonly onApplySuggestion: () => void;
+}) {
+  if (!action) {
+    return (
+      <aside className="actions-inspector actions-inspector--empty">
+        <p className="eyebrow">Detail</p>
+        <h2>Choose an action to review.</h2>
+        <p>Use the list for quick decisions, then open the detail page only when more context is needed.</p>
+      </aside>
+    );
   }
 
-  function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    if (!title.trim()) {
-      setError("Action title is required.");
-      return;
-    }
-
-    setError(null);
-    startTransition(async () => {
-      const res = await createAction({
-        title: title.trim(),
-        description: description.trim() || undefined,
-        priority,
-        status,
-        dueAt: dueAt || null,
-        followUpAt: followUpAt || null,
-        topics,
-        personId: selectedPersonId || null,
-        rationale: rationale.trim() || null,
-      });
-
-      if (!res.ok) {
-        setError(res.error ?? "Failed to save action.");
-      } else {
-        // Reset and close
-        setTitle("");
-        setDescription("");
-        setPriority("normal");
-        setStatus("inbox");
-        setDueAt("");
-        setFollowUpAt("");
-        setSelectedPersonId("");
-        setTopics([]);
-        setNewTopic("");
-        setRationale("");
-        setSuggestions(null);
-        onClose();
-        router.refresh();
-      }
-    });
-  }
-
-  function addTopicTag(tag: string) {
-    const clean = tag.trim();
-    if (clean && !topics.includes(clean)) {
-      setTopics([...topics, clean]);
-    }
-    setNewTopic("");
-  }
+  const status = STATUS_META[action.status];
 
   return (
-    <div className="modal-backdrop" style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0, 0, 0, 0.75)", backdropFilter: "blur(4px)", padding: "var(--space-md)" }} onClick={onClose}>
-      <div className="panel" style={{ width: "100%", maxWidth: "600px", maxHeight: "90vh", overflowY: "auto", background: "var(--colour-surface-elevated)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-md)", padding: "var(--space-lg)", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.5)" }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--colour-border)", paddingBottom: "var(--space-md)", marginBottom: "var(--space-md)" }}>
-          <div>
-            <p className="eyebrow" style={{ color: "var(--colour-accent-primary)" }}>Executive Workspace</p>
-            <h2 style={{ fontSize: "18px", fontWeight: 600, color: "var(--colour-text-primary)", margin: 0 }}>Quick Capture Commitment</h2>
-          </div>
-          <button type="button" onClick={onClose} style={{ border: 0, background: "transparent", color: "var(--colour-text-muted)", fontSize: "20px", cursor: "pointer", padding: "4px" }} title="Close dialog">×</button>
+    <aside className="actions-inspector" aria-label="Action detail">
+      <div className="actions-inspector__head">
+        <div>
+          <p className="eyebrow">Action detail</p>
+          <h2>{action.title}</h2>
         </div>
-
-        {error && (
-          <div className="alert alert--danger" style={{ padding: "10px 14px", borderRadius: "var(--radius-sm)", background: "rgba(224, 86, 36, 0.1)", color: "var(--colour-text-primary)", fontSize: "13px", marginBottom: "var(--space-md)" }}>
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSave} className="stack" style={{ gap: "var(--space-md)" }}>
-          {/* Title and AI Suggest row */}
-          <div className="field">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-              <label htmlFor="modal-title" className="field__label" style={{ margin: 0 }}>Title <span style={{ color: "var(--colour-danger)" }}>*</span></label>
-              <button
-                type="button"
-                onClick={handleSuggest}
-                disabled={isSuggesting || !title.trim()}
-                className="btn btn--secondary"
-                style={{ fontSize: "11px", padding: "3px 8px", background: "rgba(100, 116, 139, 0.1)", borderColor: "var(--colour-border)", display: "flex", alignItems: "center", gap: "4px" }}
-              >
-                {isSuggesting ? (
-                  <>AI Analyzing...</>
-                ) : (
-                  <>
-                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <polygon points="12 2 2 22 22 22" />
-                    </svg>
-                    Suggest Context
-                  </>
-                )}
-              </button>
-            </div>
-            <input
-              id="modal-title"
-              type="text"
-              className="input"
-              style={{ width: "100%", background: "var(--colour-surface-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", padding: "10px 14px", fontSize: "14px" }}
-              placeholder="e.g. Align with Maria on Q3 goals..."
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              disabled={isPending}
-              required
-              autoFocus
-            />
-          </div>
-
-          {/* Description */}
-          <div className="field">
-            <label htmlFor="modal-description" className="field__label">Description / Notes</label>
-            <textarea
-              id="modal-description"
-              className="input"
-              style={{ width: "100%", background: "var(--colour-surface-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", padding: "10px 14px", fontSize: "13px", resize: "vertical", minHeight: "80px", fontFamily: "inherit" }}
-              placeholder="Add optional notes, deliverables, context..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              disabled={isPending}
-              rows={3}
-            />
-          </div>
-
-          {/* Inline AI suggestions box if returned */}
-          {suggestions && (
-            <div className="alert alert--accent" style={{ padding: "14px", background: "rgba(100, 116, 139, 0.05)", border: "1px dashed var(--colour-border)", borderRadius: "var(--radius-sm)", fontSize: "12px" }}>
-              <h4 style={{ fontWeight: 600, color: "var(--colour-accent-primary)", marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
-                <span>🤖</span> AI Extracted Proposals (Click to apply)
-              </h4>
-
-              <div className="stack" style={{ gap: "8px" }}>
-                {/* Topic suggestions */}
-                {suggestions.topics && suggestions.topics.length > 0 && (
-                  <div>
-                    <span style={{ color: "var(--colour-text-muted)", marginRight: "8px" }}>Topics:</span>
-                    <span style={{ display: "inline-flex", flexWrap: "wrap", gap: "4px" }}>
-                      {suggestions.topics.map((t) => {
-                        const isSelected = topics.includes(t);
-                        const isExisting = existingTopics.includes(t);
-                        return (
-                          <button
-                            key={t}
-                            type="button"
-                            onClick={() => addTopicTag(t)}
-                            disabled={isSelected}
-                            className="chip chip--accent"
-                            style={{ padding: "1px 6px", fontSize: "11px", opacity: isSelected ? 0.5 : 1, cursor: isSelected ? "default" : "pointer", border: isExisting ? "1px solid var(--colour-accent-primary)" : "1px dashed var(--colour-border)", background: "transparent" }}
-                          >
-                            + {t} {isExisting ? "" : "(New)"}
-                          </button>
-                        );
-                      })}
-                    </span>
-                  </div>
-                )}
-
-                {/* People suggestions */}
-                {suggestions.people && suggestions.people.length > 0 && (
-                  <div>
-                    <span style={{ color: "var(--colour-text-muted)", marginRight: "8px" }}>People:</span>
-                    <span style={{ display: "inline-flex", flexWrap: "wrap", gap: "4px" }}>
-                      {suggestions.people.map((p) => {
-                        const isSelected = selectedPersonId === p.id;
-                        return (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => setSelectedPersonId(p.id)}
-                            disabled={isSelected}
-                            className="chip"
-                            style={{ padding: "1px 6px", fontSize: "11px", opacity: isSelected ? 0.5 : 1, cursor: isSelected ? "default" : "pointer" }}
-                          >
-                            + Link {p.displayName}
-                          </button>
-                        );
-                      })}
-                    </span>
-                  </div>
-                )}
-
-                {/* Priority suggestion */}
-                {suggestions.priority && (
-                  <div>
-                    <span style={{ color: "var(--colour-text-muted)", marginRight: "8px" }}>Priority:</span>
-                    <button
-                      type="button"
-                      onClick={() => setPriority(suggestions.priority)}
-                      disabled={priority === suggestions.priority}
-                      className="chip"
-                      style={{ padding: "1px 6px", fontSize: "11px" }}
-                    >
-                      Set to {suggestions.priority.toUpperCase()}
-                    </button>
-                  </div>
-                )}
-
-                {/* Date suggestions */}
-                {(suggestions.dueAt || suggestions.followUpAt) && (
-                  <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-                    {suggestions.dueAt && (
-                      <div>
-                        <span style={{ color: "var(--colour-text-muted)", marginRight: "8px" }}>Due:</span>
-                        <button
-                          type="button"
-                          onClick={() => setDueAt(suggestions.dueAt!)}
-                          disabled={dueAt === suggestions.dueAt}
-                          className="chip"
-                          style={{ padding: "1px 6px", fontSize: "11px" }}
-                        >
-                          Due {formatDate(suggestions.dueAt)}
-                        </button>
-                      </div>
-                    )}
-                    {suggestions.followUpAt && (
-                      <div>
-                        <span style={{ color: "var(--colour-text-muted)", marginRight: "8px" }}>Follow-up:</span>
-                        <button
-                          type="button"
-                          onClick={() => setFollowUpAt(suggestions.followUpAt!)}
-                          disabled={followUpAt === suggestions.followUpAt}
-                          className="chip"
-                          style={{ padding: "1px 6px", fontSize: "11px" }}
-                        >
-                          Follow-up {formatDate(suggestions.followUpAt)}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {suggestions.waitingOnSomeone && (
-                  <div>
-                    <span style={{ color: "var(--colour-text-muted)", marginRight: "8px" }}>Status:</span>
-                    <button
-                      type="button"
-                      onClick={() => setStatus("waiting")}
-                      disabled={status === "waiting"}
-                      className="chip"
-                      style={{ padding: "1px 6px", fontSize: "11px" }}
-                    >
-                      Mark Waiting On Someone
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Status & Priority Row */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-md)" }}>
-            <div className="field">
-              <label htmlFor="modal-status" className="field__label">Status</label>
-              <select
-                id="modal-status"
-                className="input"
-                style={{ width: "100%", background: "var(--colour-surface-primary)", color: "var(--colour-text-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "8px 12px" }}
-                value={status}
-                onChange={(e) => setStatus(e.target.value as ActionStatus)}
-                disabled={isPending}
-              >
-                <option value="inbox">Inbox</option>
-                <option value="planned">Planned</option>
-                <option value="in_progress">In Progress</option>
-                <option value="waiting">Waiting On</option>
-                <option value="follow_up">Follow-up</option>
-              </select>
-            </div>
-
-            <div className="field">
-              <label htmlFor="modal-priority" className="field__label">Priority</label>
-              <select
-                id="modal-priority"
-                className="input"
-                style={{ width: "100%", background: "var(--colour-surface-primary)", color: "var(--colour-text-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "8px 12px" }}
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as ActionPriority)}
-                disabled={isPending}
-              >
-                <option value="low">Low</option>
-                <option value="normal">Normal</option>
-                <option value="high">High</option>
-                <option value="critical">Critical</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Dates Row */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-md)" }}>
-            <div className="field">
-              <label htmlFor="modal-due" className="field__label">Due Date</label>
-              <input
-                id="modal-due"
-                type="date"
-                className="input"
-                style={{ width: "100%", background: "var(--colour-surface-primary)", color: "var(--colour-text-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "8px 12px" }}
-                value={dueAt}
-                onChange={(e) => setDueAt(e.target.value)}
-                disabled={isPending}
-              />
-            </div>
-
-            <div className="field">
-              <label htmlFor="modal-followup" className="field__label">Follow-up Date</label>
-              <input
-                id="modal-followup"
-                type="date"
-                className="input"
-                style={{ width: "100%", background: "var(--colour-surface-primary)", color: "var(--colour-text-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "8px 12px" }}
-                value={followUpAt}
-                onChange={(e) => setFollowUpAt(e.target.value)}
-                disabled={isPending}
-              />
-            </div>
-          </div>
-
-          {/* Associated Person */}
-          <div className="field">
-            <label htmlFor="modal-person" className="field__label">Accountability / Person Link</label>
-            <select
-              id="modal-person"
-              className="input"
-              style={{ width: "100%", background: "var(--colour-surface-primary)", color: "var(--colour-text-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "8px 12px" }}
-              value={selectedPersonId}
-              onChange={(e) => setSelectedPersonId(e.target.value)}
-              disabled={isPending}
-            >
-              <option value="">Unassigned / No Contact Link</option>
-              {people.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.displayName} {p.organisation ? `(${p.organisation})` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Source / Context Note */}
-          <div className="field">
-            <label htmlFor="modal-rationale" className="field__label">Source / Context Note</label>
-            <input
-              id="modal-rationale"
-              type="text"
-              className="input"
-              style={{ width: "100%", background: "var(--colour-surface-primary)", color: "var(--colour-text-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "8px 12px", fontSize: "13px" }}
-              placeholder="e.g. Discussed in 1:1, or Slack thread link..."
-              value={rationale}
-              onChange={(e) => setRationale(e.target.value)}
-              disabled={isPending}
-            />
-          </div>
-
-          {/* Topics input */}
-          <div className="field">
-            <label className="field__label">Topics & strategic tags</label>
-            <div className="stack" style={{ gap: "var(--space-xs)" }}>
-              {topics.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "4px" }}>
-                  {topics.map((t) => (
-                    <span key={t} className="chip chip--accent" style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "2px 8px" }}>
-                      {t}
-                      <button
-                        type="button"
-                        onClick={() => setTopics(topics.filter((top) => top !== t))}
-                        style={{ border: 0, background: "transparent", color: "inherit", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Existing Topics Autocomplete dropdown */}
-              {newTopic.trim() && (
-                <div style={{ background: "var(--colour-surface-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", maxHeight: "120px", overflowY: "auto" }}>
-                  {existingTopics
-                    .filter((t) => t.toLowerCase().includes(newTopic.toLowerCase()) && !topics.includes(t))
-                    .map((matched) => (
-                      <button
-                        key={matched}
-                        type="button"
-                        onClick={() => addTopicTag(matched)}
-                        style={{ display: "block", width: "100%", padding: "6px 12px", textAlign: "left", fontSize: "12px", color: "var(--colour-text-primary)", background: "transparent", border: 0, cursor: "pointer", borderBottom: "1px solid var(--colour-border)" }}
-                      >
-                        Use existing: <strong>{matched}</strong>
-                      </button>
-                    ))}
-                  {!topics.includes(newTopic.trim()) && (
-                    <button
-                      type="button"
-                      onClick={() => addTopicTag(newTopic)}
-                      style={{ display: "block", width: "100%", padding: "6px 12px", textAlign: "left", fontSize: "12px", color: "var(--colour-accent-primary)", background: "transparent", border: 0, cursor: "pointer" }}
-                    >
-                      + Confirm creating new topic: <strong>&ldquo;{newTopic.trim()}&rdquo;</strong>
-                    </button>
-                  )}
-                </div>
-              )}
-
-              <div style={{ display: "flex", gap: "6px" }}>
-                <input
-                  type="text"
-                  className="input"
-                  style={{ flex: 1, padding: "4px 8px", fontSize: "12px" }}
-                  placeholder="e.g. Budget, Q3 Hiring"
-                  value={newTopic}
-                  onChange={(e) => setNewTopic(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      addTopicTag(newTopic);
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="btn btn--secondary"
-                  style={{ fontSize: "12px", padding: "4px 10px" }}
-                  disabled={!newTopic.trim()}
-                  onClick={() => addTopicTag(newTopic)}
-                >
-                  Add Tag
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Form Actions */}
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: "var(--space-sm)", borderTop: "1px solid var(--colour-border)", paddingTop: "var(--space-md)", marginTop: "var(--space-sm)" }}>
-            <button type="button" className="btn btn--secondary" onClick={onClose} disabled={isPending}>
-              Cancel
-            </button>
-            <button type="submit" className="btn btn--primary" disabled={isPending || !title.trim()} style={{ minWidth: "100px" }}>
-              {isPending ? "Saving..." : "Save Action"}
-            </button>
-          </div>
-        </form>
+        <span className={statusClass(status.tone)}>{status.label}</span>
       </div>
-    </div>
+
+      <div className="actions-inspector__section">
+        <p className="actions-inspector__label">Why this exists</p>
+        <p className="actions-inspector__prose">
+          {action.rationale || action.description || "No supporting context yet. Add a note or open the detail page to enrich it."}
+        </p>
+      </div>
+
+      <div className="actions-inspector__section action-metadata-grid">
+        <label>
+          <span>Status</span>
+          <select
+            className="input"
+            value={action.status}
+            disabled={pending}
+            onChange={(event) => onStatus(event.target.value as ActionStatus)}
+          >
+            <option value="inbox">Needs approval</option>
+            <option value="planned">Planned</option>
+            <option value="in_progress">In progress</option>
+            <option value="waiting">Waiting on</option>
+            <option value="follow_up">Follow-up</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Not an action</option>
+          </select>
+        </label>
+        <label>
+          <span>Priority</span>
+          <select
+            className="input"
+            value={action.priority}
+            disabled={pending}
+            onChange={(event) => onPriority(event.target.value as ActionPriority)}
+          >
+            {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Due date</span>
+          <input
+            className="input"
+            type="date"
+            value={dateInput(action.dueAt)}
+            disabled={pending}
+            onChange={(event) => onDueDate(event.target.value)}
+          />
+        </label>
+        <label>
+          <span>Follow-up</span>
+          <input
+            className="input"
+            type="date"
+            value={dateInput(action.followUpAt)}
+            disabled={pending}
+            onChange={(event) => onFollowUpDate(event.target.value)}
+          />
+        </label>
+        <label className="action-metadata-grid__wide">
+          <span>Related person</span>
+          <select
+            className="input"
+            value={action.personId ?? ""}
+            disabled={pending}
+            onChange={(event) => onPerson(event.target.value || null)}
+          >
+            <option value="">No person linked</option>
+            {people.map((person) => (
+              <option key={person.id} value={person.id}>
+                {person.displayName}{person.organisation ? `, ${person.organisation}` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="actions-inspector__section">
+        <div className="actions-inspector__section-head">
+          <p className="actions-inspector__label">Context links</p>
+          <span className="actions-count">{action.references.length}</span>
+        </div>
+        {action.references.length > 0 ? (
+          <div className="action-source-list">
+            {action.references.slice(0, 3).map((reference) => (
+              <div className="action-source" key={reference.id}>
+                <div className="action-source__head">
+                  <strong>{reference.sourceSystem}</strong>
+                  <span>{reference.confidence ? `${Math.round(reference.confidence * 100)}%` : "Source"}</span>
+                </div>
+                <p>{reference.excerptOrPointer || "Source reference recorded."}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="actions-inspector__muted">No source linked yet.</p>
+        )}
+      </div>
+
+      <div className="actions-inspector__section">
+        <div className="actions-inspector__section-head">
+          <p className="actions-inspector__label">AI cleanup</p>
+          <button type="button" className="action-command" onClick={onSuggest} disabled={suggestionPending}>
+            {suggestionPending ? "Reviewing..." : "Suggest next step"}
+          </button>
+        </div>
+        {suggestion ? (
+          <div className="ai-cleanup-result">
+            <p>
+              Suggested priority: <strong>{PRIORITY_LABELS[suggestion.priority]}</strong>
+              {suggestion.dueAt ? `, due ${formatDate(suggestion.dueAt)}` : ""}
+              {suggestion.followUpAt ? `, follow up ${formatDate(suggestion.followUpAt)}` : ""}
+              {suggestion.waitingOnSomeone ? ", waiting on someone" : ""}.
+            </p>
+            {suggestion.topics.length > 0 ? <p>Topics: {suggestion.topics.join(", ")}</p> : null}
+            {suggestion.people.length > 0 ? <p>Person: {suggestion.people.map((person) => person.displayName).join(", ")}</p> : null}
+            <button type="button" className="btn btn--secondary" onClick={onApplySuggestion} disabled={pending}>
+              Apply proposal
+            </button>
+          </div>
+        ) : (
+          <p className="actions-inspector__muted">Ask Pilot to propose missing metadata. Nothing changes until you apply it.</p>
+        )}
+      </div>
+
+      <div className="actions-inspector__footer">
+        <Link className="btn btn--secondary" href={`/actions/${action.id}`}>
+          Open full detail
+        </Link>
+      </div>
+    </aside>
   );
 }
 
-// MAIN ACTIONS WORKSPACE COMPONENT
 export function ActionsWorkspace({
   actions,
   people,
@@ -634,562 +582,439 @@ export function ActionsWorkspace({
   readonly people: readonly PersonLinkOption[];
 }) {
   const router = useRouter();
-  const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false);
-
-  // Search and Filtering states
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string>("all_active");
-  const [filterTopic, setFilterTopic] = useState<string>("all");
-  const [filterPerson, setFilterPerson] = useState<string>("all");
-  const [filterPriority, setFilterPriority] = useState<string>("all");
-  const [filterDate, setFilterDate] = useState<string>("all");
-  const [showFilters, setShowFilters] = useState(false);
+  const [view, setView] = useState<"attention" | "duplicates" | "waiting" | "later" | "done">("attention");
+  const [selectedId, setSelectedId] = useState(actions.find(active)?.id ?? actions[0]?.id ?? null);
+  const [captureTitle, setCaptureTitle] = useState("");
+  const [dismissedDuplicateGroups, setDismissedDuplicateGroups] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [aiSuggestion, setAiSuggestion] = useState<{
+    actionId: string;
+    value: {
+      topics: string[];
+      people: { id: string; displayName: string }[];
+      dueAt: string | null;
+      followUpAt: string | null;
+      priority: ActionPriority;
+      waitingOnSomeone: boolean;
+    };
+  } | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const [isSuggesting, startSuggestionTransition] = useTransition();
 
-  // Fetch unique topic tags from actions data for filter selector
-  const availableTopics = useMemo(() => {
-    const set = new Set<string>();
-    actions.forEach((a) => {
-      if (a.topics) {
-        a.topics.forEach((t) => {
-          if (t && t.trim()) set.add(t.trim());
-        });
-      }
+  const activeActions = useMemo(() => actions.filter(active), [actions]);
+  const duplicateGroups = useMemo(
+    () => buildDuplicateGroups(actions).filter((group) => !dismissedDuplicateGroups.includes(group.id)),
+    [actions, dismissedDuplicateGroups],
+  );
+  const duplicateIds = useMemo(() => {
+    const ids = new Set<string>();
+    duplicateGroups.forEach((group) => group.duplicates.forEach((action) => ids.add(action.id)));
+    return ids;
+  }, [duplicateGroups]);
+
+  const q = searchQuery.toLowerCase().trim();
+  const searchableActions = useMemo(() => {
+    if (!q) return actions;
+    return actions.filter((action) => {
+      const linkedPerson = personName(people, action.personId) ?? "";
+      return [
+        action.title,
+        action.description ?? "",
+        action.rationale ?? "",
+        linkedPerson,
+        action.topics.join(" "),
+        action.references.map((reference) => `${reference.sourceSystem} ${reference.excerptOrPointer ?? ""}`).join(" "),
+      ].some((value) => value.toLowerCase().includes(q));
     });
-    return Array.from(set).sort();
-  }, [actions]);
+  }, [actions, people, q]);
 
-  // Map of views
-  const viewsList = [
-    { id: "all_active", label: "Attention Centre (Default)" },
-    { id: "inbox", label: "Inbox" },
-    { id: "planned", label: "Planned" },
-    { id: "in_progress", label: "In Progress" },
-    { id: "waiting", label: "Waiting On" },
-    { id: "follow_up", label: "Follow-ups" },
-    { id: "completed_cancelled", label: "Completed & Cancelled Logs" },
-    { id: "by_topic", label: "Grouped by Topic" },
-    { id: "by_person", label: "Grouped by Person" },
-    { id: "all", label: "All Items Flat List" },
-  ];
+  const selectedAction = useMemo(
+    () => actions.find((action) => action.id === selectedId) ?? activeActions[0] ?? actions[0] ?? null,
+    [actions, activeActions, selectedId],
+  );
 
-  // Helper date references
-  const { todayStart, todayEnd, nextSevenDaysEnd } = useMemo(() => {
+  const soonEnd = useMemo(() => {
     const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-    const sevenDays = new Date(end);
-    sevenDays.setDate(sevenDays.getDate() + 7);
-    return { todayStart: start, todayEnd: end, nextSevenDaysEnd: sevenDays };
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const soon = new Date(todayEnd);
+    soon.setDate(soon.getDate() + 7);
+    return soon;
   }, []);
 
-  // Filter and Search visible actions first
-  const filteredActions = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
-
-    return actions.filter((action) => {
-      // 1. Text Search matching
-      if (q) {
-        const matchesTitle = action.title.toLowerCase().includes(q);
-        const matchesDesc = (action.description ?? "").toLowerCase().includes(q);
-        const matchesTopics = (action.topics || []).some((t) => t.toLowerCase().includes(q));
-        const matchedPerson = people.find((p) => p.id === action.personId);
-        const matchesPerson = matchedPerson ? matchedPerson.displayName.toLowerCase().includes(q) : false;
-        const matchesSources = action.references?.some((r) => r.sourceSystem.toLowerCase().includes(q) || (r.excerptOrPointer ?? "").toLowerCase().includes(q)) ?? false;
-
-        if (!matchesTitle && !matchesDesc && !matchesTopics && !matchesPerson && !matchesSources) {
-          return false;
-        }
-      }
-
-      // 2. Status filtering
-      if (filterStatus === "all_active") {
-        if (action.status === "completed" || action.status === "cancelled") return false;
-      } else if (filterStatus === "completed_cancelled") {
-        if (action.status !== "completed" && action.status !== "cancelled") return false;
-      } else if (filterStatus === "by_topic" || filterStatus === "by_person" || filterStatus === "all") {
-        // keep active only for grouping views
-        if (action.status === "completed" || action.status === "cancelled") return false;
-      } else {
-        if (action.status !== filterStatus) return false;
-      }
-
-      // 3. Metadata Dropdown filters
-      if (filterTopic !== "all") {
-        if (!action.topics || !action.topics.includes(filterTopic)) return false;
-      }
-
-      if (filterPerson !== "all") {
-        if (action.personId !== filterPerson) return false;
-      }
-
-      if (filterPriority !== "all") {
-        if (action.priority !== filterPriority) return false;
-      }
-
-      if (filterDate !== "all") {
-        if (!action.dueAt) return false;
-        const dueTime = new Date(action.dueAt);
-        if (filterDate === "overdue") {
-          if (dueTime >= todayStart) return false;
-        } else if (filterDate === "today") {
-          if (dueTime < todayStart || dueTime > todayEnd) return false;
-        } else if (filterDate === "week") {
-          if (dueTime < todayStart || dueTime > nextSevenDaysEnd) return false;
-        }
-      }
-
-      return true;
+  const visibleActive = searchableActions.filter((action) => active(action) && !duplicateIds.has(action.id));
+  const lanes = useMemo(() => {
+    const needsApproval = visibleActive.filter((action) => action.status === "inbox");
+    const dueSoon = visibleActive.filter((action) => {
+      if (!action.dueAt) return false;
+      const date = new Date(action.dueAt);
+      return date <= soonEnd && action.status !== "inbox";
     });
-  }, [actions, searchQuery, filterStatus, filterTopic, filterPerson, filterPriority, filterDate, todayStart, todayEnd, nextSevenDaysEnd, people]);
-
-  // Construct target segmented focus blocks for Attention Centre view
-  const attentionSections = useMemo(() => {
-    if (filterStatus !== "all_active") return [];
-
-    const overdue: SuggestedActionView[] = [];
-    const dueToday: SuggestedActionView[] = [];
-    const followUps: SuggestedActionView[] = [];
-    const waiting: SuggestedActionView[] = [];
-    const upcoming: SuggestedActionView[] = [];
-    const inboxPlanned: SuggestedActionView[] = [];
-
-    filteredActions.forEach((a) => {
-      const isOver = a.dueAt && new Date(a.dueAt) < todayStart;
-      const isToday = a.dueAt && new Date(a.dueAt) >= todayStart && new Date(a.dueAt) <= todayEnd;
-      const isFollow = (a.followUpAt && new Date(a.followUpAt) <= todayEnd) || a.status === "follow_up";
-      const isWait = a.status === "waiting";
-      const isUp = a.dueAt && new Date(a.dueAt) > todayEnd;
-
-      if (isOver) {
-        overdue.push(a);
-      } else if (isToday) {
-        dueToday.push(a);
-      } else if (isFollow) {
-        followUps.push(a);
-      } else if (isWait) {
-        waiting.push(a);
-      } else if (isUp) {
-        upcoming.push(a);
-      } else {
-        inboxPlanned.push(a);
-      }
+    const followUps = visibleActive.filter((action) => {
+      if (action.status === "follow_up") return true;
+      if (!action.followUpAt) return false;
+      return new Date(action.followUpAt) <= soonEnd;
     });
-
+    const waiting = visibleActive.filter((action) => action.status === "waiting");
+    const later = visibleActive.filter(
+      (action) =>
+        !needsApproval.includes(action) &&
+        !dueSoon.includes(action) &&
+        !followUps.includes(action) &&
+        !waiting.includes(action),
+    );
     return [
-      { id: "overdue", label: "🚨 Overdue Deadlines", items: overdue, tone: "risk" },
-      { id: "due_today", label: "📅 Due Today", items: dueToday, tone: "warn" },
-      { id: "follow_ups", label: "🔔 Touch Base & Follow-ups", items: followUps, tone: "info" },
-      { id: "waiting", label: "⏳ Blocked / Waiting On", items: waiting, tone: "neutral" },
-      { id: "upcoming", label: "🗓️ Upcoming Deliverables", items: upcoming, tone: "info" },
-      { id: "inbox_planned", label: "📥 Inbox & General Backlog", items: inboxPlanned, tone: "neutral" },
-    ].filter((s) => s.items.length > 0);
-  }, [filteredActions, filterStatus, todayStart, todayEnd]);
+      { id: "needs-approval", title: "Needs approval", hint: "Review once. Keep only what deserves attention.", items: needsApproval },
+      { id: "due-soon", title: "Due soon", hint: "Deadlines and near-term commitments.", items: dueSoon },
+      { id: "follow-ups", title: "Follow-ups", hint: "People or threads that need a nudge.", items: followUps },
+      { id: "waiting", title: "Waiting on someone", hint: "Open loops owned outside your desk.", items: waiting },
+      { id: "later", title: "Later / parked", hint: "Useful, but not asking for attention now.", items: later },
+    ].filter((lane) => lane.items.length > 0);
+  }, [visibleActive, soonEnd]);
 
-  // Grouping for "by_topic" or "by_person" views
-  const groupedSections = useMemo(() => {
-    if (filterStatus !== "by_topic" && filterStatus !== "by_person") return [];
+  const completedRecently = searchableActions
+    .filter((action) => action.status === "completed" || action.status === "cancelled")
+    .slice(0, 12);
 
-    const list: { name: string; items: SuggestedActionView[] }[] = [];
-
-    if (filterStatus === "by_topic") {
-      const topicMap = new Map<string, SuggestedActionView[]>();
-      const untagged: SuggestedActionView[] = [];
-
-      filteredActions.forEach((action) => {
-        if (action.topics && action.topics.length > 0) {
-          action.topics.forEach((topic) => {
-            const arr = topicMap.get(topic) || [];
-            arr.push(action);
-            topicMap.set(topic, arr);
-          });
-        } else {
-          untagged.push(action);
-        }
+  const cleanupSuggestions = useMemo<CleanupSuggestion[]>(() => {
+    const suggestions: CleanupSuggestion[] = [];
+    if (duplicateGroups.length > 0) {
+      suggestions.push({
+        id: "duplicates",
+        title: "Review possible duplicates",
+        body: `${duplicateGroups.length} group${duplicateGroups.length === 1 ? "" : "s"} can be cleaned up once.`,
+        tone: "warn",
       });
-
-      Array.from(topicMap.keys())
-        .sort()
-        .forEach((topic) => {
-          list.push({ name: `# ${topic}`, items: topicMap.get(topic)! });
-        });
-
-      if (untagged.length > 0) {
-        list.push({ name: "Untagged Commitments", items: untagged });
-      }
-    } else if (filterStatus === "by_person") {
-      const personMap = new Map<string, { name: string; items: SuggestedActionView[] }>();
-      const unassigned: SuggestedActionView[] = [];
-
-      filteredActions.forEach((action) => {
-        if (action.personId) {
-          const pObj = people.find((p) => p.id === action.personId);
-          if (pObj) {
-            const existing = personMap.get(action.personId) || { name: pObj.displayName, items: [] };
-            existing.items.push(action);
-            personMap.set(action.personId, existing);
-          } else {
-            unassigned.push(action);
-          }
-        } else {
-          unassigned.push(action);
-        }
-      });
-
-      Array.from(personMap.values())
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .forEach((group) => {
-          list.push({ name: `👤 ${group.name}`, items: group.items });
-        });
-
-      if (unassigned.length > 0) {
-        list.push({ name: "Unassigned Commitments", items: unassigned });
-      }
     }
+    const inbox = activeActions.filter((action) => action.status === "inbox");
+    if (inbox.length >= 8) {
+      suggestions.push({
+        id: "too-many-inbox",
+        title: "Too many unprocessed actions",
+        body: "Start with approvals and dismiss anything that is not a real commitment.",
+        action: inbox[0],
+        tone: "risk",
+      });
+    }
+    const vague = activeActions.find((action) => tokensFor(action).size <= 2);
+    if (vague) {
+      suggestions.push({
+        id: `vague-${vague.id}`,
+        title: "Clarify a vague action",
+        body: "This item may need a clearer next step before it is useful.",
+        action: vague,
+        tone: "info",
+      });
+    }
+    const missingDate = activeActions.find(
+      (action) => action.priority !== "low" && !action.dueAt && !action.followUpAt,
+    );
+    if (missingDate) {
+      suggestions.push({
+        id: `date-${missingDate.id}`,
+        title: "Add a date or park it",
+        body: "High-attention work should have a deadline, follow-up, or a deliberate parking place.",
+        action: missingDate,
+        tone: "info",
+      });
+    }
+    const missingPerson = activeActions.find(
+      (action) => !action.personId && /\b(with|from|ask|waiting|follow|reply|send)\b/i.test(action.title),
+    );
+    if (missingPerson) {
+      suggestions.push({
+        id: `person-${missingPerson.id}`,
+        title: "Link a person",
+        body: "This looks people-related. Link it so follow-ups are easier to scan.",
+        action: missingPerson,
+        tone: "info",
+      });
+    }
+    return suggestions;
+  }, [activeActions, duplicateGroups]);
 
-    return list;
-  }, [filteredActions, filterStatus, people]);
+  function runMutation(work: () => Promise<{ ok: boolean; error?: string }>) {
+    setError(null);
+    startTransition(async () => {
+      const result = await work();
+      if (!result.ok) {
+        setError(result.error ?? "That change could not be saved.");
+      } else {
+        router.refresh();
+      }
+    });
+  }
+
+  function updateSelected(fields: Parameters<typeof updateAction>[1]) {
+    if (!selectedAction) return;
+    runMutation(() => updateAction(selectedAction.id, fields));
+  }
+
+  function createManualAction(event: React.FormEvent) {
+    event.preventDefault();
+    const title = captureTitle.trim();
+    if (!title) return;
+    runMutation(async () => {
+      const result = await createAction({ title, status: "inbox" });
+      if (result.ok) setCaptureTitle("");
+      return result;
+    });
+  }
+
+  function requestSuggestion() {
+    if (!selectedAction) return;
+    setError(null);
+    startSuggestionTransition(async () => {
+      const result = await suggestActionMetadata(
+        selectedAction.title,
+        selectedAction.description ?? selectedAction.rationale ?? undefined,
+      );
+      if (!result.ok || !result.suggestions) {
+        setError(result.error ?? "Pilot could not suggest cleanup for this action.");
+        return;
+      }
+      setAiSuggestion({ actionId: selectedAction.id, value: result.suggestions });
+    });
+  }
+
+  function applySuggestion() {
+    if (!selectedAction || !aiSuggestion || aiSuggestion.actionId !== selectedAction.id) return;
+    const suggestion = aiSuggestion.value;
+    runMutation(async () => {
+      const person = suggestion.people[0];
+      const result = await updateAction(selectedAction.id, {
+        priority: suggestion.priority,
+        dueAt: suggestion.dueAt,
+        followUpAt: suggestion.followUpAt,
+        topics: suggestion.topics.length > 0 ? suggestion.topics : selectedAction.topics,
+        personId: person?.id ?? selectedAction.personId,
+        status: suggestion.waitingOnSomeone ? "waiting" : selectedAction.status,
+      });
+      if (result.ok) setAiSuggestion(null);
+      return result;
+    });
+  }
+
+  const views = [
+    { id: "attention", label: "Needs attention", count: activeActions.length - duplicateIds.size },
+    { id: "duplicates", label: "Possible duplicates", count: duplicateGroups.length },
+    { id: "waiting", label: "Waiting on", count: activeActions.filter((action) => action.status === "waiting").length },
+    { id: "later", label: "Later / parked", count: activeActions.filter((action) => action.status === "planned" || action.status === "in_progress").length },
+    { id: "done", label: "Completed recently", count: completedRecently.length },
+  ] as const;
 
   return (
     <>
-      {/* Dynamic Modal */}
-      <QuickCaptureModal
-        isOpen={isQuickCaptureOpen}
-        onClose={() => setIsQuickCaptureOpen(false)}
-        people={people}
-        existingTopics={availableTopics}
-      />
+      <div className="actions-command">
+        <header className="actions-hero">
+          <div>
+            <p className="eyebrow">Actions</p>
+            <h1 className="page-head__title">Decide, clean up, move on.</h1>
+            <p className="page-head__lead">
+              Review the smallest useful set of commitments. Merge duplicates, approve the real work, and park the rest.
+            </p>
+          </div>
+          <form className="action-capture-inline" onSubmit={createManualAction}>
+            <label htmlFor="quick-action-title">Add a quick action</label>
+            <div>
+              <input
+                id="quick-action-title"
+                className="input"
+                value={captureTitle}
+                onChange={(event) => setCaptureTitle(event.target.value)}
+                placeholder="Add the next thing worth tracking"
+                disabled={isPending}
+              />
+              <button type="submit" className="btn btn--primary" disabled={isPending || !captureTitle.trim()}>
+                Add
+              </button>
+            </div>
+          </form>
+        </header>
 
-      {/* Main Header Panel */}
-      <div className="page-head actions-page__head" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "var(--space-md)", flexWrap: "wrap", borderBottom: "1px solid var(--colour-border)", paddingBottom: "var(--space-md)" }}>
-        <div style={{ flex: 1, minWidth: "300px" }}>
-          <p className="eyebrow">Actions</p>
-          <h1 className="page-head__title" style={{ margin: "4px 0" }}>Commitments & Accountability</h1>
-          <p className="page-head__lead" style={{ margin: 0 }}>
-            Executive-grade execution memory. Track deliverables, set strict priorities, prevent timeline slips, and avoid information-hoarding clutter.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setIsQuickCaptureOpen(true)}
-          className="btn btn--primary"
-          style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 18px", fontSize: "14px", fontWeight: 600, borderRadius: "var(--radius-sm)" }}
-        >
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          Quick Capture
-        </button>
-      </div>
-
-      {/* Filter and Search Bar Rail */}
-      <section
-        aria-label="Filters and Search"
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          background: showFilters ? "var(--colour-surface-secondary)" : "transparent",
-          border: showFilters ? "1px solid var(--colour-border)" : "none",
-          borderRadius: "var(--radius-sm)",
-          padding: showFilters ? "var(--space-md)" : "0",
-          margin: "var(--space-md) 0",
-          gap: showFilters ? "var(--space-md)" : "0"
-        }}
-      >
-        {/* Row 1: Search Text & Filters Toggle */}
-        <div style={{ display: "flex", gap: "12px", width: "100%", alignItems: "center", flexWrap: "wrap" }}>
-          <div
-            className="source-search actions-search"
-            style={{
-              margin: 0,
-              flex: 1,
-              minWidth: "280px",
-              display: "flex",
-              alignItems: "center",
-              background: "var(--colour-surface-sunken)",
-              border: "1px solid var(--colour-border)",
-              borderRadius: "var(--radius-sm)"
-            }}
-          >
-            <span className="source-search__icon" aria-hidden="true" style={{ top: "13px" }}>
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="7" />
-                <path d="m20 20-3.2-3.2" />
-              </svg>
-            </span>
+        <section className="actions-toolbar" aria-label="Action search and views">
+          <div className="actions-search-field">
+            <label htmlFor="actions-search">Search</label>
             <input
+              id="actions-search"
+              className="input"
               type="search"
-              className="input source-search__input"
-              style={{ width: "100%", height: "40px", paddingLeft: "40px", fontSize: "14px", border: "none", background: "transparent" }}
-              placeholder="Search action details, topics, people, sources..."
-              aria-label="Search actions"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search actions, people, topics, or sources"
+              onChange={(event) => setSearchQuery(event.target.value)}
             />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                style={{ background: "transparent", border: 0, color: "var(--colour-text-muted)", cursor: "pointer", marginRight: "12px", fontSize: "12px" }}
-              >
-                Clear
-              </button>
-            )}
-            <span className="source-search__count mono" style={{ marginRight: "16px", fontSize: "12px", position: "static", pointerEvents: "auto", whiteSpace: "nowrap" }}>
-              {filteredActions.length} matches
-            </span>
           </div>
-
-          {/* Collapsible Filters Toggle Button */}
-          <button
-            type="button"
-            className={`btn btn--secondary btn--sm`}
-            style={{
-              height: "42px",
-              padding: "0 var(--space-md)",
-              fontSize: "13px",
-              fontWeight: 600,
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              borderRadius: "var(--radius-sm)",
-              border: "1px solid var(--colour-border)",
-              background: showFilters ? "var(--colour-border)" : "var(--colour-surface-secondary)",
-              color: "var(--colour-text-primary)",
-              cursor: "pointer"
-            }}
-            onClick={() => setShowFilters(!showFilters)}
-            aria-expanded={showFilters}
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: showFilters ? "var(--colour-accent-primary)" : "var(--colour-text-secondary)" }}>
-              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-            </svg>
-            <span>Filters</span>
-            {/* Active filters count badge */}
-            {(filterTopic !== "all" || filterPerson !== "all" || filterPriority !== "all" || filterDate !== "all") && (
-              <span className="mono" style={{
-                background: "var(--colour-accent-primary)",
-                color: "#ffffff",
-                borderRadius: "10px",
-                padding: "2px 6px",
-                fontSize: "10px",
-                fontWeight: "bold",
-                lineHeight: 1
-              }}>
-                {[filterTopic, filterPerson, filterPriority, filterDate].filter(f => f !== "all").length}
-              </span>
-            )}
-          </button>
-        </div>
-
-        {/* Row 2: Metadata Dropdown selectors */}
-        {showFilters && (
-          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center", width: "100%" }}>
-            {/* Topic Filter */}
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <span style={{ fontSize: "11px", color: "var(--colour-text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>Topic:</span>
-              <select
-                className="input"
-                style={{ height: "32px", padding: "0 8px", fontSize: "12px", background: "var(--colour-surface-sunken)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", minWidth: "120px" }}
-                value={filterTopic}
-                onChange={(e) => setFilterTopic(e.target.value)}
-              >
-                <option value="all">All Topics</option>
-                {availableTopics.map((t) => (
-                  <option key={t} value={t}>#{t}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Person Filter */}
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <span style={{ fontSize: "11px", color: "var(--colour-text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>Person:</span>
-              <select
-                className="input"
-                style={{ height: "32px", padding: "0 8px", fontSize: "12px", background: "var(--colour-surface-sunken)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", minWidth: "120px" }}
-                value={filterPerson}
-                onChange={(e) => setFilterPerson(e.target.value)}
-              >
-                <option value="all">Everyone</option>
-                {people.map((p) => (
-                  <option key={p.id} value={p.id}>{p.displayName}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Priority Filter */}
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <span style={{ fontSize: "11px", color: "var(--colour-text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>Priority:</span>
-              <select
-                className="input"
-                style={{ height: "32px", padding: "0 8px", fontSize: "12px", background: "var(--colour-surface-sunken)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", minWidth: "100px" }}
-                value={filterPriority}
-                onChange={(e) => setFilterPriority(e.target.value)}
-              >
-                <option value="all">All Priorities</option>
-                <option value="low">Low</option>
-                <option value="normal">Normal</option>
-                <option value="high">High</option>
-                <option value="critical">Critical</option>
-              </select>
-            </div>
-
-            {/* Due Date Range Filter */}
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <span style={{ fontSize: "11px", color: "var(--colour-text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>Date:</span>
-              <select
-                className="input"
-                style={{ height: "32px", padding: "0 8px", fontSize: "12px", background: "var(--colour-surface-sunken)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", minWidth: "120px" }}
-                value={filterDate}
-                onChange={(e) => setFilterDate(e.target.value)}
-              >
-                <option value="all">Any Due Date</option>
-                <option value="overdue">Overdue</option>
-                <option value="today">Due Today</option>
-                <option value="week">Due Next 7 Days</option>
-              </select>
-            </div>
-
-            {/* Reset Filters button */}
-            {(filterTopic !== "all" || filterPerson !== "all" || filterPriority !== "all" || filterDate !== "all") && (
-              <button
-                type="button"
-                className="btn btn--secondary btn--sm"
-                onClick={() => {
-                  setFilterTopic("all");
-                  setFilterPerson("all");
-                  setFilterPriority("all");
-                  setFilterDate("all");
-                }}
-                style={{ height: "32px", padding: "0 12px", fontSize: "11px" }}
-              >
-                Reset Filters
-              </button>
-            )}
-          </div>
-        )}
-      </section>
-
-      {/* Main Workspace Layout Shell */}
-      <div className="actions-shell">
-        {/* Nav tabs Left / Top */}
-        <nav className="actions-views" aria-label="Action views">
-          <div className="actions-views__label">Views</div>
-          {viewsList.map((item) => {
-            const isActive = filterStatus === item.id;
-            let badgeCount = 0;
-
-            if (item.id === "all") {
-              badgeCount = actions.length;
-            } else if (item.id === "all_active") {
-              badgeCount = actions.filter((a) => a.status !== "completed" && a.status !== "cancelled").length;
-            } else if (item.id === "completed_cancelled") {
-              badgeCount = actions.filter((a) => a.status === "completed" || a.status === "cancelled").length;
-            } else if (item.id === "by_topic" || item.id === "by_person") {
-              badgeCount = actions.filter((a) => a.status !== "completed" && a.status !== "cancelled").length;
-            } else {
-              badgeCount = actions.filter((a) => a.status === item.id).length;
-            }
-
-            return (
+          <nav className="actions-tabs" aria-label="Action views">
+            {views.map((item) => (
               <button
                 key={item.id}
                 type="button"
-                className={`actions-view${isActive ? " actions-view--active" : ""}`}
-                aria-pressed={isActive}
-                onClick={() => setFilterStatus(item.id)}
+                className={`actions-tab${view === item.id ? " actions-tab--active" : ""}`}
+                onClick={() => setView(item.id)}
               >
                 <span>{item.label}</span>
-                <span className="actions-view__count mono">{badgeCount}</span>
+                <strong>{item.count}</strong>
               </button>
-            );
-          })}
-        </nav>
-
-        {/* Dense List Work Area */}
-        <section className="actions-working-set" aria-labelledby="working-set-title" style={{ padding: 0 }}>
-          {filteredActions.length === 0 ? (
-            <div className="empty actions-empty" style={{
-              margin: "var(--space-lg) 0",
-              padding: "var(--space-xl) var(--space-md)",
-              background: "rgba(255, 255, 255, 0.01)",
-              border: "1px solid rgba(255, 255, 255, 0.05)",
-              borderRadius: "var(--radius-md)",
-              textAlign: "center"
-            }}>
-              <p className="empty__title" style={{ fontSize: "var(--text-body)", fontWeight: 600, color: "var(--colour-text-primary)", margin: 0 }}>
-                {searchQuery || filterTopic !== "all" || filterPerson !== "all" || filterPriority !== "all" || filterDate !== "all"
-                  ? "No commitments match your active filters"
-                  : "No active commitments in this category"}
-              </p>
-              <p className="empty__body" style={{ fontSize: "var(--text-small)", color: "var(--colour-text-secondary)", marginTop: "var(--space-xs)", lineHeight: "var(--leading-normal)" }}>
-                {searchQuery || filterTopic !== "all" || filterPerson !== "all" || filterPriority !== "all" || filterDate !== "all"
-                  ? "Try resetting filters or adjusting search queries to locate your record."
-                  : "Every commitment, task, and promise extracted from your feeds is logged here. Create a manual record with 'Quick Capture'."}
-              </p>
-            </div>
-          ) : filterStatus === "all_active" ? (
-            // Focused Attention Centre View (Segmented Focus sections)
-            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-md)", marginTop: "var(--space-sm)" }}>
-              {attentionSections.map((sec) => (
-                <div key={sec.id} style={{ border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", overflow: "hidden", background: "var(--colour-surface-secondary)" }}>
-                  <div style={{ background: "rgba(255, 255, 255, 0.02)", padding: "10px 16px", borderBottom: "1px solid var(--colour-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <h3 style={{ fontSize: "12px", fontWeight: 600, textTransform: "uppercase", color: "var(--colour-text-secondary)", fontFamily: "var(--font-mono)", margin: 0 }}>
-                      {sec.label}
-                    </h3>
-                    <span className="badge" style={{ fontSize: "11px", padding: "1px 6px", background: "var(--colour-border)", borderRadius: "10px" }}>{sec.items.length}</span>
-                  </div>
-                  <div className="action-list">
-                    {sec.items.map((item) => (
-                      <ActionRow
-                        key={`${sec.id}-${item.id}`}
-                        action={item}
-                        people={people}
-                        onClick={() => router.push(`/actions/${item.id}`)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : filterStatus === "by_topic" || filterStatus === "by_person" ? (
-            // Grouped Section Views
-            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-md)", marginTop: "var(--space-sm)" }}>
-              {groupedSections.map((group) => (
-                <div key={group.name} style={{ border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", overflow: "hidden", background: "var(--colour-surface-secondary)" }}>
-                  <div style={{ background: "rgba(255, 255, 255, 0.02)", padding: "10px 16px", borderBottom: "1px solid var(--colour-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <h3 style={{ fontSize: "12px", fontWeight: 600, color: "var(--colour-text-secondary)", fontFamily: "var(--font-mono)", margin: 0 }}>
-                      {group.name}
-                    </h3>
-                    <span className="badge" style={{ fontSize: "11px", padding: "1px 6px", background: "var(--colour-border)", borderRadius: "10px" }}>{group.items.length}</span>
-                  </div>
-                  <div className="action-list">
-                    {group.items.map((item) => (
-                      <ActionRow
-                        key={`${group.name}-${item.id}`}
-                        action={item}
-                        people={people}
-                        onClick={() => router.push(`/actions/${item.id}`)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            // Flat Categorized Views
-            <div className="action-list" style={{ border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", overflow: "hidden", background: "var(--colour-surface-secondary)", marginTop: "var(--space-sm)" }}>
-              {filteredActions.map((item) => (
-                <ActionRow
-                  key={item.id}
-                  action={item}
-                  people={people}
-                  onClick={() => router.push(`/actions/${item.id}`)}
-                />
-              ))}
-            </div>
-          )}
+            ))}
+          </nav>
         </section>
+
+        {error ? <p className="form-message form-message--error" role="alert">{error}</p> : null}
+
+        <div className="actions-layout">
+          <div className="actions-left-rail">
+            <CleanupPanel suggestions={cleanupSuggestions} onSelect={(action) => setSelectedId(action.id)} />
+          </div>
+
+          <main className="actions-review" aria-label="Action review queue">
+            {view === "duplicates" ? (
+              duplicateGroups.length > 0 ? (
+                <div className="actions-review__stack">
+                  {duplicateGroups.map((group) => (
+                    <DuplicateReviewCard
+                      key={group.id}
+                      group={group}
+                      pending={isPending}
+                      onSelect={(action) => setSelectedId(action.id)}
+                      onMerge={(approve) =>
+                        runMutation(() =>
+                          mergeDuplicateActions({
+                            primaryActionId: group.primary.id,
+                            duplicateActionIds: group.duplicates.map((item) => item.id),
+                            approvePrimary: approve,
+                            reason: group.reason,
+                          }),
+                        )
+                      }
+                      onDismiss={() =>
+                        runMutation(() =>
+                          mergeDuplicateActions({
+                            primaryActionId: group.primary.id,
+                            duplicateActionIds: group.duplicates.map((item) => item.id),
+                            approvePrimary: false,
+                            reason: "Dismissed duplicate candidates from review.",
+                          }),
+                        )
+                      }
+                      onKeepSeparate={() =>
+                        setDismissedDuplicateGroups((current) => [...current, group.id])
+                      }
+                    />
+                  ))}
+                </div>
+              ) : (
+                <section className="actions-empty-state">
+                  <h2>Duplicate review complete.</h2>
+                  <p>Nothing similar needs your attention right now.</p>
+                </section>
+              )
+            ) : view === "done" ? (
+              completedRecently.length > 0 ? (
+                <section className="action-lane">
+                  <div className="action-lane__head">
+                    <div>
+                      <h2>Completed recently</h2>
+                      <p>Kept out of your daily review unless you need the record.</p>
+                    </div>
+                    <span className="actions-count">{completedRecently.length}</span>
+                  </div>
+                  <div className="action-lane__list">
+                    {completedRecently.map((action) => (
+                      <ActionRow
+                        key={action.id}
+                        action={action}
+                        people={people}
+                        selected={selectedAction?.id === action.id}
+                        pending={isPending}
+                        onSelect={() => setSelectedId(action.id)}
+                        onQuickStatus={(status) => runMutation(() => updateAction(action.id, { status }))}
+                        onComplete={() => runMutation(() => completeAction(action.id))}
+                        onSnooze={() => runMutation(() => snoozeAction(action.id, addDays(2), "Snoozed from quick triage."))}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ) : (
+                <section className="actions-empty-state">
+                  <h2>No completed actions yet.</h2>
+                  <p>Complete items from the review queue and they will appear here briefly.</p>
+                </section>
+              )
+            ) : (
+              <>
+                {view === "waiting" || view === "later" ? null : duplicateGroups.length > 0 ? (
+                  <section className="duplicate-summary">
+                    <div>
+                      <h2>We found a few items that look similar.</h2>
+                      <p>Review them once and keep your list clean. Duplicate candidates are grouped instead of shown as full rows.</p>
+                    </div>
+                    <button type="button" className="btn btn--secondary" onClick={() => setView("duplicates")}>
+                      Review duplicates
+                    </button>
+                  </section>
+                ) : null}
+
+                {lanes
+                  .filter((lane) => {
+                    if (view === "waiting") return lane.id === "waiting";
+                    if (view === "later") return lane.id === "later";
+                    return view === "attention";
+                  })
+                  .map((lane) => (
+                    <section className="action-lane" key={lane.id}>
+                      <div className="action-lane__head">
+                        <div>
+                          <h2>{lane.title}</h2>
+                          <p>{lane.hint}</p>
+                        </div>
+                        <span className="actions-count">{lane.items.length}</span>
+                      </div>
+                      <div className="action-lane__list">
+                        {lane.items.map((action) => (
+                          <ActionRow
+                            key={action.id}
+                            action={action}
+                            people={people}
+                            selected={selectedAction?.id === action.id}
+                            pending={isPending}
+                            onSelect={() => setSelectedId(action.id)}
+                            onQuickStatus={(status) => runMutation(() => updateAction(action.id, { status }))}
+                            onComplete={() => runMutation(() => completeAction(action.id))}
+                            onSnooze={() => runMutation(() => snoozeAction(action.id, addDays(2), "Snoozed from quick triage."))}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+
+                {lanes.length === 0 || (view !== "attention" && lanes.filter((lane) => lane.id === view).length === 0) ? (
+                  <section className="actions-empty-state">
+                    <h2>Nothing urgent needs your attention right now.</h2>
+                    <p>Your action list is clean. New items will appear here when they need a decision.</p>
+                  </section>
+                ) : null}
+              </>
+            )}
+          </main>
+
+          <ActionInspector
+            action={selectedAction}
+            people={people}
+            pending={isPending}
+            suggestion={aiSuggestion && aiSuggestion.actionId === selectedAction?.id ? aiSuggestion.value : null}
+            suggestionPending={isSuggesting}
+            onStatus={(status) => updateSelected({ status })}
+            onPriority={(priority) => updateSelected({ priority })}
+            onDueDate={(value) => updateSelected({ dueAt: value || null })}
+            onFollowUpDate={(value) => updateSelected({ followUpAt: value || null })}
+            onPerson={(personId) => {
+              if (!selectedAction) return;
+              runMutation(() => linkActionPerson(selectedAction.id, personId));
+            }}
+            onSuggest={requestSuggestion}
+            onApplySuggestion={applySuggestion}
+          />
+        </div>
       </div>
     </>
   );

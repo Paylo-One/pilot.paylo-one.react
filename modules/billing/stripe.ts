@@ -175,8 +175,8 @@ export const stripeApi = {
         description: "A monthly subscription for the Paylo One Personal Operator workspace.",
         tax_code: "txcd_10103100",
         default_price_data: {
-          unit_amount: 1000,
-          currency: "usd",
+          unit_amount: 4900,
+          currency: "eur",
           recurring: { interval: "month" },
         },
       },

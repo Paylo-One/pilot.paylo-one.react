@@ -15,6 +15,7 @@ import { redirect } from "next/navigation";
 import { getSignedInUser } from "@/modules/identity-tenant/server";
 import { BrandMark } from "@/components/brand-mark";
 import { PayloWordmark } from "@/components/paylo-wordmark";
+import { COMPANY_DETAILS } from "@/lib/company";
 
 const TENANT_SLUG_HEADER = "x-paylo-tenant-slug";
 
@@ -86,6 +87,9 @@ export default async function AppApexLanding() {
       <footer className="landing__footer">
         <Link href="/terms">Terms and Conditions</Link>
         <Link href="/privacy">Privacy Policy</Link>
+        <span>
+          {COMPANY_DETAILS.legalName} · {COMPANY_DETAILS.kvkLabel}
+        </span>
       </footer>
     </main>
   );

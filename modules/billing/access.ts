@@ -14,10 +14,26 @@ import {
   stripeApi,
   type StripeCheckoutSession,
   type StripeInvoice,
+  type StripePrice,
   type StripeSubscription,
 } from "./stripe";
 import type { PlanKey } from "./plans";
 import type { StripeBillingPriceOption } from "./stripe-plans";
+
+const DEFAULT_BILLING_CURRENCY = "EUR";
+
+function billingIntervalFromStripePrice(
+  price: StripePrice | null,
+  configuredPlan: ReturnType<typeof configuredPlanFromPriceId>,
+): "month" | "year" {
+  if (configuredPlan?.priceOption.interval === "annual") return "year";
+  if (configuredPlan?.priceOption.interval === "monthly") return "month";
+  return price?.recurring?.interval === "year" ? "year" : "month";
+}
+
+function currencyFromStripePrice(price: StripePrice | null): string {
+  return price?.currency?.trim().toUpperCase() || DEFAULT_BILLING_CURRENCY;
+}
 
 export interface BillingAccessRecord {
   readonly tenantId: string;
@@ -126,7 +142,7 @@ export async function createTrialBillingAccess(input: {
     trial_ends_at: endsAt,
     current_period_start: now.toISOString(),
     current_period_end: endsAt,
-    currency: "USD",
+    currency: DEFAULT_BILLING_CURRENCY,
   };
 
   if (existing?.id) {
@@ -274,6 +290,8 @@ async function upsertTenantSubscription(input: {
   currentPeriodStart: string | null;
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
+  billingInterval: "month" | "year";
+  currency: string;
   lastPaymentStatus?: string | null;
   lastPaymentError?: string | null;
   eventId: string;
@@ -283,7 +301,7 @@ async function upsertTenantSubscription(input: {
   const payload = {
     plan_key: input.planKey,
     status,
-    billing_interval: "month",
+    billing_interval: input.billingInterval,
     owner_user_id: input.userId,
     provider: "stripe",
     provider_customer_id: input.customerId,
@@ -296,7 +314,7 @@ async function upsertTenantSubscription(input: {
     last_payment_status: input.lastPaymentStatus ?? null,
     last_payment_error: input.lastPaymentError ?? null,
     last_stripe_event_id: input.eventId,
-    currency: "USD",
+    currency: input.currency,
   };
 
   const { data: existing, error } = await db
@@ -356,6 +374,8 @@ export async function syncStripeSubscription(input: {
     : null;
   const priceId = price?.id ?? null;
   const configuredPlan = configuredPlanFromPriceId(priceId);
+  const billingInterval = billingIntervalFromStripePrice(price, configuredPlan);
+  const currency = currencyFromStripePrice(price);
   const planKey =
     configuredPlan?.planKey ??
     (input.subscription.metadata?.plan_key as PlanKey | undefined) ??
@@ -419,6 +439,8 @@ export async function syncStripeSubscription(input: {
     currentPeriodStart,
     currentPeriodEnd,
     cancelAtPeriodEnd,
+    billingInterval,
+    currency,
     lastPaymentStatus: input.paymentStatus,
     lastPaymentError: input.paymentError,
     eventId: input.eventId,

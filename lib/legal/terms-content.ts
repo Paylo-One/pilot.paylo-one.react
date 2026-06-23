@@ -1,5 +1,7 @@
-export const TERMS_VERSION = "2026-06-10.1";
-export const TERMS_EFFECTIVE_DATE = "10 June 2026";
+import { COMPANY_DETAILS } from "@/lib/company";
+
+export const TERMS_VERSION = "2026-06-23.1";
+export const TERMS_EFFECTIVE_DATE = "23 June 2026";
 
 export interface LegalSection {
   id: string;
@@ -13,7 +15,7 @@ export const TERMS_SECTIONS: LegalSection[] = [
     id: "acceptance-of-terms",
     heading: "1. Acceptance of Terms",
     paragraphs: [
-      "These Terms and Conditions (the \"Terms\") govern your access to and use of Paylo.one (the \"Service\"), operated by Paylo.one (\"we\", \"us\", or \"our\"). By creating an account, accessing the Service, or otherwise using any part of the Service, you agree to be bound by these Terms. If you do not agree to these Terms, you must not use the Service.",
+      `These Terms and Conditions (the "Terms") govern your access to and use of Paylo.one (the "Service"), operated by ${COMPANY_DETAILS.legalName}, registered with the Dutch Chamber of Commerce (KvK) under number ${COMPANY_DETAILS.kvkNumber} ("we", "us", or "our"). By creating an account, accessing the Service, or otherwise using any part of the Service, you agree to be bound by these Terms. If you do not agree to these Terms, you must not use the Service.`,
       "If you are using the Service on behalf of a company, organisation, or other legal entity, you represent and warrant that you have the authority to bind that entity to these Terms, in which case \"you\" refers to that entity.",
       "We may update these Terms from time to time as described in the section titled Availability and Changes to the Service. Your continued use of the Service after updated Terms take effect constitutes your acceptance of the updated Terms.",
     ],
@@ -32,7 +34,7 @@ export const TERMS_SECTIONS: LegalSection[] = [
     heading: "3. User Accounts",
     paragraphs: [
       "To use the Service you must register for an account and provide accurate, current, and complete information, including a valid email address. You are responsible for keeping your account information up to date.",
-      "You are responsible for maintaining the confidentiality of your account credentials and for all activity that occurs under your account. You must notify us promptly at [contact email] if you become aware of any unauthorised access to or use of your account.",
+      `You are responsible for maintaining the confidentiality of your account credentials and for all activity that occurs under your account. You must notify us promptly at ${COMPANY_DETAILS.accessEmail} if you become aware of any unauthorised access to or use of your account.`,
       "You must be at least 16 years of age, or the minimum age required in your jurisdiction to consent to use online services, to create an account. We may suspend or terminate accounts that we reasonably believe were created in violation of this requirement.",
     ],
   },
@@ -157,7 +159,7 @@ export const TERMS_SECTIONS: LegalSection[] = [
     id: "contact",
     heading: "16. Contact",
     paragraphs: [
-      "If you have questions about these Terms or the Service, you can contact us at [contact email] or by post at [company address].",
+      `If you have questions about these Terms or the Service, you can contact ${COMPANY_DETAILS.legalName} at ${COMPANY_DETAILS.accessEmail} or by post at ${COMPANY_DETAILS.postalAddress}. ${COMPANY_DETAILS.legalName} is registered with the Dutch Chamber of Commerce under ${COMPANY_DETAILS.kvkLabel}.`,
       "We will use reasonable efforts to respond to enquiries promptly. Formal legal notices under these Terms should be sent in writing to the postal address above.",
     ],
   },

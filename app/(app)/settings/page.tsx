@@ -31,6 +31,7 @@ import { PasskeysCard } from "./passkeys-card";
 import { ByoModelCard } from "@/components/settings/byo-model-card";
 import { OnboardingLauncher } from "@/components/settings/onboarding-launcher";
 import { SettingsNav } from "./settings-nav";
+import { COMPANY_DETAILS } from "@/lib/company";
 
 type SectionTag = "active" | "read-only" | "planned";
 
@@ -374,6 +375,12 @@ export default async function SettingsPage() {
           <div className="meta-row">
             <span className="meta-row__key">Source references</span>
             <span className="meta-row__value">Required on every insight</span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">Company registration</span>
+            <span className="meta-row__value mono">
+              {COMPANY_DETAILS.legalName} · {COMPANY_DETAILS.kvkLabel}
+            </span>
           </div>
         </SectionCard>
 

@@ -1,14 +1,15 @@
 import type { LegalSection } from "./terms-content";
+import { COMPANY_DETAILS } from "@/lib/company";
 
-export const PRIVACY_VERSION = "2026-06-10.1";
-export const PRIVACY_EFFECTIVE_DATE = "10 June 2026";
+export const PRIVACY_VERSION = "2026-06-23.1";
+export const PRIVACY_EFFECTIVE_DATE = "23 June 2026";
 
 export const PRIVACY_SECTIONS: LegalSection[] = [
   {
     id: "information-we-collect",
     heading: "1. Information We Collect",
     paragraphs: [
-      "This Privacy Policy explains how Paylo.one (\"we\", \"us\", or \"our\") collects, uses, and protects information when you use the Paylo.one service (the \"Service\"). It applies to information processed through your account and the workspaces you belong to.",
+      `This Privacy Policy explains how ${COMPANY_DETAILS.legalName}, registered with the Dutch Chamber of Commerce (KvK) under number ${COMPANY_DETAILS.kvkNumber} ("we", "us", or "our"), collects, uses, and protects information when you use the Paylo.one service (the "Service"). It applies to information processed through your account and the workspaces you belong to.`,
       "We collect information in three main ways: information you provide directly, such as your account details and uploaded content; information ingested from third-party sources that you explicitly connect to your workspace; and information generated automatically when you use the Service, such as usage and device data.",
       "The Service is multi-tenant. Information belonging to one workspace is logically isolated from other workspaces, and access to a workspace is limited to its members. The categories of information we collect are described in more detail in the sections below.",
     ],
@@ -85,7 +86,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     heading: "9. Data Sharing and Subprocessors",
     paragraphs: [
       "We do not sell your personal information. We share information only as described in this policy.",
-      "We use a limited set of service providers (subprocessors) to operate the Service, such as cloud hosting and storage providers, AI model providers, payment processors, and email delivery services. Subprocessors are bound by contracts that require them to protect your information and to process it only on our instructions. A current list of subprocessors is available on request at [contact email].",
+      `We use a limited set of service providers (subprocessors) to operate the Service, such as cloud hosting and storage providers, AI model providers, payment processors, and email delivery services. Subprocessors are bound by contracts that require them to protect your information and to process it only on our instructions. A current list of subprocessors is available on request at ${COMPANY_DETAILS.accessEmail}.`,
       "We may also disclose information where required by law, legal process, or a binding governmental request; where necessary to protect the rights, safety, or property of our users, the public, or ourselves; or in connection with a merger, acquisition, or sale of assets, in which case we will notify you of any change in ownership or in the use of your personal information.",
     ],
   },
@@ -129,7 +130,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     heading: "14. Your Rights",
     paragraphs: [
       "Depending on your jurisdiction, you may have rights regarding your personal information, which may include the following:",
-      "You can exercise many of these rights directly within the Service, for example by editing your account details, deleting content, or disconnecting sources. For other requests, contact us at [contact email]. We will respond within the timeframes required by applicable law and may need to verify your identity before acting on a request. If you are unsatisfied with our response, you may have the right to lodge a complaint with a data protection authority.",
+      `You can exercise many of these rights directly within the Service, for example by editing your account details, deleting content, or disconnecting sources. For other requests, contact us at ${COMPANY_DETAILS.accessEmail}. We will respond within the timeframes required by applicable law and may need to verify your identity before acting on a request. If you are unsatisfied with our response, you may have the right to lodge a complaint with a data protection authority.`,
     ],
     bullets: [
       "The right to access the personal information we hold about you.",
@@ -145,7 +146,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     heading: "15. Children's Privacy",
     paragraphs: [
       "The Service is not directed at children and may not be used by anyone under the age of 16, or the minimum age required in your jurisdiction to consent to use online services.",
-      "We do not knowingly collect personal information from children. If we become aware that we have collected personal information from a child without appropriate consent, we will delete it promptly. If you believe a child has provided us with personal information, please contact us at [contact email].",
+      `We do not knowingly collect personal information from children. If we become aware that we have collected personal information from a child without appropriate consent, we will delete it promptly. If you believe a child has provided us with personal information, please contact us at ${COMPANY_DETAILS.accessEmail}.`,
     ],
   },
   {
@@ -160,7 +161,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     id: "contact",
     heading: "17. Contact",
     paragraphs: [
-      "If you have questions about this Privacy Policy or about how we handle your information, you can contact us at [contact email] or by post at [company address].",
+      `If you have questions about this Privacy Policy or about how we handle your information, you can contact ${COMPANY_DETAILS.legalName} at ${COMPANY_DETAILS.accessEmail} or by post at ${COMPANY_DETAILS.postalAddress}. ${COMPANY_DETAILS.legalName} is registered with the Dutch Chamber of Commerce under ${COMPANY_DETAILS.kvkLabel}.`,
       "Requests to exercise your privacy rights, requests for our current subprocessor list, and privacy-related complaints should be directed to the same contact details. We will respond as soon as reasonably practicable.",
     ],
   },
