@@ -422,7 +422,6 @@ function ActionInspector({
   if (!action) {
     return (
       <aside className="actions-inspector actions-inspector--empty">
-        <p className="eyebrow">Detail</p>
         <h2>Choose an action to review.</h2>
         <p>Use the list for quick decisions, then open the detail page only when more context is needed.</p>
       </aside>
@@ -434,10 +433,7 @@ function ActionInspector({
   return (
     <aside className="actions-inspector" aria-label="Action detail">
       <div className="actions-inspector__head">
-        <div>
-          <p className="eyebrow">Action detail</p>
-          <h2>{action.title}</h2>
-        </div>
+        <h2>{action.title}</h2>
         <span className={statusClass(status.tone)}>{status.label}</span>
       </div>
 
@@ -541,9 +537,9 @@ function ActionInspector({
 
       <div className="actions-inspector__section">
         <div className="actions-inspector__section-head">
-          <p className="actions-inspector__label">AI cleanup</p>
+          <p className="actions-inspector__label">Pilot suggestion</p>
           <button type="button" className="action-command" onClick={onSuggest} disabled={suggestionPending}>
-            {suggestionPending ? "Reviewing..." : "Suggest next step"}
+            {suggestionPending ? "Reviewing…" : "Suggest next step"}
           </button>
         </div>
         {suggestion ? (
@@ -643,7 +639,7 @@ export function ActionsWorkspace({
   }, []);
 
   const visibleActive = searchableActions.filter((action) => active(action) && !duplicateIds.has(action.id));
-  const lanes = useMemo(() => {
+  const buckets = useMemo(() => {
     const needsApproval = visibleActive.filter((action) => action.status === "inbox");
     const dueSoon = visibleActive.filter((action) => {
       if (!action.dueAt) return false;
@@ -651,6 +647,7 @@ export function ActionsWorkspace({
       return date <= soonEnd && action.status !== "inbox";
     });
     const followUps = visibleActive.filter((action) => {
+      if (dueSoon.includes(action)) return false;
       if (action.status === "follow_up") return true;
       if (!action.followUpAt) return false;
       return new Date(action.followUpAt) <= soonEnd;
@@ -663,14 +660,24 @@ export function ActionsWorkspace({
         !followUps.includes(action) &&
         !waiting.includes(action),
     );
-    return [
-      { id: "needs-approval", title: "Needs approval", hint: "Review once. Keep only what deserves attention.", items: needsApproval },
-      { id: "due-soon", title: "Due soon", hint: "Deadlines and near-term commitments.", items: dueSoon },
-      { id: "follow-ups", title: "Follow-ups", hint: "People or threads that need a nudge.", items: followUps },
-      { id: "waiting", title: "Waiting on someone", hint: "Open loops owned outside your desk.", items: waiting },
-      { id: "later", title: "Later / parked", hint: "Useful, but not asking for attention now.", items: later },
-    ].filter((lane) => lane.items.length > 0);
-  }, [visibleActive, soonEnd]);
+    return { needsApproval, dueSoon, followUps, waiting, later };
+    // visibleActive is derived from searchableActions + duplicateIds; depend on those.
+  }, [searchableActions, duplicateIds, soonEnd]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The "Needs attention" view shows only what is asking for a decision now —
+  // approvals and near-term commitments. Waiting and parked are their own views,
+  // so nothing appears in two places.
+  const attentionCount = buckets.needsApproval.length + buckets.dueSoon.length + buckets.followUps.length;
+  const lanes = useMemo(() => {
+    const all = [
+      { id: "needs-approval", title: "Needs approval", hint: "Review once. Keep only what deserves attention.", items: buckets.needsApproval },
+      { id: "due-soon", title: "Due soon", hint: "Deadlines and near-term commitments.", items: buckets.dueSoon },
+      { id: "follow-ups", title: "Follow-ups", hint: "People or threads that need a nudge.", items: buckets.followUps },
+      { id: "waiting", title: "Waiting on someone", hint: "Open loops owned outside your desk.", items: buckets.waiting },
+      { id: "later", title: "Later / parked", hint: "Useful, but not asking for attention now.", items: buckets.later },
+    ];
+    return all.filter((lane) => lane.items.length > 0);
+  }, [buckets]);
 
   const completedRecently = searchableActions
     .filter((action) => action.status === "completed" || action.status === "cancelled")
@@ -796,11 +803,11 @@ export function ActionsWorkspace({
   }
 
   const views = [
-    { id: "attention", label: "Needs attention", count: activeActions.length - duplicateIds.size },
+    { id: "attention", label: "Needs attention", count: attentionCount },
+    { id: "waiting", label: "Waiting on", count: buckets.waiting.length },
+    { id: "later", label: "Later / parked", count: buckets.later.length },
     { id: "duplicates", label: "Possible duplicates", count: duplicateGroups.length },
-    { id: "waiting", label: "Waiting on", count: activeActions.filter((action) => action.status === "waiting").length },
-    { id: "later", label: "Later / parked", count: activeActions.filter((action) => action.status === "planned" || action.status === "in_progress").length },
-    { id: "done", label: "Completed recently", count: completedRecently.length },
+    { id: "done", label: "Completed", count: completedRecently.length },
   ] as const;
 
   return (
@@ -808,7 +815,6 @@ export function ActionsWorkspace({
       <div className="actions-command">
         <header className="actions-hero">
           <div>
-            <p className="eyebrow">Actions</p>
             <h1 className="page-head__title">Decide, clean up, move on.</h1>
             <p className="page-head__lead">
               Review the smallest useful set of commitments. Merge duplicates, approve the real work, and park the rest.
@@ -942,23 +948,15 @@ export function ActionsWorkspace({
               )
             ) : (
               <>
-                {view === "waiting" || view === "later" ? null : duplicateGroups.length > 0 ? (
-                  <section className="duplicate-summary">
-                    <div>
-                      <h2>We found a few items that look similar.</h2>
-                      <p>Review them once and keep your list clean. Duplicate candidates are grouped instead of shown as full rows.</p>
-                    </div>
-                    <button type="button" className="btn btn--secondary" onClick={() => setView("duplicates")}>
-                      Review duplicates
-                    </button>
-                  </section>
-                ) : null}
-
                 {lanes
                   .filter((lane) => {
                     if (view === "waiting") return lane.id === "waiting";
                     if (view === "later") return lane.id === "later";
-                    return view === "attention";
+                    return (
+                      lane.id === "needs-approval" ||
+                      lane.id === "due-soon" ||
+                      lane.id === "follow-ups"
+                    );
                   })
                   .map((lane) => (
                     <section className="action-lane" key={lane.id}>
@@ -987,10 +985,26 @@ export function ActionsWorkspace({
                     </section>
                   ))}
 
-                {lanes.length === 0 || (view !== "attention" && lanes.filter((lane) => lane.id === view).length === 0) ? (
+                {(view === "attention" && attentionCount === 0) ||
+                (view === "waiting" && buckets.waiting.length === 0) ||
+                (view === "later" && buckets.later.length === 0) ? (
                   <section className="actions-empty-state">
-                    <h2>Nothing urgent needs your attention right now.</h2>
-                    <p>Your action list is clean. New items will appear here when they need a decision.</p>
+                    {view === "waiting" ? (
+                      <>
+                        <h2>Nothing is waiting on anyone else.</h2>
+                        <p>When an action depends on someone outside your desk, it lands here.</p>
+                      </>
+                    ) : view === "later" ? (
+                      <>
+                        <h2>Nothing parked for later.</h2>
+                        <p>Actions you keep but aren&rsquo;t acting on yet will appear here.</p>
+                      </>
+                    ) : (
+                      <>
+                        <h2>You&rsquo;re all caught up.</h2>
+                        <p>Nothing needs a decision right now. New items show up here when they do.</p>
+                      </>
+                    )}
                   </section>
                 ) : null}
               </>

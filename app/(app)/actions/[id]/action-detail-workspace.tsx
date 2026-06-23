@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { updateAction, snoozeAction, completeAction, registerActionDocument, removeActionDocument } from "../actions";
@@ -42,6 +42,16 @@ interface ActionDetailWorkspaceProps {
   readonly existingTopics: readonly string[];
 }
 
+const STATUS_META: Record<ActionStatus, { label: string; tone: "ok" | "info" | "warn" | "risk" | "neutral" }> = {
+  inbox: { label: "Needs approval", tone: "warn" },
+  planned: { label: "Planned", tone: "info" },
+  in_progress: { label: "In progress", tone: "ok" },
+  waiting: { label: "Waiting on", tone: "neutral" },
+  follow_up: { label: "Follow-up", tone: "warn" },
+  completed: { label: "Completed", tone: "ok" },
+  cancelled: { label: "Not an action", tone: "neutral" },
+};
+
 export function ActionDetailWorkspace({
   action,
   tenantId,
@@ -77,7 +87,11 @@ export function ActionDetailWorkspace({
   const [snoozeReason, setSnoozeReason] = useState("");
   const [completionFeedback, setCompletionFeedback] = useState("");
 
-  const isSnoozed = action.snoozedUntil && new Date(action.snoozedUntil) > new Date();
+  // Inline document removal confirmation (replaces window.confirm)
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+
+  const isSnoozed = Boolean(action.snoozedUntil && new Date(action.snoozedUntil) > new Date());
+  const statusMeta = STATUS_META[status];
 
   // Handle saving Title & Description
   async function handleSaveDetails(e: React.FormEvent) {
@@ -164,10 +178,10 @@ export function ActionDetailWorkspace({
       if (!res.ok) {
         setError(res.error ?? "Failed to snooze action.");
       } else {
-        setSuccess(`Action successfully snoozed until ${snoozeUntil}.`);
+        setSuccess(`Snoozed until ${formatDateString(snoozeUntil)}.`);
         setSnoozeUntil("");
         setSnoozeReason("");
-        setStatus("planned"); // will change client local visual representation or let server refresh update
+        setStatus("planned");
         router.refresh();
       }
     });
@@ -196,7 +210,7 @@ export function ActionDetailWorkspace({
       if (!res.ok) {
         setError(res.error ?? "Failed to complete action.");
       } else {
-        setSuccess("Action successfully completed.");
+        setSuccess("Marked complete.");
         setCompletionFeedback("");
         setStatus("completed");
         router.refresh();
@@ -241,7 +255,7 @@ export function ActionDetailWorkspace({
       const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
       const path = `${tenantId}/actions/${action.id}/${fileId}-${cleanFileName}`;
 
-      const { data: uploadData, error: uploadErr } = await supabase.storage
+      const { error: uploadErr } = await supabase.storage
         .from("uploads")
         .upload(path, file, {
           cacheControl: "3600",
@@ -272,18 +286,19 @@ export function ActionDetailWorkspace({
       }
 
       setUploadProgress(100);
-      setSuccess(`File "${file.name}" uploaded and linked successfully.`);
+      setSuccess(`“${file.name}” uploaded and linked.`);
       router.refresh();
     } catch (err: any) {
       setError(err.message || "An error occurred during file upload.");
     } finally {
       setIsUploadPending(false);
       setUploadProgress(null);
+      e.target.value = "";
     }
   }
 
   async function handleDeleteFile(fileId: string) {
-    if (!window.confirm("Are you sure you want to remove this document?")) return;
+    setConfirmRemoveId(null);
     setError(null);
     setSuccess(null);
 
@@ -291,12 +306,13 @@ export function ActionDetailWorkspace({
     if (!res.ok) {
       setError(res.error ?? "Failed to delete document.");
     } else {
-      setSuccess("Document deleted successfully.");
+      setSuccess("Document removed.");
       router.refresh();
     }
   }
 
   async function handleDownloadFile(filePath: string, fileName: string) {
+    setError(null);
     try {
       const supabase = createSupabaseBrowserClient();
       const { data, error: signedErr } = await supabase.storage
@@ -304,7 +320,7 @@ export function ActionDetailWorkspace({
         .createSignedUrl(filePath, 300);
 
       if (signedErr) {
-        alert("Failed to generate download link: " + signedErr.message);
+        setError("Failed to generate download link: " + signedErr.message);
         return;
       }
 
@@ -317,7 +333,7 @@ export function ActionDetailWorkspace({
         document.body.removeChild(link);
       }
     } catch (err: any) {
-      alert("Error downloading file: " + err.message);
+      setError("Error downloading file: " + err.message);
     }
   }
 
@@ -338,67 +354,76 @@ export function ActionDetailWorkspace({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   }
 
+  function applyPreset(days: number) {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    setSnoozeUntil(d.toISOString().substring(0, 10));
+  }
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-md)", maxWidth: "1200px", margin: "0 auto", padding: "var(--space-md) var(--space-lg)" }}>
-      {/* Back breadcrumb */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-xs)" }}>
-        <Link href="/actions" className="btn btn--secondary btn--sm" style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 12px", fontSize: "13px" }}>
+    <div className="action-detail">
+      {/* Topbar: back + identity */}
+      <div className="action-detail__topbar">
+        <Link href="/actions" className="btn btn--secondary btn--sm action-detail__back">
           <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
             <path d="M13.5 16.5 L7 10 L13.5 3.5" />
           </svg>
           Back to Actions
         </Link>
-        <span className={`status status--${status === "completed" ? "ok" : status === "cancelled" ? "neutral" : "info"}`}>
-          Action ID: {action.id.substring(0, 8)}...
-        </span>
+        <div className="action-detail__identity">
+          <span className={`status status--${statusMeta.tone}`}>{statusMeta.label}</span>
+          <span className="badge badge--plain" title={action.id}>
+            {action.id.substring(0, 8)}
+          </span>
+        </div>
       </div>
 
       {/* Notifications */}
       {error && (
-        <div className="alert alert--risk" style={{ padding: "12px 16px", borderRadius: "var(--radius-sm)", fontSize: "14px" }}>
-          <strong>Error:</strong> {error}
+        <div className="alert alert--risk" role="alert">
+          <div>
+            <p className="alert__title">Something went wrong</p>
+            <p className="alert__body">{error}</p>
+          </div>
         </div>
       )}
       {success && (
-        <div className="alert alert--ok" style={{ padding: "12px 16px", borderRadius: "var(--radius-sm)", fontSize: "14px" }}>
-          <strong>Success:</strong> {success}
+        <div className="alert alert--ok" role="status">
+          <div>
+            <p className="alert__title">Saved</p>
+            <p className="alert__body">{success}</p>
+          </div>
         </div>
       )}
 
       {/* Snoozed Banner */}
       {isSnoozed && (
-        <div className="alert alert--accent" style={{ padding: "16px", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-md)", background: "var(--colour-surface-secondary)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "var(--space-md)" }}>
+        <div className="alert alert--accent action-detail__snooze-banner">
           <div>
-            <h4 style={{ fontWeight: 600, fontSize: "14px", color: "var(--colour-text-primary)", display: "flex", alignItems: "center", gap: "8px" }}>
-              <span className="status status--warn" style={{ fontSize: "10px", padding: "1px 6px", textTransform: "uppercase" }}>Snoozed</span>
-              Commitment Snoozed until {formatDateString(action.snoozedUntil!)}
-            </h4>
+            <p className="alert__title">Snoozed until {formatDateString(action.snoozedUntil!)}</p>
             {action.snoozeMetadata?.last_snooze?.reason && (
-              <p style={{ fontSize: "13px", color: "var(--colour-text-secondary)", fontStyle: "italic", marginTop: "6px" }}>
-                &ldquo;{action.snoozeMetadata.last_snooze.reason}&rdquo;
-              </p>
+              <p className="alert__body">“{action.snoozeMetadata.last_snooze.reason}”</p>
             )}
           </div>
           <button type="button" onClick={handleClearSnooze} disabled={isSnoozePending} className="btn btn--secondary btn--sm">
-            {isSnoozePending ? "Clearing..." : "Un-snooze Action"}
+            {isSnoozePending ? "Clearing…" : "Un-snooze"}
           </button>
         </div>
       )}
 
       {/* 2-Column Grid */}
-      <div className="detail-workspace-grid" style={{ display: "grid", gridTemplateColumns: "1fr", gap: "var(--space-lg)" }}>
-        {/* LEFT COLUMN: Content, Sources, Snooze Logs, Document Manager */}
-        <div className="stack" style={{ gap: "var(--space-lg)" }}>
-          {/* Main Details Card */}
-          <div className="panel" style={{ background: "var(--colour-surface-secondary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-md)", padding: "var(--space-lg)" }}>
-            <form onSubmit={handleSaveDetails} className="stack" style={{ gap: "var(--space-md)" }}>
+      <div className="action-detail__grid">
+        {/* LEFT: content, documents, sources, history */}
+        <div className="action-detail__main">
+          {/* Main Details */}
+          <section className="panel">
+            <form onSubmit={handleSaveDetails}>
               <div className="field">
-                <label htmlFor="action-title-input" className="field__label" style={{ fontWeight: 600, fontSize: "13px", color: "var(--colour-text-secondary)" }}>Action Title</label>
+                <label htmlFor="action-title-input" className="field__label">Action title</label>
                 <input
                   id="action-title-input"
                   type="text"
-                  className="input"
-                  style={{ fontSize: "20px", fontWeight: 600, padding: "12px 16px", width: "100%", background: "var(--colour-surface-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)" }}
+                  className="input action-detail__title-input"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   disabled={isPending}
@@ -407,358 +432,329 @@ export function ActionDetailWorkspace({
               </div>
 
               <div className="field">
-                <label htmlFor="action-desc-input" className="field__label" style={{ fontWeight: 600, fontSize: "13px", color: "var(--colour-text-secondary)" }}>Description & Objectives</label>
+                <label htmlFor="action-desc-input" className="field__label">Description &amp; objectives</label>
                 <textarea
                   id="action-desc-input"
-                  className="input"
-                  style={{ width: "100%", minHeight: "150px", resize: "vertical", fontFamily: "inherit", padding: "12px 16px", background: "var(--colour-surface-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", fontSize: "14px", lineHeight: "1.6" }}
-                  placeholder="Provide context, deliverables, expectations or exact notes..."
+                  className="textarea"
+                  rows={6}
+                  placeholder="Context, deliverables, expectations, or exact notes…"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   disabled={isPending}
-                  rows={6}
                 />
               </div>
 
-              <div className="field">
-                <label htmlFor="action-rationale-input" className="field__label" style={{ fontWeight: 600, fontSize: "13px", color: "var(--colour-text-secondary)" }}>Source & Context Notes</label>
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label htmlFor="action-rationale-input" className="field__label">Source &amp; context notes</label>
                 <input
                   id="action-rationale-input"
                   type="text"
                   className="input"
-                  style={{ width: "100%", padding: "12px 16px", background: "var(--colour-surface-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", color: "var(--colour-text-primary)", fontSize: "14px" }}
-                  placeholder="Provide reference origins, e.g. discussed with Maria in weekly 1:1, or direct workspace URL link..."
+                  placeholder="e.g. Discussed with Maria in the weekly 1:1, or a workspace link…"
                   value={rationale}
                   onChange={(e) => setRationale(e.target.value)}
                   disabled={isPending}
                 />
               </div>
 
-              <div style={{ display: "flex", justifyContent: "flex-end", borderTop: "1px solid var(--colour-border)", paddingTop: "var(--space-md)", marginTop: "var(--space-sm)" }}>
-                <button type="submit" className="btn btn--primary" disabled={isPending} style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: "140px" }}>
-                  {isPending ? "Saving..." : detailsSaved ? "✓ Saved" : "Save Details"}
+              <div className="action-detail__form-footer">
+                <button type="submit" className="btn btn--primary" disabled={isPending}>
+                  {isPending ? "Saving…" : detailsSaved ? "Saved" : "Save details"}
                 </button>
               </div>
             </form>
-          </div>
+          </section>
 
-          {/* Secure Document Attachment Card */}
-          <div className="panel" style={{ background: "var(--colour-surface-secondary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-md)", padding: "var(--space-lg)" }}>
-            <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--colour-text-primary)", marginBottom: "4px" }}>Document Attachments</h3>
-            <p style={{ fontSize: "13px", color: "var(--colour-text-muted)", marginBottom: "var(--space-md)" }}>
-              Upload relevant agreements, briefs, or assets required to execute this action. Strictly secure under your tenant workspace boundaries.
-            </p>
+          {/* Documents */}
+          <section className="panel">
+            <div className="card-head">
+              <div>
+                <h2 className="card__title">Documents</h2>
+                <p className="action-detail__panel-hint">
+                  Agreements, briefs, or assets needed to execute this action. Kept inside your workspace.
+                </p>
+              </div>
+              {action.documents.length > 0 ? (
+                <span className="actions-count">{action.documents.length}</span>
+              ) : null}
+            </div>
 
-            {/* Existing Documents List */}
-            {action.documents && action.documents.length > 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "var(--space-md)" }}>
+            {action.documents && action.documents.length > 0 && (
+              <div className="doc-list">
                 {action.documents.map((doc: any) => (
-                  <div key={doc.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "var(--colour-surface-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px", borderRadius: "4px", background: "var(--colour-border)", color: "var(--colour-text-secondary)" }}>
-                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                          <polyline points="14 2 14 8 20 8" />
-                        </svg>
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <button
-                          type="button"
-                          onClick={() => handleDownloadFile(doc.path, doc.name)}
-                          style={{ background: "transparent", border: 0, padding: 0, fontWeight: 500, fontSize: "14px", color: "var(--colour-accent-primary)", textAlign: "left", cursor: "pointer", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}
-                          title="Click to download"
-                        >
-                          {doc.name}
-                        </button>
-                        <p style={{ fontSize: "11px", color: "var(--colour-text-muted)", marginTop: "2px" }}>
-                          {formatBytes(doc.size)} • Uploaded {formatDateString(doc.uploadedAt)} by {doc.uploadedBy.split("@")[0]}
-                        </p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteFile(doc.id)}
-                      className="btn btn--ghost"
-                      style={{ padding: "6px", color: "var(--colour-danger)" }}
-                      title="Remove attachment"
-                    >
-                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  <div key={doc.id} className="doc-item">
+                    <span className="doc-item__icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
                       </svg>
-                    </button>
+                    </span>
+                    <div className="doc-item__body">
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadFile(doc.path, doc.name)}
+                        className="doc-item__name"
+                        title="Download"
+                      >
+                        {doc.name}
+                      </button>
+                      <p className="doc-item__meta">
+                        {formatBytes(doc.size)} · {formatDateString(doc.uploadedAt)} · {String(doc.uploadedBy).split("@")[0]}
+                      </p>
+                    </div>
+                    {confirmRemoveId === doc.id ? (
+                      <div className="doc-item__confirm">
+                        <button type="button" className="btn btn--ghost btn--sm" onClick={() => setConfirmRemoveId(null)}>
+                          Cancel
+                        </button>
+                        <button type="button" className="btn btn--danger btn--sm" onClick={() => handleDeleteFile(doc.id)}>
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmRemoveId(doc.id)}
+                        className="doc-item__remove"
+                        aria-label={`Remove ${doc.name}`}
+                        title="Remove"
+                      >
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
                 ))}
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px", background: "var(--colour-surface-primary)", border: "1px dashed var(--colour-border)", borderRadius: "var(--radius-sm)", marginBottom: "var(--space-md)" }}>
-                <p style={{ fontSize: "13px", color: "var(--colour-text-muted)" }}>No documents uploaded yet.</p>
               </div>
             )}
 
             {/* Upload Area */}
-            <div style={{ position: "relative" }}>
+            <div className="doc-dropzone">
               <input
                 id="doc-upload-input"
                 type="file"
-                style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", zIndex: 10 }}
+                className="doc-dropzone__input"
                 onChange={handleFileUpload}
                 disabled={isUploadPending}
+                aria-label="Upload a document"
               />
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px", background: "rgba(255, 255, 255, 0.02)", border: "1px dashed var(--colour-border)", borderRadius: "var(--radius-sm)", cursor: "pointer" }}>
-                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ color: "var(--colour-accent-primary)", marginBottom: "8px" }}>
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="17 8 12 3 7 8" />
-                  <line x1="12" y1="3" x2="12" y2="15" />
-                </svg>
-                <p style={{ fontSize: "14px", fontWeight: 500, color: "var(--colour-text-primary)" }}>
-                  {isUploadPending ? "Uploading file..." : "Click or drag file here to upload"}
-                </p>
-                <p style={{ fontSize: "11px", color: "var(--colour-text-muted)", marginTop: "4px" }}>
-                  Max file size: 15MB. Supported formats: PDF, images, text documents.
-                </p>
-              </div>
+              <svg className="doc-dropzone__icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              <p className="doc-dropzone__title">
+                {isUploadPending ? "Uploading…" : "Click or drop a file to upload"}
+              </p>
+              <p className="doc-dropzone__hint">Up to 15MB. PDF, images, or text documents.</p>
             </div>
 
             {isUploadPending && uploadProgress !== null && (
-              <div style={{ marginTop: "12px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-                  <span style={{ fontSize: "12px", color: "var(--colour-text-secondary)" }}>Uploading file...</span>
-                  <span className="mono" style={{ fontSize: "12px", color: "var(--colour-text-secondary)" }}>{uploadProgress}%</span>
+              <div className="upload-progress">
+                <div className="upload-progress__head">
+                  <span>Uploading…</span>
+                  <span className="mono">{uploadProgress}%</span>
                 </div>
-                <div style={{ width: "100%", height: "4px", background: "var(--colour-border)", borderRadius: "2px", overflow: "hidden" }}>
-                  <div style={{ width: "100%", height: "100%", background: "var(--colour-accent-primary)", transform: `scaleX(${uploadProgress / 100})`, transformOrigin: "left", transition: "transform 0.2s ease" }} />
+                <div className="upload-progress__track">
+                  <div className="upload-progress__bar" style={{ transform: `scaleX(${uploadProgress / 100})` }} />
                 </div>
               </div>
             )}
-          </div>
+          </section>
 
-          {/* Traceable Sources */}
+          {/* Sources */}
           {action.references && action.references.length > 0 && (
-            <div className="panel" style={{ background: "var(--colour-surface-secondary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-md)", padding: "var(--space-lg)" }}>
-              <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--colour-text-primary)", marginBottom: "4px" }}>Sources & Traceability</h3>
-              <p style={{ fontSize: "13px", color: "var(--colour-text-muted)", marginBottom: "var(--space-md)" }}>
-                This action is linked to the source that created it.
-              </p>
+            <section className="panel">
+              <div className="card-head">
+                <div>
+                  <h2 className="card__title">Sources &amp; traceability</h2>
+                  <p className="action-detail__panel-hint">Where this action came from.</p>
+                </div>
+                <span className="actions-count">{action.references.length}</span>
+              </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
+              <div className="detail-source-list">
                 {action.references.map((reference) => (
-                  <div key={reference.id} style={{ border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "var(--space-md)", background: "var(--colour-surface-primary)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-xs)", fontSize: "11px", color: "var(--colour-text-secondary)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>
+                  <div key={reference.id} className="detail-source">
+                    <div className="detail-source__head">
                       <span>{reference.sourceSystem.replaceAll("_", " ")}</span>
                       {reference.itemTimestamp && (
-                        <time dateTime={reference.itemTimestamp}>
-                          {formatDateString(reference.itemTimestamp)}
-                        </time>
+                        <time dateTime={reference.itemTimestamp}>{formatDateString(reference.itemTimestamp)}</time>
                       )}
                     </div>
                     {reference.excerptOrPointer ? (
-                      <p style={{ fontSize: "13px", color: "var(--colour-text-primary)", whiteSpace: "pre-wrap", lineHeight: "1.5" }}>{reference.excerptOrPointer}</p>
+                      <p className="detail-source__excerpt">{reference.excerptOrPointer}</p>
                     ) : (
-                      <p style={{ fontSize: "13px", color: "var(--colour-text-muted)" }}>Traceability reference ID logged securely.</p>
+                      <p className="detail-source__excerpt detail-source__excerpt--muted">Reference logged securely.</p>
                     )}
                     {reference.diaryEntryId ? (
-                      <Link
-                        href={`/diary?entry=${reference.diaryEntryId}`}
-                        className="btn btn--ghost btn--sm"
-                        style={{ marginTop: "var(--space-sm)" }}
-                      >
-                        Open Diary Reference
+                      <Link href={`/diary?entry=${reference.diaryEntryId}`} className="btn btn--ghost btn--sm">
+                        Open diary reference
                       </Link>
                     ) : null}
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
           )}
 
-          {/* Activity / Snooze & Completion History */}
-          <div className="panel" style={{ background: "var(--colour-surface-secondary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-md)", padding: "var(--space-lg)" }}>
-            <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--colour-text-primary)", marginBottom: "var(--space-sm)" }}>History & Lifecycle Logs</h3>
+          {/* History */}
+          <section className="panel">
+            <div className="card-head">
+              <h2 className="card__title">History</h2>
+            </div>
 
-            <div className="stack" style={{ gap: "12px" }}>
-              <div style={{ display: "flex", gap: "12px" }}>
-                <span className="mono" style={{ fontSize: "12px", color: "var(--colour-text-muted)", minWidth: "120px" }}>
-                  {formatDateString(action.createdAt)}
-                </span>
-                <div>
-                  <p style={{ fontSize: "13px", color: "var(--colour-text-primary)", fontWeight: 500 }}>Commitment Created</p>
-                  <p style={{ fontSize: "12px", color: "var(--colour-text-muted)" }}>
-                    Source: {action.createdFrom === "manual" ? "Manually captured" : "AI pipeline extraction"}
+            <ol className="timeline">
+              <li className="timeline__row">
+                <span className="timeline__time mono">{formatDateString(action.createdAt)}</span>
+                <div className="timeline__body">
+                  <p className="timeline__title">Created</p>
+                  <p className="timeline__meta">
+                    {action.createdFrom === "manual" ? "Manually captured" : "AI pipeline extraction"}
                   </p>
                 </div>
-              </div>
+              </li>
 
-              {/* Snooze history logs */}
               {action.snoozeMetadata?.history?.map((snooze: any, index: number) => (
-                <div key={`${snooze.snoozed_at}-${index}`} style={{ display: "flex", gap: "12px" }}>
-                  <span className="mono" style={{ fontSize: "12px", color: "var(--colour-text-muted)", minWidth: "120px" }}>
-                    {formatDateString(snooze.snoozed_at)}
-                  </span>
-                  <div>
-                    <p style={{ fontSize: "13px", color: "var(--colour-text-primary)", fontWeight: 500 }}>Snoozed Commitment</p>
-                    <p style={{ fontSize: "12px", color: "var(--colour-text-secondary)" }}>
-                      Rescheduled until <strong>{formatDateString(snooze.snoozed_until)}</strong>
-                    </p>
-                    <p style={{ fontSize: "12px", color: "var(--colour-text-muted)", fontStyle: "italic", marginTop: "2px" }}>
-                      &ldquo;{snooze.reason}&rdquo;
-                    </p>
+                <li key={`${snooze.snoozed_at}-${index}`} className="timeline__row">
+                  <span className="timeline__time mono">{formatDateString(snooze.snoozed_at)}</span>
+                  <div className="timeline__body">
+                    <p className="timeline__title">Snoozed</p>
+                    <p className="timeline__meta">Rescheduled to {formatDateString(snooze.snoozed_until)}</p>
+                    {snooze.reason ? <p className="timeline__quote">“{snooze.reason}”</p> : null}
                   </div>
-                </div>
+                </li>
               ))}
 
-              {/* Completion history */}
               {action.status === "completed" && action.completedAt && (
-                <div style={{ display: "flex", gap: "12px" }}>
-                  <span className="mono" style={{ fontSize: "12px", color: "var(--colour-text-muted)", minWidth: "120px" }}>
-                    {formatDateString(action.completedAt)}
-                  </span>
-                  <div>
-                    <p style={{ fontSize: "13px", color: "var(--colour-success)", fontWeight: 600 }}>✓ Marked Completed</p>
+                <li className="timeline__row">
+                  <span className="timeline__time mono">{formatDateString(action.completedAt)}</span>
+                  <div className="timeline__body">
+                    <p className="timeline__title timeline__title--ok">Completed</p>
                     {action.completionMetadata?.feedback && (
-                      <p style={{ fontSize: "12px", color: "var(--colour-text-muted)", fontStyle: "italic", marginTop: "2px" }}>
-                        &ldquo;{action.completionMetadata.feedback}&rdquo;
-                      </p>
+                      <p className="timeline__quote">“{action.completionMetadata.feedback}”</p>
                     )}
                   </div>
-                </div>
+                </li>
               )}
-            </div>
-          </div>
+            </ol>
+          </section>
         </div>
 
-        {/* RIGHT COLUMN: Metadata Control Rail */}
-        <div className="stack" style={{ gap: "var(--space-lg)" }}>
-          {/* Main Controls Card */}
-          <div className="panel" style={{ background: "var(--colour-surface-secondary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-md)", padding: "var(--space-lg)" }}>
-            <h3 style={{ fontSize: "14px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--colour-text-secondary)", marginBottom: "var(--space-md)" }}>
-              Commitment Properties
-            </h3>
+        {/* RIGHT: metadata rail */}
+        <div className="action-detail__rail">
+          {/* Properties */}
+          <section className="panel">
+            <h2 className="action-detail__rail-title">Properties</h2>
 
-            <div className="stack" style={{ gap: "var(--space-md)" }}>
-              {/* Status Select */}
-              <div className="field">
-                <label htmlFor="detail-status" className="field__label">Lifecycle Status</label>
-                <select
-                  id="detail-status"
+            <div className="field">
+              <label htmlFor="detail-status" className="field__label">Status</label>
+              <select
+                id="detail-status"
+                className="input"
+                value={status}
+                onChange={(e) => {
+                  const nextVal = e.target.value as ActionStatus;
+                  setStatus(nextVal);
+                  triggerMetadataUpdate({ status: nextVal });
+                }}
+              >
+                <option value="inbox">Needs approval</option>
+                <option value="planned">Planned</option>
+                <option value="in_progress">In progress</option>
+                <option value="waiting">Waiting on someone</option>
+                <option value="follow_up">Follow-up</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Not an action</option>
+              </select>
+            </div>
+
+            <div className="field">
+              <label htmlFor="detail-priority" className="field__label">Priority</label>
+              <select
+                id="detail-priority"
+                className="input"
+                value={priority}
+                onChange={(e) => {
+                  const nextVal = e.target.value as ActionPriority;
+                  setPriority(nextVal);
+                  triggerMetadataUpdate({ priority: nextVal });
+                }}
+              >
+                <option value="low">Low</option>
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+              </select>
+            </div>
+
+            <div className="field">
+              <label htmlFor="detail-due" className="field__label">Due date</label>
+              <div className="input-suffix">
+                <input
+                  id="detail-due"
+                  type="date"
                   className="input"
-                  style={{ width: "100%", background: "var(--colour-surface-primary)", color: "var(--colour-text-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "8px 12px" }}
-                  value={status}
+                  value={dueAt}
                   onChange={(e) => {
-                    const nextVal = e.target.value as ActionStatus;
-                    setStatus(nextVal);
-                    triggerMetadataUpdate({ status: nextVal });
+                    const val = e.target.value;
+                    setDueAt(val);
+                    triggerMetadataUpdate({ dueAt: val || null });
                   }}
-                >
-                  <option value="inbox">Inbox (Unorganized)</option>
-                  <option value="planned">Planned (Scheduled)</option>
-                  <option value="in_progress">In Progress (Active)</option>
-                  <option value="waiting">Waiting On Someone</option>
-                  <option value="follow_up">Follow-up Needed</option>
-                  <option value="completed">Completed (Closed)</option>
-                  <option value="cancelled">Cancelled (Dismissed)</option>
-                </select>
-              </div>
-
-              {/* Priority Select */}
-              <div className="field">
-                <label htmlFor="detail-priority" className="field__label">Priority Rank</label>
-                <select
-                  id="detail-priority"
-                  className="input"
-                  style={{ width: "100%", background: "var(--colour-surface-primary)", color: "var(--colour-text-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "8px 12px" }}
-                  value={priority}
-                  onChange={(e) => {
-                    const nextVal = e.target.value as ActionPriority;
-                    setPriority(nextVal);
-                    triggerMetadataUpdate({ priority: nextVal });
-                  }}
-                >
-                  <option value="low">Low Priority</option>
-                  <option value="normal">Normal Priority</option>
-                  <option value="high">High Priority</option>
-                  <option value="critical">Critical (Blocker)</option>
-                </select>
-              </div>
-
-              {/* Due Date */}
-              <div className="field">
-                <label htmlFor="detail-due" className="field__label">Operational Due Date</label>
-                <div style={{ display: "flex", gap: "6px" }}>
-                  <input
-                    id="detail-due"
-                    type="date"
-                    className="input"
-                    style={{ flex: 1, background: "var(--colour-surface-primary)", color: "var(--colour-text-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "8px 12px" }}
-                    value={dueAt}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setDueAt(val);
-                      triggerMetadataUpdate({ dueAt: val || null });
+                />
+                {dueAt && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDueAt("");
+                      triggerMetadataUpdate({ dueAt: null });
                     }}
-                  />
-                  {dueAt && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDueAt("");
-                        triggerMetadataUpdate({ dueAt: null });
-                      }}
-                      className="btn btn--secondary"
-                      style={{ padding: "8px 12px" }}
-                      title="Clear due date"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Follow-up Date */}
-              <div className="field">
-                <label htmlFor="detail-followup" className="field__label">Soft Follow-up Date</label>
-                <div style={{ display: "flex", gap: "6px" }}>
-                  <input
-                    id="detail-followup"
-                    type="date"
-                    className="input"
-                    style={{ flex: 1, background: "var(--colour-surface-primary)", color: "var(--colour-text-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "8px 12px" }}
-                    value={followUpAt}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setFollowUpAt(val);
-                      triggerMetadataUpdate({ followUpAt: val || null });
-                    }}
-                  />
-                  {followUpAt && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFollowUpAt("");
-                        triggerMetadataUpdate({ followUpAt: null });
-                      }}
-                      className="btn btn--secondary"
-                      style={{ padding: "8px 12px" }}
-                      title="Clear follow-up date"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
+                    className="btn btn--ghost btn--sm"
+                    title="Clear due date"
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
             </div>
-          </div>
 
-          {/* People & Accountability Link */}
-          <div className="panel" style={{ background: "var(--colour-surface-secondary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-md)", padding: "var(--space-lg)" }}>
-            <h3 style={{ fontSize: "14px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--colour-text-secondary)", marginBottom: "var(--space-md)" }}>
-              Accountability Link
-            </h3>
-            <p style={{ fontSize: "12px", color: "var(--colour-text-muted)", marginBottom: "var(--space-sm)" }}>
-              Assign responsibility or link the primary contact related to this commitment.
-            </p>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label htmlFor="detail-followup" className="field__label">Follow-up date</label>
+              <div className="input-suffix">
+                <input
+                  id="detail-followup"
+                  type="date"
+                  className="input"
+                  value={followUpAt}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFollowUpAt(val);
+                    triggerMetadataUpdate({ followUpAt: val || null });
+                  }}
+                />
+                {followUpAt && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFollowUpAt("");
+                      triggerMetadataUpdate({ followUpAt: null });
+                    }}
+                    className="btn btn--ghost btn--sm"
+                    title="Clear follow-up date"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
 
+          {/* Accountability */}
+          <section className="panel">
+            <h2 className="action-detail__rail-title">Accountability</h2>
+            <p className="action-detail__panel-hint">Link the person responsible or the primary contact.</p>
             <PersonLinkControl
               targetId={action.id}
               people={people}
@@ -771,198 +767,142 @@ export function ActionDetailWorkspace({
                 return res;
               }}
             />
-          </div>
+          </section>
 
-          {/* Topics Tagging Card */}
-          <div className="panel" style={{ background: "var(--colour-surface-secondary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-md)", padding: "var(--space-lg)" }}>
-            <h3 style={{ fontSize: "14px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--colour-text-secondary)", marginBottom: "var(--space-md)" }}>
-              Topics & Focus Areas
-            </h3>
+          {/* Topics */}
+          <section className="panel">
+            <h2 className="action-detail__rail-title">Topics</h2>
 
-            <div className="stack" style={{ gap: "var(--space-xs)" }}>
-              {topics.length > 0 ? (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
-                  {topics.map((tag) => (
-                    <span key={tag} className="chip chip--accent" style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "4px 10px", fontSize: "12px" }}>
-                      {tag}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveTopic(tag)}
-                        style={{ border: 0, background: "transparent", color: "inherit", cursor: "pointer", fontSize: "14px", fontWeight: "bold" }}
-                        title={`Remove topic ${tag}`}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p style={{ fontSize: "12px", color: "var(--colour-text-muted)", marginBottom: "8px" }}>No focus areas linked.</p>
-              )}
-
-              {/* Suggestions dropdown or matching list */}
-              {newTopic.trim() && (
-                <div style={{ background: "var(--colour-surface-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", maxHeight: "150px", overflowY: "auto", marginBottom: "8px" }}>
-                  {existingTopics
-                    .filter((t) => t.toLowerCase().includes(newTopic.toLowerCase()) && !topics.includes(t))
-                    .map((matched) => (
-                      <button
-                        key={matched}
-                        type="button"
-                        onClick={() => handleAddTopic(matched)}
-                        style={{ display: "block", width: "100%", padding: "8px 12px", textAlign: "left", fontSize: "13px", color: "var(--colour-text-primary)", background: "transparent", border: 0, cursor: "pointer", borderBottom: "1px solid var(--colour-border)" }}
-                      >
-                        Use existing: <strong>{matched}</strong>
-                      </button>
-                    ))}
-                  {!topics.includes(newTopic.trim()) && (
+            {topics.length > 0 ? (
+              <div className="topic-chips">
+                {topics.map((tag) => (
+                  <span key={tag} className="chip chip--accent">
+                    {tag}
                     <button
                       type="button"
-                      onClick={() => handleAddTopic(newTopic)}
-                      style={{ display: "block", width: "100%", padding: "8px 12px", textAlign: "left", fontSize: "13px", color: "var(--colour-accent-primary)", background: "transparent", border: 0, cursor: "pointer" }}
+                      onClick={() => handleRemoveTopic(tag)}
+                      className="topic-chips__remove"
+                      aria-label={`Remove topic ${tag}`}
                     >
-                      + Create new topic: <strong>&ldquo;{newTopic.trim()}&rdquo;</strong>
+                      <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                        <path d="M4 4l8 8M12 4l-8 8" />
+                      </svg>
                     </button>
-                  )}
-                </div>
-              )}
-
-              <div style={{ display: "flex", gap: "6px" }}>
-                <input
-                  type="text"
-                  className="input"
-                  style={{ flex: 1, fontSize: "13px", padding: "6px 10px" }}
-                  placeholder="Type a topic name..."
-                  value={newTopic}
-                  onChange={(e) => setNewTopic(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleAddTopic(newTopic);
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="btn btn--secondary"
-                  disabled={!newTopic.trim()}
-                  onClick={() => handleAddTopic(newTopic)}
-                  style={{ padding: "6px 12px", fontSize: "13px" }}
-                >
-                  Add
-                </button>
+                  </span>
+                ))}
               </div>
+            ) : (
+              <p className="action-detail__panel-hint">No topics linked yet.</p>
+            )}
+
+            {newTopic.trim() && (
+              <div className="topic-suggest">
+                {existingTopics
+                  .filter((t) => t.toLowerCase().includes(newTopic.toLowerCase()) && !topics.includes(t))
+                  .map((matched) => (
+                    <button key={matched} type="button" onClick={() => handleAddTopic(matched)} className="topic-suggest__item">
+                      Use existing: <strong>{matched}</strong>
+                    </button>
+                  ))}
+                {!topics.includes(newTopic.trim()) && (
+                  <button type="button" onClick={() => handleAddTopic(newTopic)} className="topic-suggest__item topic-suggest__item--new">
+                    Create “{newTopic.trim()}”
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div className="input-suffix action-detail__topic-add">
+              <input
+                type="text"
+                className="input"
+                placeholder="Add a topic…"
+                value={newTopic}
+                onChange={(e) => setNewTopic(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddTopic(newTopic);
+                  }
+                }}
+              />
+              <button type="button" className="btn btn--secondary btn--sm" disabled={!newTopic.trim()} onClick={() => handleAddTopic(newTopic)}>
+                Add
+              </button>
             </div>
-          </div>
+          </section>
 
-          {/* Snooze Control Panel */}
+          {/* Snooze */}
           {status !== "completed" && status !== "cancelled" && !isSnoozed && (
-            <div className="panel" style={{ background: "var(--colour-surface-secondary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-md)", padding: "var(--space-lg)" }}>
-              <h3 style={{ fontSize: "14px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--colour-text-secondary)", marginBottom: "var(--space-md)" }}>
-                Snooze Commitment
-              </h3>
-
-              <form onSubmit={handleSnoozeSubmit} className="stack" style={{ gap: "var(--space-sm)" }}>
+            <section className="panel">
+              <h2 className="action-detail__rail-title">Snooze</h2>
+              <form onSubmit={handleSnoozeSubmit}>
                 <div className="field">
-                  <label htmlFor="snooze-until-input" className="field__label">Snooze until date</label>
+                  <label htmlFor="snooze-until-input" className="field__label">Snooze until</label>
                   <input
                     id="snooze-until-input"
                     type="date"
                     className="input"
-                    style={{ width: "100%", background: "var(--colour-surface-primary)", color: "var(--colour-text-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "8px 12px" }}
                     value={snoozeUntil}
                     onChange={(e) => setSnoozeUntil(e.target.value)}
                     disabled={isSnoozePending}
                     required
                   />
-                  <div style={{ display: "flex", gap: "6px", marginTop: "8px" }}>
-                    <button
-                      type="button"
-                      className="btn btn--ghost btn--sm"
-                      style={{ fontSize: "12px", padding: "4px 8px" }}
-                      onClick={() => {
-                        const tomorrow = new Date();
-                        tomorrow.setDate(tomorrow.getDate() + 1);
-                        setSnoozeUntil(tomorrow.toISOString().substring(0, 10));
-                      }}
-                    >
-                      +1 Day
+                  <div className="action-detail__presets">
+                    <button type="button" className="btn btn--ghost btn--sm" onClick={() => applyPreset(1)}>
+                      Tomorrow
                     </button>
-                    <button
-                      type="button"
-                      className="btn btn--ghost btn--sm"
-                      style={{ fontSize: "12px", padding: "4px 8px" }}
-                      onClick={() => {
-                        const nextWeek = new Date();
-                        nextWeek.setDate(nextWeek.getDate() + 7);
-                        setSnoozeUntil(nextWeek.toISOString().substring(0, 10));
-                      }}
-                    >
-                      +1 Week
+                    <button type="button" className="btn btn--ghost btn--sm" onClick={() => applyPreset(7)}>
+                      Next week
                     </button>
                   </div>
                 </div>
 
-                <div className="field">
-                  <label htmlFor="snooze-reason-input" className="field__label">Snooze Reason</label>
+                <div className="field" style={{ marginBottom: "var(--space-md)" }}>
+                  <label htmlFor="snooze-reason-input" className="field__label">Reason (optional)</label>
                   <input
                     id="snooze-reason-input"
                     type="text"
                     className="input"
-                    style={{ width: "100%", background: "var(--colour-surface-primary)", color: "var(--colour-text-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "8px 12px" }}
-                    placeholder="e.g. Waiting for team alignment..."
+                    placeholder="e.g. Waiting for team alignment…"
                     value={snoozeReason}
                     onChange={(e) => setSnoozeReason(e.target.value)}
                     disabled={isSnoozePending}
                   />
                 </div>
 
-                <button type="submit" className="btn btn--secondary" style={{ width: "100%", marginTop: "4px" }} disabled={isSnoozePending || !snoozeUntil}>
-                  {isSnoozePending ? "Snoozing..." : "Apply Snooze"}
+                <button type="submit" className="btn btn--secondary btn--block" disabled={isSnoozePending || !snoozeUntil}>
+                  {isSnoozePending ? "Snoozing…" : "Snooze"}
                 </button>
               </form>
-            </div>
+            </section>
           )}
 
-          {/* Complete Action Section */}
+          {/* Complete */}
           {status !== "completed" && (
-            <div className="panel" style={{ background: "var(--colour-surface-secondary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-md)", padding: "var(--space-lg)" }}>
-              <h3 style={{ fontSize: "14px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--colour-text-secondary)", marginBottom: "var(--space-md)" }}>
-                Complete Action
-              </h3>
-
-              <form onSubmit={handleCompleteSubmit} className="stack" style={{ gap: "var(--space-sm)" }}>
-                <div className="field">
-                  <label htmlFor="completion-feedback-input" className="field__label">Closure Notes (Optional)</label>
+            <section className="panel">
+              <h2 className="action-detail__rail-title">Complete</h2>
+              <form onSubmit={handleCompleteSubmit}>
+                <div className="field" style={{ marginBottom: "var(--space-md)" }}>
+                  <label htmlFor="completion-feedback-input" className="field__label">Closure note (optional)</label>
                   <input
                     id="completion-feedback-input"
                     type="text"
                     className="input"
-                    style={{ width: "100%", background: "var(--colour-surface-primary)", color: "var(--colour-text-primary)", border: "1px solid var(--colour-border)", borderRadius: "var(--radius-sm)", padding: "8px 12px" }}
-                    placeholder="e.g. Client signed off hiring pipeline..."
+                    placeholder="e.g. Client signed off on the pipeline…"
                     value={completionFeedback}
                     onChange={(e) => setCompletionFeedback(e.target.value)}
                     disabled={isCompletePending}
                   />
                 </div>
-
-                <button type="submit" className="btn btn--accent-outline" style={{ width: "100%", marginTop: "4px" }} disabled={isCompletePending}>
-                  {isCompletePending ? "Completing..." : "✓ Mark as Completed"}
+                <button type="submit" className="btn btn--primary btn--block" disabled={isCompletePending}>
+                  {isCompletePending ? "Completing…" : "Mark complete"}
                 </button>
               </form>
-            </div>
+            </section>
           )}
         </div>
       </div>
-
-      {/* Style tag to support the responsive layout */}
-      <style jsx global>{`
-        @media (min-width: 1024px) {
-          .detail-workspace-grid {
-            grid-template-columns: 2fr 1fr !important;
-          }
-        }
-      `}</style>
     </div>
   );
 }
