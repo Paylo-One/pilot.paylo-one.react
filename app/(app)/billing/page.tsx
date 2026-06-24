@@ -4,7 +4,8 @@ import {
 } from "@/modules/identity-tenant/server";
 import { getBillingAccess } from "@/modules/billing/access";
 import { configuredPlanFromPriceId } from "@/modules/billing/stripe";
-import { BillingActions } from "./billing-actions";
+import { ManageSubscriptionButton } from "./billing-actions";
+import { PlanComparison } from "./plan-comparison";
 
 function formatDate(value: string | null): string {
   if (!value) return "-";
@@ -15,17 +16,15 @@ function formatDate(value: string | null): string {
   }).format(new Date(value));
 }
 
-function trialCopy(freeAccessEndsAt: string, status: string): string {
-  const days = Math.ceil(
-    (Date.parse(freeAccessEndsAt) - Date.now()) / (24 * 60 * 60 * 1000),
-  );
-  if (status !== "trialing" || days <= 0) {
-    return "Your free access has ended. Choose a plan to continue using Paylo One.";
+function restrictedCopy(freeAccessEndsAt: string, status: string): string {
+  const ended = Date.parse(freeAccessEndsAt) <= Date.now();
+  if (status === "past_due") {
+    return "Your last payment did not go through. Update your payment details to keep your workspace active.";
   }
-  if (days === 1) {
-    return "Your free access ends tomorrow. Add your subscription now so your workspace keeps running.";
+  if (ended) {
+    return "Your free access has ended. Choose a plan below to continue using Paylo One.";
   }
-  return `You have ${days} days left in your free access period. Choose a plan to keep your workspace active.`;
+  return "Your workspace needs an active subscription. Choose a plan below to continue.";
 }
 
 export default async function BillingPage() {
@@ -41,8 +40,9 @@ export default async function BillingPage() {
         <p className="eyebrow">Billing</p>
         <h1 className="page-head__title">Plan &amp; access</h1>
         <p className="page-head__lead">
-          Manage the subscription that keeps your Paylo One workspace active.
-          Payment details are handled securely by Stripe.
+          Choose the plan that fits how you operate. Compare Personal Operator
+          and Executive Operator below — payment details are handled securely by
+          Stripe.
         </p>
       </div>
 
@@ -61,19 +61,19 @@ export default async function BillingPage() {
           </p>
         </section>
       ) : (
-        <div className="stack" style={{ maxWidth: "820px" }}>
-          {access.billingStatus === "trialing" || access.accessStatus === "restricted" ? (
-            <div className={`alert ${access.accessStatus === "restricted" ? "alert--risk" : "alert--accent"}`}>
-              <p className="alert__title">
-                {access.accessStatus === "restricted"
-                  ? "Payment required"
-                  : "Free access is active"}
-              </p>
+        <div className="stack" style={{ maxWidth: "920px", gap: "var(--space-xl)" }}>
+          {access.accessStatus === "restricted" ? (
+            <div className="alert alert--risk">
+              <p className="alert__title">Payment required</p>
               <p className="alert__body">
-                {trialCopy(access.freeAccessEndsAt, access.billingStatus)}
+                {restrictedCopy(access.freeAccessEndsAt, access.billingStatus)}
               </p>
             </div>
           ) : null}
+
+          <PlanComparison
+            currentPriceOption={configuredPlan?.priceOption.key ?? null}
+          />
 
           <section className="card">
             <div className="card-head">
@@ -124,10 +124,7 @@ export default async function BillingPage() {
             ) : null}
 
             <div style={{ marginTop: "var(--space-md)" }}>
-              <BillingActions
-                canManage={!!access.stripeCustomerId}
-                currentPriceOption={configuredPlan?.priceOption.key ?? null}
-              />
+              <ManageSubscriptionButton canManage={!!access.stripeCustomerId} />
             </div>
           </section>
         </div>

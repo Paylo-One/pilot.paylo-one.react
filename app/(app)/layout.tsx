@@ -22,6 +22,8 @@ import {
   getSignedInUser,
 } from "@/modules/identity-tenant/server";
 import { enforceBillingAccessForPath } from "@/modules/billing/access-guard";
+import { getBillingAccess } from "@/modules/billing/access";
+import { TrialBanner } from "@/components/trial-banner";
 import { BrandMark } from "@/components/brand-mark";
 import { PayloWordmark } from "@/components/paylo-wordmark";
 import { WorkspaceNav } from "@/components/workspace-nav";
@@ -48,6 +50,7 @@ export default async function AppLayout({
     requestHeaders.get("x-paylo-request-path"),
   );
   const user = await getSignedInUser();
+  const billingAccess = await getBillingAccess(ctx.tenantId);
 
   const supabase = await createSupabaseServerClient();
   const { data: profile } = await supabase
@@ -139,6 +142,9 @@ export default async function AppLayout({
             </span>
           </div>
         </header>
+        {billingAccess?.billingStatus === "trialing" ? (
+          <TrialBanner endsAt={billingAccess.freeAccessEndsAt} />
+        ) : null}
         {children}
       </div>
     </div>

@@ -6195,4 +6195,274 @@ a.relationship-list__link:hover .relationship-list__other {
   }
 }
 
+/* ============================================================================
+   TRIAL BANNER — app-wide free-access countdown (workspace shell)
+   A calm accent strip below the topbar while the workspace is on trial. The
+   remaining time uses mono numerals (a controlled system signature), with a
+   single teal action back to Billing. Restraint: teal stays ≤10% of screen.
+   ========================================================================== */
+.trial-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  padding: var(--space-sm) var(--space-xl);
+  border-bottom: 1px solid var(--colour-accent);
+  background: var(--colour-accent-tint);
+}
+.trial-banner--ending {
+  border-bottom-color: var(--colour-warning);
+  background: var(--colour-warning-tint);
+}
+.trial-banner__body {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.trial-banner__title {
+  font-size: var(--text-small);
+  font-weight: 600;
+  color: var(--colour-text-primary);
+}
+.trial-banner__count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+}
+.trial-banner__seg {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  font-family: var(--font-mono);
+  color: var(--colour-text-secondary);
+}
+.trial-banner__num {
+  font-size: var(--text-small);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--colour-text-primary);
+}
+.trial-banner__unit {
+  font-size: var(--text-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--colour-text-tertiary);
+}
+.trial-banner__cta {
+  flex-shrink: 0;
+  text-decoration: none;
+}
+
+@media (max-width: 620px) {
+  .trial-banner {
+    padding: var(--space-sm) var(--space-md);
+  }
+}
+
+/* ============================================================================
+   PLAN COMPARISON — Billing page (mirrors the marketing pricing language)
+   Tier cards + a monthly/annual cadence toggle + a what-is-included matrix,
+   resolved against the same governance tokens used on paylo.one.
+   ========================================================================== */
+.billing-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+  background: var(--colour-surface-sunken);
+}
+.billing-toggle__option {
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--colour-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 7px 11px;
+  cursor: pointer;
+}
+.billing-toggle__option:hover {
+  color: var(--colour-text-primary);
+}
+.billing-toggle__option--active {
+  color: var(--colour-text-primary);
+  background: var(--colour-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+}
+
+.plan-card {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  padding: var(--space-xl);
+  background: var(--colour-surface);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-lg);
+}
+.plan-card--featured {
+  border-color: var(--colour-accent);
+  background: var(--colour-surface-elevated);
+}
+.plan-card__tag {
+  align-self: flex-start;
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--colour-accent);
+  background: var(--colour-accent-tint);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  margin-bottom: var(--space-md);
+}
+.plan-card__name {
+  font-size: var(--text-h2);
+  font-weight: 600;
+}
+.plan-card__audience {
+  margin-top: var(--space-xs);
+  font-size: var(--text-small);
+  color: var(--colour-text-tertiary);
+}
+.plan-card__price {
+  margin-top: var(--space-lg);
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.plan-card__cadence {
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--colour-text-tertiary);
+  margin-top: var(--space-xs);
+}
+.plan-card__summary {
+  margin-top: var(--space-md);
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+  line-height: var(--leading-snug);
+}
+.plan-includes {
+  margin-top: var(--space-lg);
+  display: grid;
+  gap: var(--space-sm);
+  flex: 1;
+}
+.plan-include {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: var(--space-sm);
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+  line-height: var(--leading-snug);
+}
+.plan-include svg {
+  margin-top: 3px;
+  color: var(--colour-accent);
+  flex-shrink: 0;
+}
+.plan-card__cta {
+  margin-top: var(--space-xl);
+  width: 100%;
+}
+.plan-card__current {
+  margin-top: var(--space-xl);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--colour-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--colour-surface-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--colour-text-secondary);
+}
+
+.plan-matrix-wrap {
+  margin-top: var(--space-xl);
+  overflow-x: auto;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-md);
+}
+.plan-matrix {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-small);
+  min-width: 520px;
+}
+.plan-matrix th,
+.plan-matrix td {
+  padding: 0.7rem var(--space-md);
+  text-align: left;
+  border-bottom: 1px solid var(--colour-border);
+}
+.plan-matrix thead th {
+  font-family: var(--font-heading);
+  font-size: var(--text-small);
+  font-weight: 600;
+  color: var(--colour-text-primary);
+  background: var(--colour-surface);
+}
+.plan-matrix thead th:first-child {
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--colour-text-tertiary);
+  font-weight: 600;
+}
+.plan-matrix td:first-child {
+  color: var(--colour-text-primary);
+  font-weight: 500;
+}
+.plan-matrix td:not(:first-child),
+.plan-matrix th:not(:first-child) {
+  text-align: center;
+}
+.plan-matrix tbody tr:last-child td {
+  border-bottom: 0;
+}
+.plan-matrix__val {
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--colour-text-secondary);
+}
+.plan-matrix__yes {
+  color: var(--colour-accent);
+}
+.plan-matrix__no {
+  color: var(--colour-text-tertiary);
+  opacity: 0.5;
+}
+
+@media (max-width: 720px) {
+  .plan-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 } /* end @layer components */
