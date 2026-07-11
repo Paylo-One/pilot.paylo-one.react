@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint · Typecheck · Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      # Unit tests. The runtime tenant-isolation suite self-skips here (no test
+      # DB env), so this stays fast and DB-free.
+      - run: npm test
+
+  tenant-isolation:
+    name: Tenant isolation (runtime RLS on Postgres)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      # `supabase start` boots the full local stack (Postgres + Auth/GoTrue +
+      # PostgREST) and applies every migration in supabase/migrations, giving a
+      # real RLS-enforcing database for the integration test.
+      - name: Start Supabase stack
+        run: supabase start
+      - name: Export test DB env
+        run: |
+          set -euo pipefail
+          eval "$(supabase status -o env)"
+          {
+            echo "SUPABASE_TEST_URL=${API_URL}"
+            echo "SUPABASE_TEST_ANON_KEY=${ANON_KEY}"
+            echo "SUPABASE_TEST_SERVICE_KEY=${SERVICE_ROLE_KEY}"
+          } >> "$GITHUB_ENV"
+      - name: Run runtime tenant-isolation test
+        run: npx vitest run modules/identity-tenant/tenant-isolation.integration.test.ts
+      - name: Stop Supabase stack
+        if: always()
+        run: supabase stop || true
