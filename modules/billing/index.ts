@@ -7,8 +7,8 @@
  * server-side resolver and guard helpers live in `entitlements.ts`.
  *
  * Governance:
- *  - governance/billing-logical-design.md (tiers, matrix, lifecycle, enforcement)
- *  - governance/billing-technical-design.md (data model, engine, APIs)
+ *  - governance/docs/02-monetisation/billing-subscription-logical-design.md (tiers, matrix, lifecycle, enforcement)
+ *  - governance/docs/02-monetisation/billing-subscription-technical-design.md (data model, engine, APIs)
  *  - services/billing.md (provider integration; invite-linked activation)
  *
  * Still a stub on the money side: no payment provider, no webhooks, no

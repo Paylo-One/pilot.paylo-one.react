@@ -4,7 +4,7 @@ import "server-only";
  * modules/source-connection/entitlement-guard.ts
  *
  * Plan enforcement for connecting sources — the first wired enforcement point
- * (governance/billing-logical-design.md §7.2, technical-design §8, §11).
+ * (governance/docs/02-monetisation/billing-subscription-logical-design.md §7.2, technical-design §8, §11).
  *
  * OBSERVE-ONLY for now: we resolve the tenant's `maxConnectedSources`
  * entitlement, count their current connections, and check headroom — but a

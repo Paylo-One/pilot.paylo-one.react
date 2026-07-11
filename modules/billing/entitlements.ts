@@ -11,8 +11,8 @@
  *   plan defaults  →  active add-ons  →  admin overrides  →  account-state collapse
  *
  * Governance:
- *  - governance/billing-logical-design.md §7 (enforcement) + §8 (model)
- *  - governance/billing-technical-design.md §4 (engine) + §11 (rollout safety)
+ *  - governance/docs/02-monetisation/billing-subscription-logical-design.md §7 (enforcement) + §8 (model)
+ *  - governance/docs/02-monetisation/billing-subscription-technical-design.md §4 (engine) + §11 (rollout safety)
  *
  * Posture (mirrors model-usage-cost / model-entitlement): server-only. Reads go
  * through the secret client (service_role) with an EXPLICIT tenant_id predicate;

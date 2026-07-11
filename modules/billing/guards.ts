@@ -11,7 +11,7 @@
  * `detail` payload (`EntitlementDenial`) naming the plan that unlocks the
  * capability/limit, so the UI renders the correct upgrade prompt.
  *
- * Governance: governance/billing-logical-design.md §7-8, technical-design §4.3.
+ * Governance: governance/docs/02-monetisation/billing-subscription-logical-design.md §7-8, technical-design §4.3.
  */
 
 import { AppError, err, ok, type Result } from "@/modules/shared";

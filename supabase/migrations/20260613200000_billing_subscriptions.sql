@@ -5,7 +5,7 @@
 -- (founder/beta/coupon), rolled-up usage counters, and a provider-agnostic
 -- webhook event ledger.
 --
--- Governance: governance/billing-logical-design.md, governance/billing-technical-design.md (§2).
+-- Governance: governance/docs/02-monetisation/billing-subscription-logical-design.md, governance/docs/02-monetisation/billing-subscription-technical-design.md (§2).
 -- Builds ON TOP OF: 20260607160001_tenancy_core.sql (tenants, auth_tenant_ids()),
 -- 20260613180000_admin_foundation.sql (catalogue_items, is_platform_admin(),
 -- admin RBAC + audit), 20260613120000_tenant_model_providers.sql (BYO posture).
@@ -263,5 +263,5 @@ on conflict (plan_key) do nothing;
 --   row (provider 'manual', status 'active', plan_key = ops default e.g.
 --   'plan_executive') so the resolver never locks out a current user. The
 --   resolver treats a missing row as a grandfathered 'active' on the default
---   plan (logged) until backfill completes. See billing-technical-design.md §11.
+--   plan (logged) until backfill completes. See billing-subscription-technical-design.md §11.
 -- ============================================================================

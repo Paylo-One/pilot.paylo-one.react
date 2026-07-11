@@ -12,8 +12,8 @@
  * never drift. Do NOT import server-only code here.
  *
  * Governance:
- *  - governance/billing-logical-design.md §5 (feature matrix) + §8 (entitlement model)
- *  - governance/billing-technical-design.md §4 (entitlement engine)
+ *  - governance/docs/02-monetisation/billing-subscription-logical-design.md §5 (feature matrix) + §8 (entitlement model)
+ *  - governance/docs/02-monetisation/billing-subscription-technical-design.md §4 (entitlement engine)
  *  - services/model-entitlement-service.md (AI limits feed Model Entitlement)
  *
  * Invariant (enforced by tests, technical-design §12): entitlements are
