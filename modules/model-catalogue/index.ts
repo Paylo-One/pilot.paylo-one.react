@@ -151,19 +151,27 @@ export interface ModelCatalogueService {
   ): Promise<Result<ModelDescriptor>>;
 }
 
-/** The hosted chat model id, from server env (default gpt-4o-mini). */
+/**
+ * The default chat model id, from server env (default gpt-4o-mini). Reached
+ * through the OpenAI-compatible adapter; when an EU router is configured
+ * (LLM_BASE_URL + LLM_MODEL, ADR-045) this is a provider-prefixed EU model id
+ * such as "mistral/mistral-small-latest".
+ */
 export function defaultOpenAiModelId(): string {
-  return process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
+  return process.env.LLM_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
 }
 
-/** Build the single active OpenAI catalogue entry (MVP). */
+/** Build the single active default catalogue entry (MVP). */
 function defaultOpenAiModel(): ModelDescriptor {
   const modelId = defaultOpenAiModelId();
+  // Reflect EU-resident inference in the display name when it is configured,
+  // so audit/usage surfaces name the region rather than assuming hosted OpenAI.
+  const isEu = /\brouter\.eu\.requesty\.ai\b/i.test(process.env.LLM_BASE_URL?.trim() || "");
   return {
     modelId,
     provider: "openai",
     runtimeType: "openai",
-    displayName: `OpenAI ${modelId}`,
+    displayName: isEu ? `EU · ${modelId}` : `OpenAI ${modelId}`,
     baseModel: modelId,
     modelVersion: "hosted",
     contextWindow: 128_000,

@@ -20,6 +20,7 @@ import {
 } from "@/modules/identity-tenant/server";
 import { AVAILABILITY_LABELS, AVAILABILITY_TONE } from "@/modules/shared";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { isEuInference } from "@/lib/llm";
 import { listTenantModelProviders } from "@/modules/tenant-models/server";
 import { referralService } from "@/modules/referral";
 import { listMcpGrants } from "@/modules/mcp";
@@ -208,6 +209,9 @@ export default async function SettingsPage() {
             Every request is checked against your plan and how sensitive the
             content is before any model is used. When you add your own key above,
             it is used first; otherwise Paylo.one uses its own secure default.
+            {!providers.some((p) => p.isActive) && isEuInference()
+              ? " That default runs inside the European Union, on infrastructure in Frankfurt, using European AI models under GDPR — never used to train external models."
+              : ""}
           </p>
           <div className="meta-row">
             <span className="meta-row__key">In use now</span>
@@ -215,6 +219,16 @@ export default async function SettingsPage() {
               <span className="badge badge--plain">
                 {providers.some((p) => p.isActive) ? "Your own key" : "Paylo.one default"}
               </span>
+            </span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-row__key">Where it runs</span>
+            <span className="meta-row__value">
+              {providers.some((p) => p.isActive)
+                ? "Your own provider"
+                : isEuInference()
+                  ? "European Union (Frankfurt)"
+                  : "Secure default"}
             </span>
           </div>
           <div className="meta-row">

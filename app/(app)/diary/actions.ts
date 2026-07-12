@@ -11,7 +11,7 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import OpenAI from "openai";
+import { createLlmClient, llmChatModel, llmTranscriptionModel, hasLlm } from "@/lib/llm";
 import { requireTenantContext } from "@/modules/identity-tenant/server";
 import { diaryService, type DiaryEntry } from "@/modules/diary";
 import { auditService } from "@/modules/audit";
@@ -256,8 +256,7 @@ export async function transcribeVoiceNoteAction(
     return { ok: false, error: "Keep voice notes under 25 MB." };
   }
 
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
+  if (!hasLlm()) {
     return {
       ok: false,
       error:
@@ -266,10 +265,10 @@ export async function transcribeVoiceNoteAction(
   }
 
   try {
-    const client = new OpenAI({ apiKey });
+    const client = createLlmClient();
     const response = await client.audio.transcriptions.create({
       file: audio,
-      model: process.env.OPENAI_TRANSCRIPTION_MODEL || "whisper-1",
+      model: llmTranscriptionModel(),
     });
     const transcript = String(response.text ?? "").trim();
     if (!transcript) {
@@ -524,12 +523,11 @@ export async function generateWeeklySummaryAction(): Promise<DiaryActionState> {
   }
 
   let summary = fallbackWeeklySummary(entries);
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (apiKey) {
+  if (hasLlm()) {
     try {
-      const client = new OpenAI({ apiKey });
+      const client = createLlmClient();
       const response = await client.chat.completions.create({
-        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+        model: llmChatModel(),
         temperature: 0.2,
         response_format: { type: "json_object" },
         messages: [

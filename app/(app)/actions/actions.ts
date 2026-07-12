@@ -11,7 +11,7 @@ import { requireTenantContext } from "@/modules/identity-tenant/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { auditService } from "@/modules/audit";
 import { ActionStatus, ActionPriority, ActionCreatedFrom } from "@/modules/action-extraction/server";
-import OpenAI from "openai";
+import { createLlmClient, llmChatModel, hasLlm } from "@/lib/llm";
 
 export interface ActionDocument {
   readonly id: string;
@@ -603,14 +603,13 @@ export async function suggestActionMetadata(
       };
     };
 
-    // 4. Try OpenAI if API Key is configured
-    const apiKey = process.env.OPENAI_API_KEY?.trim();
-    if (!apiKey) {
+    // 4. Try the configured LLM provider (EU router or hosted OpenAI, ADR-045)
+    if (!hasLlm()) {
       return { ok: true, suggestions: getFallback() };
     }
 
     try {
-      const client = new OpenAI({ apiKey });
+      const client = createLlmClient();
       const systemPrompt = `You are an assistant in Pilot by Paylo.one. Your task is to analyze an action's title and description to extract and suggest structured metadata.
 We want to keep metadata minimal and avoid information hoarding and tag clutter. Suggest only what is highly relevant and high-value.
 
@@ -635,7 +634,7 @@ You must respond with a JSON object in this exact schema:
 }`;
 
       const response = await client.chat.completions.create({
-        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+        model: llmChatModel(),
         temperature: 0,
         response_format: { type: "json_object" },
         messages: [
