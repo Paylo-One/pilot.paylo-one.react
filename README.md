@@ -125,6 +125,29 @@ npm run lint
 npm run build
 ```
 
+## Continuous integration
+
+CI runs on every push/PR (`.github/workflows/ci.yml`), in two jobs:
+
+- **quality** — `npm ci`, lint, typecheck, unit tests (Node 22). The runtime
+  tenant-isolation suite self-skips here (no DB env), so this stays fast.
+- **tenant-isolation** — boots the Supabase local stack (real Postgres + Auth +
+  PostgREST with all migrations applied) and runs the runtime RLS test, proving
+  a member of one tenant cannot read another tenant's rows.
+
+Run the whole pipeline locally before pushing (needs Docker + the Supabase CLI,
+`brew install supabase/tap/supabase`):
+
+```bash
+npm run ci:local              # lint + typecheck + unit + DB-backed isolation test
+KEEP_SUPABASE=1 npm run ci:local   # leave the stack up for faster re-runs
+```
+
+`npm run test:integration` runs only the runtime isolation test and expects a
+running stack (`supabase start`); it reads `SUPABASE_TEST_URL` /
+`SUPABASE_TEST_ANON_KEY` / `SUPABASE_TEST_SERVICE_KEY`. `scripts/ci-local.sh`
+wires those up from `supabase status` automatically.
+
 ## What is intentionally NOT here
 
 Real passkeys/WebAuthn (auth is magic-link, passkey-ready), payment processing,
