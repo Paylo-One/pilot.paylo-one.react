@@ -30,6 +30,7 @@ import "server-only";
 
 import OpenAI from "openai";
 import { AppError, NotImplementedError } from "@/modules/shared";
+import { createLlmClient } from "@/lib/llm";
 
 /**
  * The concrete runtime types that have a first-class adapter. The catalogue's
@@ -115,18 +116,16 @@ function makeStubAdapter(runtimeType: AdapterRuntimeType): ModelAdapter {
 }
 
 /**
- * Lazily construct the OpenAI client so merely importing this module never
- * requires the key. The key is the tenant's BYO key when supplied (ADR-038),
- * otherwise the Paylo server env key; either way it stays on the server and is
- * never logged or returned (security-and-privacy.md: provider keys are
- * server-side only).
+ * Lazily construct the OpenAI-compatible client so merely importing this module
+ * never requires the key. The key is the tenant's BYO key when supplied
+ * (ADR-038), otherwise the Paylo server env key; either way it stays on the
+ * server and is never logged or returned (security-and-privacy.md: provider keys
+ * are server-side only). The base URL / provider selection (hosted OpenAI vs the
+ * EU router) is resolved centrally in `@/lib/llm` (ADR-045), so this adapter is
+ * unchanged whether inference runs in the EU or against hosted OpenAI.
  */
 function openAiClient(overrideKey?: string): OpenAI {
-  const apiKey = overrideKey?.trim() || process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
-    throw new AppError("internal", "OPENAI_API_KEY is not set");
-  }
-  return new OpenAI({ apiKey });
+  return createLlmClient(overrideKey);
 }
 
 /**
