@@ -10,7 +10,9 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:integration": "vitest run modules/identity-tenant/tenant-isolation.integration.test.ts",
+    "ci:local": "bash scripts/ci-local.sh"
   },
   "dependencies": {
     "@supabase/ssr": "^0.7.0",

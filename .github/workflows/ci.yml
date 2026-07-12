@@ -56,7 +56,8 @@ jobs:
             echo "SUPABASE_TEST_SERVICE_KEY=${SERVICE_ROLE_KEY}"
           } >> "$GITHUB_ENV"
       - name: Run runtime tenant-isolation test
-        run: npx vitest run modules/identity-tenant/tenant-isolation.integration.test.ts
+        # Same command `scripts/ci-local.sh` runs locally, so CI and local match.
+        run: npm run test:integration
       - name: Stop Supabase stack
         if: always()
         run: supabase stop || true
