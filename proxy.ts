@@ -29,6 +29,16 @@ export const TENANT_SLUG_HEADER = "x-paylo-tenant-slug";
 export const REQUEST_PATH_HEADER = "x-paylo-request-path";
 
 export async function proxy(request: NextRequest): Promise<NextResponse> {
+  // Operational probes (`/api/health`, `/api/health/ready`) must be reachable by
+  // infrastructure — load balancers, uptime monitors, orchestrators — which call
+  // by IP or an internal hostname and cannot present a valid tenant/apex Host.
+  // They must also stay independent of tenant resolution and the Supabase session
+  // refresh so a liveness probe reflects the process, not the auth backend.
+  // Bypass the edge gate for them; they expose no tenant data.
+  if (request.nextUrl.pathname.startsWith("/api/health")) {
+    return NextResponse.next();
+  }
+
   // Use the platform-provided host only. Do NOT read X-Forwarded-Host here.
   const host = request.headers.get("host");
   const decision = resolveHost(host, activeApex());
