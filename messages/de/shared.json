@@ -1,0 +1,16 @@
+{
+  "companyName": "Paylo.one",
+  "productName": "Pilot",
+  "tagline": "Die ruhige Intelligenzschicht für Führungskräfte",
+  "inviteOnly": "Nur auf Einladung",
+  "language": {
+    "label": "Sprache",
+    "change": "Sprache ändern",
+    "current": "Aktuelle Sprache: {language}"
+  },
+  "cta": {
+    "requestAccess": "Zugang anfragen",
+    "explorePilot": "Pilot entdecken",
+    "learnMore": "Mehr erfahren"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "companyName": "Paylo.one",
+  "productName": "Pilot",
+  "tagline": "La couche d'intelligence sereine pour les dirigeants",
+  "inviteOnly": "Sur invitation uniquement",
+  "language": {
+    "label": "Langue",
+    "change": "Changer de langue",
+    "current": "Langue actuelle : {language}"
+  },
+  "cta": {
+    "requestAccess": "Demander l'accès",
+    "explorePilot": "Découvrir Pilot",
+    "learnMore": "En savoir plus"
+  }
+}

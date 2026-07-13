@@ -1,5 +1,11 @@
 import type { NextConfig } from "next";
 import path from "path";
+import createNextIntlPlugin from "next-intl/plugin";
+
+// next-intl in no-URL-routing mode: locale + messages are resolved per request
+// in i18n/request.ts (from the NEXT_LOCALE cookie / Accept-Language), never from
+// a URL prefix — tenant routing already owns the subdomain (see proxy.ts).
+const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -11,4 +17,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

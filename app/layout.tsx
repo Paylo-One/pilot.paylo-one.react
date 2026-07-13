@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
+import { isLocale, localeConfig, defaultLocale } from "@/i18n/config";
 import "./globals.css";
 
 // IBM Plex Sans + IBM Plex Mono, the locked MVP type system, self-hosted via
