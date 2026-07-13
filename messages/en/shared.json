@@ -1,0 +1,16 @@
+{
+  "companyName": "Paylo.one",
+  "productName": "Pilot",
+  "tagline": "The calm intelligence layer for leaders",
+  "inviteOnly": "Invite-only",
+  "language": {
+    "label": "Language",
+    "change": "Change language",
+    "current": "Current language: {language}"
+  },
+  "cta": {
+    "requestAccess": "Request access",
+    "explorePilot": "Explore Pilot",
+    "learnMore": "Learn more"
+  }
+}

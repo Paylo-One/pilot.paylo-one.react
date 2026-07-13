@@ -1,0 +1,16 @@
+{
+  "companyName": "Paylo.one",
+  "productName": "Pilot",
+  "tagline": "Det rolige intelligenslag for ledere",
+  "inviteOnly": "Kun efter invitation",
+  "language": {
+    "label": "Sprog",
+    "change": "Skift sprog",
+    "current": "Nuværende sprog: {language}"
+  },
+  "cta": {
+    "requestAccess": "Anmod om adgang",
+    "explorePilot": "Udforsk Pilot",
+    "learnMore": "Læs mere"
+  }
+}

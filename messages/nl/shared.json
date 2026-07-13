@@ -1,0 +1,16 @@
+{
+  "companyName": "Paylo.one",
+  "productName": "Pilot",
+  "tagline": "De kalme intelligentielaag voor leiders",
+  "inviteOnly": "Alleen op uitnodiging",
+  "language": {
+    "label": "Taal",
+    "change": "Taal wijzigen",
+    "current": "Huidige taal: {language}"
+  },
+  "cta": {
+    "requestAccess": "Toegang aanvragen",
+    "explorePilot": "Ontdek Pilot",
+    "learnMore": "Meer informatie"
+  }
+}

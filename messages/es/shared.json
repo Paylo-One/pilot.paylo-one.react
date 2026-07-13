@@ -1,0 +1,16 @@
+{
+  "companyName": "Paylo.one",
+  "productName": "Pilot",
+  "tagline": "La capa de inteligencia serena para líderes",
+  "inviteOnly": "Solo por invitación",
+  "language": {
+    "label": "Idioma",
+    "change": "Cambiar idioma",
+    "current": "Idioma actual: {language}"
+  },
+  "cta": {
+    "requestAccess": "Solicitar acceso",
+    "explorePilot": "Explorar Pilot",
+    "learnMore": "Más información"
+  }
+}
