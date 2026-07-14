@@ -7,6 +7,7 @@
  */
 
 import { useActionState } from "react";
+import { useTranslations } from "next-intl";
 import { saveProfileAction } from "./actions";
 import { initialProfileFormState } from "./types";
 
@@ -17,6 +18,7 @@ export interface ProfileFormValues {
 }
 
 export function SettingsProfileForm({ values }: { values: ProfileFormValues }) {
+  const t = useTranslations("settings.profile");
   const [state, action, pending] = useActionState(
     saveProfileAction,
     initialProfileFormState,
@@ -26,21 +28,21 @@ export function SettingsProfileForm({ values }: { values: ProfileFormValues }) {
     <form action={action} className="card" style={{ maxWidth: "520px" }}>
       <div className="field">
         <label htmlFor="display_name" className="field__label">
-          Display name
+          {t("displayName")}
         </label>
         <input
           id="display_name"
           name="display_name"
           type="text"
           defaultValue={values.displayName}
-          placeholder="How you appear in the workspace"
+          placeholder={t("displayNamePlaceholder")}
           className="input"
         />
       </div>
 
       <div className="field">
         <label htmlFor="timezone" className="field__label">
-          Timezone
+          {t("timezone")}
         </label>
         <select
           id="timezone"
@@ -55,14 +57,12 @@ export function SettingsProfileForm({ values }: { values: ProfileFormValues }) {
             </option>
           ))}
         </select>
-        <span className="field__hint">
-          Drives when your daily briefing is prepared.
-        </span>
+        <span className="field__hint">{t("timezoneHint")}</span>
       </div>
 
       <div className="field">
         <label htmlFor="briefing_time" className="field__label">
-          Briefing time
+          {t("briefingTime")}
         </label>
         <input
           id="briefing_time"
@@ -77,11 +77,11 @@ export function SettingsProfileForm({ values }: { values: ProfileFormValues }) {
         <p className="form-message form-message--error">{state.error}</p>
       ) : null}
       {state.ok ? (
-        <p className="form-message form-message--ok">Profile saved.</p>
+        <p className="form-message form-message--ok">{t("saved")}</p>
       ) : null}
 
       <button type="submit" disabled={pending} className="btn btn--primary">
-        {pending ? "Saving…" : "Save profile"}
+        {pending ? t("saving") : t("save")}
       </button>
     </form>
   );

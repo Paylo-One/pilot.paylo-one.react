@@ -1,0 +1,26 @@
+{
+  "groups": {
+    "workspace": "Workspace",
+    "system": "System",
+    "account": "Account"
+  },
+  "items": {
+    "briefing": "Briefing",
+    "actions": "Actions",
+    "diary": "Diary",
+    "people": "People & Companies",
+    "sources": "Sources",
+    "intelligence": "Intelligence",
+    "mcp": "MCP Access",
+    "invitations": "Invitations",
+    "settings": "Settings",
+    "billing": "Billing"
+  },
+  "plannedTitle": "{label} — not yet open",
+  "mobile": {
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "label": "Workspace navigation"
+  },
+  "primaryLabel": "Primary navigation"
+}

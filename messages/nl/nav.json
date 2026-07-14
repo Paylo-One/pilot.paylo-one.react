@@ -1,0 +1,26 @@
+{
+  "groups": {
+    "workspace": "Workspace",
+    "system": "Systeem",
+    "account": "Account"
+  },
+  "items": {
+    "briefing": "Briefing",
+    "actions": "Acties",
+    "diary": "Dagboek",
+    "people": "Personen & bedrijven",
+    "sources": "Bronnen",
+    "intelligence": "Intelligence",
+    "mcp": "MCP-toegang",
+    "invitations": "Uitnodigingen",
+    "settings": "Instellingen",
+    "billing": "Facturering"
+  },
+  "plannedTitle": "{label} — nog niet beschikbaar",
+  "mobile": {
+    "openMenu": "Menu openen",
+    "closeMenu": "Menu sluiten",
+    "label": "Workspacenavigatie"
+  },
+  "primaryLabel": "Primaire navigatie"
+}

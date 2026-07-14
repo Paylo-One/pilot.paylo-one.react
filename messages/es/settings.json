@@ -1,0 +1,63 @@
+{
+  "eyebrow": "Ajustes",
+  "title": "Espacio de trabajo y controles",
+  "lead": "La identidad de su espacio de trabajo, la inteligencia que lo impulsa, su postura de seguridad y privacidad, y las garantías de confianza que las sustentan. Puede ver, exportar y eliminar sus datos; usted mantiene el control.",
+  "tags": {
+    "available": "Disponible",
+    "readOnly": "Solo lectura",
+    "planned": "Previsto"
+  },
+  "groups": {
+    "workspace": "Espacio de trabajo y usted",
+    "intelligence": "Inteligencia",
+    "invitations": "Invitaciones",
+    "security": "Seguridad y privacidad",
+    "tools": "Acceso a herramientas y confianza"
+  },
+  "sectionsAria": "Secciones de ajustes",
+  "nav": {
+    "workspace": "Espacio de trabajo",
+    "intelligence": "Inteligencia",
+    "invitations": "Invitaciones",
+    "security": "Seguridad y privacidad",
+    "tools": "Acceso a herramientas y confianza"
+  },
+  "tenant": {
+    "label": "Inquilino",
+    "title": "Espacio de trabajo",
+    "subdomain": "Subdominio",
+    "signedInAs": "Sesión iniciada como",
+    "role": "Función",
+    "onboarding": "Incorporación",
+    "onboardingActive": "Solo por invitación · activa"
+  },
+  "language": {
+    "label": "Idioma",
+    "title": "Idioma y región",
+    "description": "Elija el idioma para su espacio de trabajo y el contenido generado por IA. Su elección se guarda en su perfil y le acompaña en todos los dispositivos. Las fechas, las horas y los números se formatean según el idioma que elija.",
+    "fieldLabel": "Idioma de visualización"
+  },
+  "profile": {
+    "label": "Perfil",
+    "title": "Su perfil",
+    "displayName": "Nombre visible",
+    "displayNamePlaceholder": "Cómo aparece en el espacio de trabajo",
+    "timezone": "Zona horaria",
+    "timezoneHint": "Determina cuándo se prepara su informe diario.",
+    "briefingTime": "Hora del informe",
+    "saved": "Perfil guardado.",
+    "save": "Guardar perfil",
+    "saving": "Guardando…"
+  },
+  "invitations": {
+    "label": "Invitaciones",
+    "title": "Su enlace de invitación privado",
+    "description": "Paylo One funciona solo por invitación. Su enlace permite que las personas que usted elija soliciten su propio espacio de trabajo. Gestiónelo, cópielo y vea quién se ha unido en la página de Invitaciones.",
+    "status": "Estado",
+    "preparing": "Preparando",
+    "manage": "Gestionar invitaciones",
+    "linkPaused": "Enlace en pausa",
+    "limitReached": "Límite de invitaciones alcanzado",
+    "available": "{count, plural, one {# invitación disponible} other {# invitaciones disponibles}}"
+  }
+}

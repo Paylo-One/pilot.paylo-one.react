@@ -1,0 +1,28 @@
+{
+  "actions": {
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "close": "Close",
+    "signOut": "Sign out",
+    "continue": "Continue",
+    "back": "Back",
+    "manage": "Manage",
+    "retry": "Try again",
+    "upgrade": "Upgrade"
+  },
+  "state": {
+    "loading": "Loading…",
+    "saved": "Saved",
+    "error": "Something went wrong",
+    "empty": "Nothing here yet"
+  },
+  "availability": {
+    "available": "Available",
+    "readOnly": "Read only",
+    "planned": "Planned",
+    "comingSoon": "Coming soon",
+    "active": "Active"
+  },
+  "placeholder": "—"
+}

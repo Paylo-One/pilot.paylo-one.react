@@ -1,0 +1,28 @@
+{
+  "actions": {
+    "save": "Lagre",
+    "saving": "Lagrer…",
+    "cancel": "Avbryt",
+    "close": "Lukk",
+    "signOut": "Logg ut",
+    "continue": "Fortsett",
+    "back": "Tilbake",
+    "manage": "Administrer",
+    "retry": "Prøv igjen",
+    "upgrade": "Oppgrader"
+  },
+  "state": {
+    "loading": "Laster…",
+    "saved": "Lagret",
+    "error": "Noe gikk galt",
+    "empty": "Ingenting her ennå"
+  },
+  "availability": {
+    "available": "Tilgjengelig",
+    "readOnly": "Skrivebeskyttet",
+    "planned": "Planlagt",
+    "comingSoon": "Kommer snart",
+    "active": "Aktiv"
+  },
+  "placeholder": "—"
+}

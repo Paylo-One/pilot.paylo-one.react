@@ -1,0 +1,63 @@
+{
+  "eyebrow": "Indstillinger",
+  "title": "Workspace og kontroller",
+  "lead": "Din workspace-identitet, den intelligence, der driver den, din sikkerheds- og privatlivsprofil samt de tillidsgarantier, der ligger under. Du kan se, eksportere og slette dine data; du bevarer kontrollen.",
+  "tags": {
+    "available": "Tilgængelig",
+    "readOnly": "Skrivebeskyttet",
+    "planned": "Planlagt"
+  },
+  "groups": {
+    "workspace": "Workspace og dig",
+    "intelligence": "Intelligence",
+    "invitations": "Invitationer",
+    "security": "Sikkerhed og privatliv",
+    "tools": "Værktøjsadgang og tillid"
+  },
+  "sectionsAria": "Indstillingssektioner",
+  "nav": {
+    "workspace": "Workspace",
+    "intelligence": "Intelligence",
+    "invitations": "Invitationer",
+    "security": "Sikkerhed og privatliv",
+    "tools": "Værktøjsadgang og tillid"
+  },
+  "tenant": {
+    "label": "Tenant",
+    "title": "Workspace",
+    "subdomain": "Underdomæne",
+    "signedInAs": "Logget ind som",
+    "role": "Rolle",
+    "onboarding": "Onboarding",
+    "onboardingActive": "Kun ved invitation · aktiv"
+  },
+  "language": {
+    "label": "Sprog",
+    "title": "Sprog og region",
+    "description": "Vælg sproget for dit workspace og AI-genereret indhold. Dit valg gemmes i din profil og følger dig på tværs af enheder. Datoer, klokkeslæt og tal formateres efter det sprog, du vælger.",
+    "fieldLabel": "Visningssprog"
+  },
+  "profile": {
+    "label": "Profil",
+    "title": "Din profil",
+    "displayName": "Visningsnavn",
+    "displayNamePlaceholder": "Sådan vises du i dit workspace",
+    "timezone": "Tidszone",
+    "timezoneHint": "Bestemmer, hvornår din daglige briefing forberedes.",
+    "briefingTime": "Briefing-tidspunkt",
+    "saved": "Profil gemt.",
+    "save": "Gem profil",
+    "saving": "Gemmer…"
+  },
+  "invitations": {
+    "label": "Invitationer",
+    "title": "Dit private invitationslink",
+    "description": "Paylo One er kun ved invitation. Dit link lader de personer, du vælger, anmode om deres eget workspace. Administrer det, kopiér det, og se, hvem der er kommet til, på siden Invitationer.",
+    "status": "Status",
+    "preparing": "Forbereder",
+    "manage": "Administrer invitationer",
+    "linkPaused": "Link sat på pause",
+    "limitReached": "Invitationsgrænse nået",
+    "available": "{count, plural, one {# invitation tilgængelig} other {# invitationer tilgængelige}}"
+  }
+}

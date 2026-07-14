@@ -1,0 +1,10 @@
+{
+  "eyebrow": "Account inactive",
+  "title": "Billing needs attention",
+  "lead": "You can still sign in and manage your account, but workspace features are paused until billing is active again.",
+  "stateEyebrow": "Access state",
+  "stateTitle": "Core features are paused",
+  "stateFallback": "restricted",
+  "rationale": "Choose a plan, update payment details, or restart your subscription to restore access to briefing, actions, diary, sources, and intelligence.",
+  "viewBilling": "View billing details"
+}

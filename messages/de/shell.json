@@ -1,0 +1,18 @@
+{
+  "greeting": {
+    "morning": "Guten Morgen",
+    "afternoon": "Guten Tag",
+    "evening": "Guten Abend"
+  },
+  "workspace": {
+    "label": "Workspace",
+    "tenantTitle": "Ihr isolierter Workspace"
+  },
+  "operator": "Operator",
+  "status": {
+    "sourcesTitle": "Synchronisierungsstatus der Quellen",
+    "sourcesIdle": "Quellen · inaktiv",
+    "briefingTitle": "Status des täglichen Briefings",
+    "briefingReady": "Briefing · bereit"
+  }
+}

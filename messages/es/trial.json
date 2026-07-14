@@ -1,0 +1,13 @@
+{
+  "titleActive": "Prueba gratuita — elija un plan antes de que finalice",
+  "titleEnded": "Su prueba gratuita ha finalizado",
+  "ctaActive": "Ver planes",
+  "ctaEnded": "Elegir un plan",
+  "units": {
+    "day": "día",
+    "days": "días",
+    "hours": "h",
+    "minutes": "min",
+    "seconds": "s"
+  }
+}

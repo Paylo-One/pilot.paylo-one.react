@@ -11,6 +11,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { appHostBaseUrl, tenantBaseUrl } from "@/lib/config";
 import { safeNextPath } from "@/lib/auth-redirect";
 import { findPrimaryTenantSlug } from "@/modules/identity-tenant/server";
+import { seedLocaleCookieFromProfile } from "@/lib/i18n/locale-cookie";
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
@@ -40,10 +41,16 @@ export async function GET(request: NextRequest) {
   if (userId) {
     const slug = await findPrimaryTenantSlug(userId);
     if (slug) {
-      return NextResponse.redirect(tenantBaseUrl(slug));
+      const response = NextResponse.redirect(tenantBaseUrl(slug));
+      // Carry the user's stored language into their workspace, so the choice
+      // follows them across sessions and devices (ADR-052).
+      await seedLocaleCookieFromProfile(supabase, userId, response);
+      return response;
     }
   }
 
   // New user: send to onboarding to claim a subdomain.
-  return NextResponse.redirect(`${appHostBaseUrl()}${next}`);
+  const response = NextResponse.redirect(`${appHostBaseUrl()}${next}`);
+  if (userId) await seedLocaleCookieFromProfile(supabase, userId, response);
+  return response;
 }

@@ -14,11 +14,13 @@
  * only". Features that are not open yet are tagged "Planned".
  */
 
+import { getTranslations } from "next-intl/server";
 import {
   requireTenantContext,
   getSignedInUser,
 } from "@/modules/identity-tenant/server";
 import { AVAILABILITY_LABELS, AVAILABILITY_TONE } from "@/modules/shared";
+import { LanguageSelector } from "@/components/language-selector";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isEuInference } from "@/lib/llm";
 import { listTenantModelProviders } from "@/modules/tenant-models/server";
@@ -42,21 +44,17 @@ const TAG_TONE: Record<SectionTag, string> = {
   planned: "info",
 };
 
-const TAG_LABELS: Record<SectionTag, string> = {
-  active: "Available",
-  "read-only": "Read only",
-  planned: "Planned",
-};
-
 function SectionCard({
   label,
   title,
   tag,
+  tagLabel,
   children,
 }: {
   label: string;
   title: string;
   tag?: SectionTag;
+  tagLabel?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -70,9 +68,7 @@ function SectionCard({
           <h2 className="card__title">{title}</h2>
         </div>
         {tag ? (
-          <span className={`status status--${TAG_TONE[tag]}`}>
-            {TAG_LABELS[tag]}
-          </span>
+          <span className={`status status--${TAG_TONE[tag]}`}>{tagLabel}</span>
         ) : null}
       </div>
       {children}
@@ -101,6 +97,15 @@ function GroupHeading({
 export default async function SettingsPage() {
   const ctx = await requireTenantContext();
   const user = await getSignedInUser();
+  const ts = await getTranslations("settings");
+  const tagLabelFor = (tag?: SectionTag): string | undefined =>
+    tag === "active"
+      ? ts("tags.available")
+      : tag === "read-only"
+        ? ts("tags.readOnly")
+        : tag === "planned"
+          ? ts("tags.planned")
+          : undefined;
 
   const supabase = await createSupabaseServerClient();
   const { data: profile } = await supabase
@@ -125,32 +130,26 @@ export default async function SettingsPage() {
   const referral = referralOverviewRes.ok ? referralOverviewRes.value : null;
   const invitationSummary = referral
     ? referral.status === "suspended"
-      ? "Link paused"
+      ? ts("invitations.linkPaused")
       : referral.limitReached
-        ? "Invitation limit reached"
-        : `${referral.remaining} ${
-            referral.remaining === 1 ? "invitation" : "invitations"
-          } available`
+        ? ts("invitations.limitReached")
+        : ts("invitations.available", { count: referral.remaining })
     : null;
 
   const sections = [
-    { id: "workspace", label: "Workspace" },
-    { id: "intelligence", label: "Intelligence" },
-    { id: "invitations", label: "Invitations" },
-    { id: "security", label: "Security & privacy" },
-    { id: "tools", label: "Tool access & trust" },
+    { id: "workspace", label: ts("nav.workspace") },
+    { id: "intelligence", label: ts("nav.intelligence") },
+    { id: "invitations", label: ts("nav.invitations") },
+    { id: "security", label: ts("nav.security") },
+    { id: "tools", label: ts("nav.tools") },
   ];
 
   return (
     <main className="workspace__content">
       <div className="page-head">
-        <p className="eyebrow">Settings</p>
-        <h1 className="page-head__title">Workspace &amp; controls</h1>
-        <p className="page-head__lead">
-          Your workspace identity, the intelligence that powers it, your security
-          and privacy posture, and the trust guarantees underneath. You can see,
-          export, and delete your data; you stay in command.
-        </p>
+        <p className="eyebrow">{ts("eyebrow")}</p>
+        <h1 className="page-head__title">{ts("title")}</h1>
+        <p className="page-head__lead">{ts("lead")}</p>
       </div>
 
       <div className="settings-layout">
@@ -158,25 +157,25 @@ export default async function SettingsPage() {
 
         <div className="stack" style={{ gap: "var(--space-md)" }}>
         {/* ===== Workspace & you ========================================== */}
-        <GroupHeading id="workspace">Workspace &amp; you</GroupHeading>
+        <GroupHeading id="workspace">{ts("groups.workspace")}</GroupHeading>
 
-        <SectionCard label="Tenant" title="Workspace">
+        <SectionCard label={ts("tenant.label")} title={ts("tenant.title")}>
           <div className="meta-row">
-            <span className="meta-row__key">Subdomain</span>
+            <span className="meta-row__key">{ts("tenant.subdomain")}</span>
             <span className="meta-row__value mono">{ctx.tenantSlug}.paylo.one</span>
           </div>
           <div className="meta-row">
-            <span className="meta-row__key">Signed in as</span>
+            <span className="meta-row__key">{ts("tenant.signedInAs")}</span>
             <span className="meta-row__value mono">{user?.email ?? "—"}</span>
           </div>
           <div className="meta-row">
-            <span className="meta-row__key">Role</span>
+            <span className="meta-row__key">{ts("tenant.role")}</span>
             <span className="meta-row__value">
               <span className="badge">{ctx.role}</span>
             </span>
           </div>
           <div className="meta-row">
-            <span className="meta-row__key">Onboarding</span>
+            <span className="meta-row__key">{ts("tenant.onboarding")}</span>
             <span
               className="meta-row__value"
               style={{
@@ -187,24 +186,46 @@ export default async function SettingsPage() {
                 flexWrap: "wrap",
               }}
             >
-              <span className="status status--ok">Invite-only · active</span>
+              <span className="status status--ok">{ts("tenant.onboardingActive")}</span>
               <OnboardingLauncher profile={profile} />
             </span>
           </div>
         </SectionCard>
 
-        <SectionCard label="Profile" title="Your profile" tag="active">
+        <SectionCard
+          label={ts("language.label")}
+          title={ts("language.title")}
+          tag="active"
+          tagLabel={tagLabelFor("active")}
+        >
+          <p className="action-card__rationale" style={{ marginBottom: "var(--space-md)" }}>
+            {ts("language.description")}
+          </p>
+          <div className="field" style={{ maxWidth: "320px" }}>
+            <label htmlFor="settings-language" className="field__label">
+              {ts("language.fieldLabel")}
+            </label>
+            <LanguageSelector id="settings-language" />
+          </div>
+        </SectionCard>
+
+        <SectionCard
+          label={ts("profile.label")}
+          title={ts("profile.title")}
+          tag="active"
+          tagLabel={tagLabelFor("active")}
+        >
           <SettingsProfileForm values={values} />
         </SectionCard>
 
         {/* ===== Intelligence ============================================= */}
-        <GroupHeading id="intelligence">Intelligence</GroupHeading>
+        <GroupHeading id="intelligence">{ts("groups.intelligence")}</GroupHeading>
 
-        <SectionCard label="Model provider" title="Bring your own key" tag="active">
+        <SectionCard label="Model provider" title="Bring your own key" tag="active" tagLabel={tagLabelFor("active")}>
           <ByoModelCard providers={providers} />
         </SectionCard>
 
-        <SectionCard label="Model use" title="How your AI is run" tag="read-only">
+        <SectionCard label="Model use" title="How your AI is run" tag="read-only" tagLabel={tagLabelFor("read-only")}>
           <p className="action-card__rationale" style={{ marginBottom: "var(--space-md)" }}>
             Every request is checked against your plan and how sensitive the
             content is before any model is used. When you add your own key above,
@@ -242,7 +263,7 @@ export default async function SettingsPage() {
         </SectionCard>
 
         {/* ===== Invitations ============================================= */}
-        <GroupHeading id="invitations">Invitations</GroupHeading>
+        <GroupHeading id="invitations">{ts("groups.invitations")}</GroupHeading>
 
         <SectionCard
           label="Invitations"
@@ -292,9 +313,9 @@ export default async function SettingsPage() {
         </SectionCard>
 
         {/* ===== Security & privacy ======================================= */}
-        <GroupHeading id="security">Security &amp; privacy</GroupHeading>
+        <GroupHeading id="security">{ts("groups.security")}</GroupHeading>
 
-        <SectionCard label="Security" title="Passkey authentication" tag="active">
+        <SectionCard label="Security" title="Passkey authentication" tag="active" tagLabel={tagLabelFor("active")}>
           <p className="action-card__rationale" style={{ marginBottom: "var(--space-md)" }}>
             One passkey works across every &lt;slug&gt;.paylo.one workspace (RP ID
             = the registrable domain). Enrol at least two — on separate devices —
@@ -309,7 +330,7 @@ export default async function SettingsPage() {
           <PasskeysCard />
         </SectionCard>
 
-        <SectionCard label="Privacy" title="Storage &amp; retention" tag="read-only">
+        <SectionCard label="Privacy" title="Storage &amp; retention" tag="read-only" tagLabel={tagLabelFor("read-only")}>
           <p className="action-card__rationale" style={{ marginBottom: "var(--space-md)" }}>
             Each source carries its own storage policy. We store the least we can
             to deliver value; the conservative default is summaries only.
@@ -346,9 +367,9 @@ export default async function SettingsPage() {
         </SectionCard>
 
         {/* ===== Tool access & trust ====================================== */}
-        <GroupHeading id="tools">Tool access &amp; trust</GroupHeading>
+        <GroupHeading id="tools">{ts("groups.tools")}</GroupHeading>
 
-        <SectionCard label="Tool access" title="Connected MCP clients" tag="active">
+        <SectionCard label="Tool access" title="Connected MCP clients" tag="active" tagLabel={tagLabelFor("active")}>
           <p className="action-card__rationale" style={{ marginBottom: "var(--space-md)" }}>
             Approved clients can use Pilot memory through MCP after you grant
             access. Each grant is scoped to this workspace, logged, and
@@ -376,7 +397,7 @@ export default async function SettingsPage() {
           </div>
         </SectionCard>
 
-        <SectionCard label="Trust" title="Activity log &amp; sources" tag="read-only">
+        <SectionCard label="Trust" title="Activity log &amp; sources" tag="read-only" tagLabel={tagLabelFor("read-only")}>
           <p className="action-card__rationale" style={{ marginBottom: "var(--space-md)" }}>
             Every AI insight shows where it came from, and every change — sign-in,
             source and key changes, prompt edits, model use — is written to a

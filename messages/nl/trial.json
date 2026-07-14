@@ -1,0 +1,13 @@
+{
+  "titleActive": "Gratis proefperiode — kies een abonnement voordat deze eindigt",
+  "titleEnded": "Uw gratis proefperiode is beëindigd",
+  "ctaActive": "Abonnementen bekijken",
+  "ctaEnded": "Kies een abonnement",
+  "units": {
+    "day": "dag",
+    "days": "dagen",
+    "hours": "u",
+    "minutes": "min",
+    "seconds": "sec"
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "eyebrow": "Settings",
+  "title": "Workspace & controls",
+  "lead": "Your workspace identity, the intelligence that powers it, your security and privacy posture, and the trust guarantees underneath. You can see, export, and delete your data; you stay in command.",
+  "tags": {
+    "available": "Available",
+    "readOnly": "Read only",
+    "planned": "Planned"
+  },
+  "groups": {
+    "workspace": "Workspace & you",
+    "intelligence": "Intelligence",
+    "invitations": "Invitations",
+    "security": "Security & privacy",
+    "tools": "Tool access & trust"
+  },
+  "sectionsAria": "Settings sections",
+  "nav": {
+    "workspace": "Workspace",
+    "intelligence": "Intelligence",
+    "invitations": "Invitations",
+    "security": "Security & privacy",
+    "tools": "Tool access & trust"
+  },
+  "tenant": {
+    "label": "Tenant",
+    "title": "Workspace",
+    "subdomain": "Subdomain",
+    "signedInAs": "Signed in as",
+    "role": "Role",
+    "onboarding": "Onboarding",
+    "onboardingActive": "Invite-only · active"
+  },
+  "language": {
+    "label": "Language",
+    "title": "Language & region",
+    "description": "Choose the language for your workspace and AI-generated content. Your choice is saved to your profile and follows you across devices. Dates, times, and numbers are formatted for the language you pick.",
+    "fieldLabel": "Display language"
+  },
+  "profile": {
+    "label": "Profile",
+    "title": "Your profile",
+    "displayName": "Display name",
+    "displayNamePlaceholder": "How you appear in the workspace",
+    "timezone": "Timezone",
+    "timezoneHint": "Drives when your daily briefing is prepared.",
+    "briefingTime": "Briefing time",
+    "saved": "Profile saved.",
+    "save": "Save profile",
+    "saving": "Saving…"
+  },
+  "invitations": {
+    "label": "Invitations",
+    "title": "Your private invitation link",
+    "description": "Paylo One is invite-only. Your link lets the people you choose request their own workspace. Manage it, copy it, and see who's joined on the Invitations page.",
+    "status": "Status",
+    "preparing": "Preparing",
+    "manage": "Manage invitations",
+    "linkPaused": "Link paused",
+    "limitReached": "Invitation limit reached",
+    "available": "{count, plural, one {# invitation available} other {# invitations available}}"
+  }
+}

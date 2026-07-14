@@ -1,0 +1,10 @@
+{
+  "_comment": "Translation review status. Underscore-prefixed so the message loader (i18n/load.ts) ignores it. 'source' = human-owned source of truth; 'machine-draft' = generated, awaiting native linguistic review before it can be considered production-ready. See docs/localisation.md.",
+  "en": "source",
+  "nl": "machine-draft",
+  "de": "machine-draft",
+  "fr": "machine-draft",
+  "no": "machine-draft",
+  "da": "machine-draft",
+  "es": "machine-draft"
+}

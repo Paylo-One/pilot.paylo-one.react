@@ -1,0 +1,10 @@
+{
+  "eyebrow": "Cuenta inactiva",
+  "title": "La facturación requiere su atención",
+  "lead": "Puede seguir iniciando sesión y gestionando su cuenta, pero las funciones del espacio de trabajo quedan en pausa hasta que la facturación vuelva a estar activa.",
+  "stateEyebrow": "Estado de acceso",
+  "stateTitle": "Las funciones principales están en pausa",
+  "stateFallback": "restringido",
+  "rationale": "Elija un plan, actualice los datos de pago o reactive su suscripción para restablecer el acceso al informe, las acciones, el diario, las fuentes y la inteligencia.",
+  "viewBilling": "Ver detalles de facturación"
+}

@@ -31,6 +31,7 @@ import {
   type Result,
 } from "@/modules/shared";
 import { modelUsageCostService } from "@/modules/model-usage-cost";
+import { resolveResponseLanguage } from "@/lib/i18n/ai-language";
 import { getAdapter } from "./adapters";
 import { livePipeline } from "./live-pipeline";
 import type { GatewayPipeline } from "./pipeline";
@@ -89,7 +90,18 @@ export function createModelGateway(
   pipeline: GatewayPipeline = livePipeline,
 ): ModelGatewayService {
   return {
-    async invoke(req) {
+    async invoke(rawReq) {
+      // Language boundary (ADR-052): every Gateway call inherits the user's
+      // chosen language here, so no individual caller has to remember to pass
+      // it. A caller may still set `responseLanguage` explicitly (e.g. a test).
+      // Background/cron runs without a request context resolve to undefined and
+      // fall back to English. The value is a validated English endonym, never
+      // raw input (see lib/i18n/ai-language.ts).
+      const req: GatewayRequest =
+        rawReq.responseLanguage === undefined
+          ? { ...rawReq, responseLanguage: await resolveResponseLanguage() }
+          : rawReq;
+
       // Evaluable policy denial: nothing to route.
       if (!hasModelSelector(req)) {
         return err(

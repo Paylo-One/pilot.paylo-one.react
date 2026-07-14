@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
 export interface SettingsSection {
   readonly id: string;
@@ -15,6 +16,7 @@ export interface SettingsSection {
 }
 
 export function SettingsNav({ sections }: { sections: SettingsSection[] }) {
+  const t = useTranslations("settings");
   const [active, setActive] = useState<string>(sections[0]?.id ?? "");
 
   useEffect(() => {
@@ -42,7 +44,7 @@ export function SettingsNav({ sections }: { sections: SettingsSection[] }) {
   }, [sections]);
 
   return (
-    <nav className="settings-toc" aria-label="Settings sections">
+    <nav className="settings-toc" aria-label={t("sectionsAria")}>
       {sections.map((section) => (
         <a
           key={section.id}

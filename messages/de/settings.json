@@ -1,0 +1,63 @@
+{
+  "eyebrow": "Einstellungen",
+  "title": "Workspace & Steuerung",
+  "lead": "Die Identität Ihres Workspace, die Intelligence, die ihn antreibt, Ihre Sicherheits- und Datenschutzlage sowie die zugrunde liegenden Vertrauensgarantien. Sie können Ihre Daten einsehen, exportieren und löschen; die Kontrolle bleibt bei Ihnen.",
+  "tags": {
+    "available": "Verfügbar",
+    "readOnly": "Schreibgeschützt",
+    "planned": "Geplant"
+  },
+  "groups": {
+    "workspace": "Workspace & Sie",
+    "intelligence": "Intelligence",
+    "invitations": "Einladungen",
+    "security": "Sicherheit & Datenschutz",
+    "tools": "Tool-Zugriff & Vertrauen"
+  },
+  "sectionsAria": "Einstellungsbereiche",
+  "nav": {
+    "workspace": "Workspace",
+    "intelligence": "Intelligence",
+    "invitations": "Einladungen",
+    "security": "Sicherheit & Datenschutz",
+    "tools": "Tool-Zugriff & Vertrauen"
+  },
+  "tenant": {
+    "label": "Mandant",
+    "title": "Workspace",
+    "subdomain": "Subdomain",
+    "signedInAs": "Angemeldet als",
+    "role": "Rolle",
+    "onboarding": "Onboarding",
+    "onboardingActive": "Nur mit Einladung · aktiv"
+  },
+  "language": {
+    "label": "Sprache",
+    "title": "Sprache & Region",
+    "description": "Wählen Sie die Sprache für Ihren Workspace und KI-generierte Inhalte. Ihre Auswahl wird in Ihrem Profil gespeichert und folgt Ihnen geräteübergreifend. Datums-, Zeit- und Zahlenangaben werden für die gewählte Sprache formatiert.",
+    "fieldLabel": "Anzeigesprache"
+  },
+  "profile": {
+    "label": "Profil",
+    "title": "Ihr Profil",
+    "displayName": "Anzeigename",
+    "displayNamePlaceholder": "Wie Sie im Workspace erscheinen",
+    "timezone": "Zeitzone",
+    "timezoneHint": "Bestimmt, wann Ihr tägliches Briefing vorbereitet wird.",
+    "briefingTime": "Briefing-Zeit",
+    "saved": "Profil gespeichert.",
+    "save": "Profil speichern",
+    "saving": "Wird gespeichert…"
+  },
+  "invitations": {
+    "label": "Einladungen",
+    "title": "Ihr privater Einladungslink",
+    "description": "Paylo One ist nur mit Einladung zugänglich. Ihr Link ermöglicht es den von Ihnen ausgewählten Personen, einen eigenen Workspace anzufragen. Verwalten und kopieren Sie ihn und sehen Sie auf der Seite „Einladungen“, wer beigetreten ist.",
+    "status": "Status",
+    "preparing": "Wird vorbereitet",
+    "manage": "Einladungen verwalten",
+    "linkPaused": "Link pausiert",
+    "limitReached": "Einladungslimit erreicht",
+    "available": "{count, plural, one {# Einladung verfügbar} other {# Einladungen verfügbar}}"
+  }
+}

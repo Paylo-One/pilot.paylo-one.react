@@ -20,10 +20,8 @@
 
 import { getRequestConfig } from "next-intl/server";
 import { cookies, headers } from "next/headers";
-import { defaultLocale, isLocale, locales, type Locale } from "./config";
+import { defaultLocale, isLocale, LOCALE_COOKIE, locales, type Locale } from "./config";
 import { loadMessages } from "./load";
-
-const LOCALE_COOKIE = "NEXT_LOCALE";
 
 /**
  * Parse an `Accept-Language` header into an ordered list of base language tags

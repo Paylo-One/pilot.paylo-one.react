@@ -1,0 +1,26 @@
+{
+  "groups": {
+    "workspace": "Arbeidsområde",
+    "system": "System",
+    "account": "Konto"
+  },
+  "items": {
+    "briefing": "Briefing",
+    "actions": "Handlinger",
+    "diary": "Dagbok",
+    "people": "Personer og selskaper",
+    "sources": "Kilder",
+    "intelligence": "Innsikt",
+    "mcp": "MCP-tilgang",
+    "invitations": "Invitasjoner",
+    "settings": "Innstillinger",
+    "billing": "Fakturering"
+  },
+  "plannedTitle": "{label} — ikke åpnet ennå",
+  "mobile": {
+    "openMenu": "Åpne meny",
+    "closeMenu": "Lukk meny",
+    "label": "Navigasjon i arbeidsområdet"
+  },
+  "primaryLabel": "Primær navigasjon"
+}

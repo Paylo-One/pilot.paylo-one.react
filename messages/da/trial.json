@@ -1,0 +1,13 @@
+{
+  "titleActive": "Gratis prøveperiode — vælg et abonnement, før den slutter",
+  "titleEnded": "Din gratis prøveperiode er slut",
+  "ctaActive": "Se abonnementer",
+  "ctaEnded": "Vælg et abonnement",
+  "units": {
+    "day": "dag",
+    "days": "dage",
+    "hours": "t",
+    "minutes": "min",
+    "seconds": "sek"
+  }
+}

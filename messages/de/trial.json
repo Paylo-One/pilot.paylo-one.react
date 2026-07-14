@@ -1,0 +1,13 @@
+{
+  "titleActive": "Kostenlose Testphase — wählen Sie einen Tarif, bevor sie endet",
+  "titleEnded": "Ihre kostenlose Testphase ist beendet",
+  "ctaActive": "Tarife ansehen",
+  "ctaEnded": "Tarif wählen",
+  "units": {
+    "day": "Tag",
+    "days": "Tage",
+    "hours": "Std.",
+    "minutes": "Min.",
+    "seconds": "Sek."
+  }
+}

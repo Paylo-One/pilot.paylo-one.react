@@ -39,6 +39,7 @@ import {
   tenantModelToDescriptor,
 } from "@/modules/tenant-models/server";
 import { promptVersioningService } from "@/modules/prompt-versioning/server";
+import { languageDirective } from "@/lib/i18n/ai-language";
 import { modelUsageCostService, type UsageStatus } from "@/modules/model-usage-cost";
 import { getAdapter, type AdapterRuntimeType } from "./adapters";
 import type {
@@ -167,9 +168,16 @@ export const livePipeline: GatewayPipeline = {
       if (!resolvedRes.ok) return resolvedRes;
       const resolved = resolvedRes.value;
 
+      // Append the user's language directive (ADR-052). It is a static,
+      // tenant-agnostic sentence added AFTER the tenant system prompt, so it
+      // cannot override safety/role instructions and carries no tenant data.
+      const systemPrompt = req.responseLanguage
+        ? resolved.version.systemPrompt + languageDirective(req.responseLanguage)
+        : resolved.version.systemPrompt;
+
       return ok({
         resolved,
-        systemPrompt: resolved.version.systemPrompt,
+        systemPrompt,
         userPrompt: buildUserPrompt(req.retrievalContext),
       });
     },

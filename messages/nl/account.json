@@ -1,0 +1,10 @@
+{
+  "eyebrow": "Account inactief",
+  "title": "Facturering vereist aandacht",
+  "lead": "U kunt nog steeds inloggen en uw account beheren, maar de workspacefuncties zijn gepauzeerd totdat de facturering weer actief is.",
+  "stateEyebrow": "Toegangsstatus",
+  "stateTitle": "Kernfuncties zijn gepauzeerd",
+  "stateFallback": "beperkt",
+  "rationale": "Kies een abonnement, werk uw betaalgegevens bij of hervat uw abonnement om de toegang tot briefing, acties, dagboek, bronnen en intelligence te herstellen.",
+  "viewBilling": "Facturatiegegevens bekijken"
+}

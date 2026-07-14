@@ -1,0 +1,13 @@
+{
+  "titleActive": "Essai gratuit — choisissez une formule avant son expiration",
+  "titleEnded": "Votre essai gratuit est terminé",
+  "ctaActive": "Voir les formules",
+  "ctaEnded": "Choisir une formule",
+  "units": {
+    "day": "jour",
+    "days": "jours",
+    "hours": "h",
+    "minutes": "min",
+    "seconds": "s"
+  }
+}

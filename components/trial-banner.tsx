@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { useTranslations } from "next-intl";
 
 /**
  * TrialBanner
@@ -30,6 +31,7 @@ function breakdown(totalSeconds: number) {
 }
 
 export function TrialBanner({ endsAt }: { endsAt: string }) {
+  const t = useTranslations("trial");
   const endsAtMs = Date.parse(endsAt);
 
   // Returns whole seconds remaining (a primitive, so referential equality holds
@@ -54,10 +56,10 @@ export function TrialBanner({ endsAt }: { endsAt: string }) {
     parts === null
       ? []
       : [
-          { value: parts.days, unit: parts.days === 1 ? "day" : "days" },
-          { value: parts.hours, unit: "hrs" },
-          { value: parts.minutes, unit: "min" },
-          { value: parts.seconds, unit: "sec" },
+          { value: parts.days, unit: t(parts.days === 1 ? "units.day" : "units.days"), key: "days" },
+          { value: parts.hours, unit: t("units.hours"), key: "hours" },
+          { value: parts.minutes, unit: t("units.minutes"), key: "minutes" },
+          { value: parts.seconds, unit: t("units.seconds"), key: "seconds" },
         ];
 
   return (
@@ -67,14 +69,12 @@ export function TrialBanner({ endsAt }: { endsAt: string }) {
     >
       <div className="trial-banner__body">
         <span className="trial-banner__title">
-          {ended
-            ? "Your free trial has ended"
-            : "Free trial — choose a plan before it ends"}
+          {ended ? t("titleEnded") : t("titleActive")}
         </span>
         {parts !== null && !ended ? (
           <span className="trial-banner__count" aria-live="off">
             {segments.map((seg) => (
-              <span className="trial-banner__seg" key={seg.unit}>
+              <span className="trial-banner__seg" key={seg.key}>
                 <span className="trial-banner__num">
                   {String(seg.value).padStart(2, "0")}
                 </span>
@@ -85,7 +85,7 @@ export function TrialBanner({ endsAt }: { endsAt: string }) {
         ) : null}
       </div>
       <a className="btn btn--primary btn--sm trial-banner__cta" href="/billing">
-        {ended ? "Choose a plan" : "View plans"}
+        {ended ? t("ctaEnded") : t("ctaActive")}
       </a>
     </div>
   );
