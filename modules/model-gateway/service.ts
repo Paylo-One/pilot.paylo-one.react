@@ -44,6 +44,23 @@ import type {
 
 export const DEFAULT_EMBEDDING_MODEL_ID = "text-embedding-3-small";
 
+/**
+ * Per-1k-token input cost (USD) for the default embedding model
+ * (`text-embedding-3-small`: $0.00002 / 1k tokens). Embeddings have no output
+ * tokens, so only the input rate applies. Kept here rather than in the Model
+ * Catalogue because the MVP catalogue lists only routable chat models; the
+ * embedding runtime is reached directly. Rounded to the `model_usage`
+ * numeric(10,5) scale on write.
+ */
+export const EMBEDDING_INPUT_COST_PER_1K_USD = 0.00002;
+
+/** Estimate the USD cost of an embedding call from its input token count. */
+export function estimateEmbeddingCostUsd(inputTokens: number): number {
+  const cost = (inputTokens / 1000) * EMBEDDING_INPUT_COST_PER_1K_USD;
+  // Keep within the model_usage numeric(10,5) scale.
+  return Math.round(cost * 1e5) / 1e5;
+}
+
 /** The public Model Gateway interface used across the app. */
 export interface ModelGatewayService {
   /** Run a completion: policy → assembly → route → post-process. */
@@ -124,7 +141,7 @@ export function createModelGateway(
             inputTokens: raw.inputTokens,
             outputTokens: 0,
             totalTokens: raw.inputTokens,
-            estimatedCostUsd: 0,
+            estimatedCostUsd: estimateEmbeddingCostUsd(raw.inputTokens),
             latencyMs: raw.latencyMs,
             status: "ok",
             promptTemplateKey: "semantic-linking-embeddings",

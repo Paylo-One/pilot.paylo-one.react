@@ -26,6 +26,11 @@ jobs:
       # Unit tests. The runtime tenant-isolation suite self-skips here (no test
       # DB env), so this stays fast and DB-free.
       - run: npm test
+      # Dependency hygiene: enforce the release-readiness "zero known
+      # vulnerabilities" bar. Fails only on high/critical advisories so routine
+      # low/moderate noise doesn't block PRs.
+      - name: Dependency audit (high/critical)
+        run: npm audit --audit-level=high
 
   tenant-isolation:
     name: Tenant isolation (runtime RLS on Postgres)
