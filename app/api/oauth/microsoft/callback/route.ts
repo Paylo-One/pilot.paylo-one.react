@@ -134,7 +134,10 @@ export async function GET(request: Request) {
     );
     clearStateCookies(response);
     return response;
-  } catch {
+  } catch (cause) {
+    console.warn("[oauth][microsoft] callback failed; redirecting with error", {
+      error: cause instanceof Error ? cause.message : String(cause),
+    });
     const response = NextResponse.redirect(`${sourcesUrl}?microsoft=error`);
     clearStateCookies(response);
     return response;

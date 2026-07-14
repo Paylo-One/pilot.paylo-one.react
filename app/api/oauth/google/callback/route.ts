@@ -111,7 +111,10 @@ export async function GET(request: Request) {
     );
     clearStateCookie(response);
     return response;
-  } catch {
+  } catch (cause) {
+    console.warn("[oauth][google] callback failed; redirecting with error", {
+      error: cause instanceof Error ? cause.message : String(cause),
+    });
     const response = NextResponse.redirect(`${sourcesUrl}?google=error`);
     clearStateCookie(response);
     return response;

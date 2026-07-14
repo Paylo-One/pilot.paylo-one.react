@@ -85,7 +85,10 @@ export async function GET(request: Request) {
     const response = NextResponse.redirect(`${sourcesUrl}?slack=connected&channels=${channels.length}`);
     clearStateCookie(response);
     return response;
-  } catch {
+  } catch (cause) {
+    console.warn("[oauth][slack] callback failed; redirecting with error", {
+      error: cause instanceof Error ? cause.message : String(cause),
+    });
     const response = NextResponse.redirect(`${sourcesUrl}?slack=error`);
     clearStateCookie(response);
     return response;

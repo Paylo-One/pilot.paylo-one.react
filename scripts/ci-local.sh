@@ -20,6 +20,8 @@ echo "==> quality: typecheck"
 npm run typecheck
 echo "==> quality: unit tests (integration self-skips without DB env)"
 npm test
+echo "==> quality: dependency audit (high/critical)"
+npm audit --audit-level=high
 
 # --- Postgres-backed tenant-isolation -------------------------------------
 STARTED_HERE=0

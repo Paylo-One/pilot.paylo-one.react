@@ -113,7 +113,10 @@ export async function GET(request: Request) {
     );
     clearStateCookie(response);
     return response;
-  } catch {
+  } catch (cause) {
+    console.warn("[oauth][github] callback failed; redirecting with error", {
+      error: cause instanceof Error ? cause.message : String(cause),
+    });
     const response = NextResponse.redirect(`${sourcesUrl}?github=error`);
     clearStateCookie(response);
     return response;
