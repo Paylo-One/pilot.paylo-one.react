@@ -23,6 +23,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isEuInference } from "@/lib/llm";
 import { listTenantModelProviders } from "@/modules/tenant-models/server";
 import { referralService } from "@/modules/referral";
+import { modelUsageCostService } from "@/modules/model-usage-cost";
 import { listMcpGrants } from "@/modules/mcp";
 import {
   SettingsProfileForm,
@@ -35,6 +36,20 @@ import { SettingsNav } from "./settings-nav";
 import { COMPANY_DETAILS } from "@/lib/company";
 
 type SectionTag = "active" | "read-only" | "planned";
+
+const TOKEN_FMT = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+
+function formatUsd(value: number): string {
+  // Pilot per-tenant spend is small; keep sub-cent figures legible without
+  // dropping them to "$0.00".
+  const fractionDigits = value > 0 && value < 1 ? 4 : 2;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: fractionDigits,
+  }).format(value);
+}
 
 const TAG_TONE: Record<SectionTag, string> = {
   active: "ok",
@@ -113,6 +128,10 @@ export default async function SettingsPage() {
   const providers = providersRes.ok ? providersRes.value : [];
   const mcpGrants = await listMcpGrants(ctx);
   const activeMcpGrants = mcpGrants.filter((grant) => grant.status === "active");
+
+  const usageRes = await modelUsageCostService.summarize(ctx, { windowDays: 30 });
+  const usage = usageRes.ok ? usageRes.value : null;
+  const topModel = usage?.byModel[0] ?? null;
 
   const values: ProfileFormValues = {
     displayName: profile?.display_name ?? "",
@@ -239,6 +258,58 @@ export default async function SettingsPage() {
             <span className="meta-row__key">Record kept</span>
             <span className="meta-row__value">What was used, every time</span>
           </div>
+        </SectionCard>
+
+        <SectionCard label="Model usage" title="Usage &amp; estimated cost" tag="read-only">
+          <p className="action-card__rationale" style={{ marginBottom: "var(--space-md)" }}>
+            A running view of how much AI you&rsquo;ve used in the last 30 days,
+            with an estimated cost. Figures cover briefings, agent runs, and
+            background linking; they exclude any calls made through your own key.
+          </p>
+          {usage && usage.calls > 0 ? (
+            <>
+              <div className="meta-row">
+                <span className="meta-row__key">Model calls</span>
+                <span className="meta-row__value">
+                  {usage.calls.toLocaleString("en-US")}
+                  {usage.failedCalls > 0 ? (
+                    <span className="status status--warn" style={{ marginLeft: "var(--space-sm)" }}>
+                      {usage.failedCalls} failed
+                    </span>
+                  ) : null}
+                </span>
+              </div>
+              <div className="meta-row">
+                <span className="meta-row__key">Tokens used</span>
+                <span className="meta-row__value mono">{TOKEN_FMT.format(usage.totalTokens)}</span>
+              </div>
+              <div className="meta-row">
+                <span className="meta-row__key">Estimated cost</span>
+                <span className="meta-row__value mono">{formatUsd(usage.estCostUsd)}</span>
+              </div>
+              {topModel ? (
+                <div className="meta-row">
+                  <span className="meta-row__key">Most-used model</span>
+                  <span className="meta-row__value">
+                    <span className="badge badge--plain">{topModel.modelId}</span>
+                  </span>
+                </div>
+              ) : null}
+              {usage.truncated ? (
+                <p className="action-card__rationale" style={{ marginTop: "var(--space-sm)", opacity: 0.8 }}>
+                  Showing the most recent activity in this window; totals are a
+                  lower bound.
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <div className="meta-row">
+              <span className="meta-row__key">Activity</span>
+              <span className="meta-row__value">
+                {usage ? "No model activity yet in this window" : "Temporarily unavailable"}
+              </span>
+            </div>
+          )}
         </SectionCard>
 
         {/* ===== Invitations ============================================= */}
