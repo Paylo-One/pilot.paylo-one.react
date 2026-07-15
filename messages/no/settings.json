@@ -1,0 +1,63 @@
+{
+  "eyebrow": "Innstillinger",
+  "title": "Arbeidsområde og kontroller",
+  "lead": "Identiteten til arbeidsområdet ditt, innsikten som driver det, sikkerhets- og personvernprofilen din, og tillitsgarantiene under det hele. Du kan se, eksportere og slette dataene dine; du har kontrollen.",
+  "tags": {
+    "available": "Tilgjengelig",
+    "readOnly": "Skrivebeskyttet",
+    "planned": "Planlagt"
+  },
+  "groups": {
+    "workspace": "Arbeidsområde og deg",
+    "intelligence": "Innsikt",
+    "invitations": "Invitasjoner",
+    "security": "Sikkerhet og personvern",
+    "tools": "Verktøytilgang og tillit"
+  },
+  "sectionsAria": "Innstillingsseksjoner",
+  "nav": {
+    "workspace": "Arbeidsområde",
+    "intelligence": "Innsikt",
+    "invitations": "Invitasjoner",
+    "security": "Sikkerhet og personvern",
+    "tools": "Verktøytilgang og tillit"
+  },
+  "tenant": {
+    "label": "Leietaker",
+    "title": "Arbeidsområde",
+    "subdomain": "Underdomene",
+    "signedInAs": "Innlogget som",
+    "role": "Rolle",
+    "onboarding": "Onboarding",
+    "onboardingActive": "Kun invitasjon · aktiv"
+  },
+  "language": {
+    "label": "Språk",
+    "title": "Språk og region",
+    "description": "Velg språket for arbeidsområdet ditt og AI-generert innhold. Valget ditt lagres i profilen din og følger deg på tvers av enheter. Datoer, klokkeslett og tall formateres etter språket du velger.",
+    "fieldLabel": "Visningsspråk"
+  },
+  "profile": {
+    "label": "Profil",
+    "title": "Profilen din",
+    "displayName": "Visningsnavn",
+    "displayNamePlaceholder": "Slik vises du i arbeidsområdet",
+    "timezone": "Tidssone",
+    "timezoneHint": "Bestemmer når den daglige briefingen din klargjøres.",
+    "briefingTime": "Briefing-tidspunkt",
+    "saved": "Profilen er lagret.",
+    "save": "Lagre profil",
+    "saving": "Lagrer…"
+  },
+  "invitations": {
+    "label": "Invitasjoner",
+    "title": "Din private invitasjonslenke",
+    "description": "Paylo One er kun tilgjengelig via invitasjon. Lenken din lar personene du velger be om sitt eget arbeidsområde. Administrer den, kopier den, og se hvem som har blitt med på Invitasjoner-siden.",
+    "status": "Status",
+    "preparing": "Klargjør",
+    "manage": "Administrer invitasjoner",
+    "linkPaused": "Lenke satt på pause",
+    "limitReached": "Invitasjonsgrensen er nådd",
+    "available": "{count, plural, one {# invitasjon tilgjengelig} other {# invitasjoner tilgjengelig}}"
+  }
+}

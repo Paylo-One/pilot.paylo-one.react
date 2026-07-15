@@ -1,0 +1,18 @@
+{
+  "greeting": {
+    "morning": "God morgen",
+    "afternoon": "God ettermiddag",
+    "evening": "God kveld"
+  },
+  "workspace": {
+    "label": "Arbeidsområde",
+    "tenantTitle": "Ditt isolerte arbeidsområde"
+  },
+  "operator": "Operatør",
+  "status": {
+    "sourcesTitle": "Synkroniseringsstatus for kilder",
+    "sourcesIdle": "Kilder · inaktiv",
+    "briefingTitle": "Status for daglig briefing",
+    "briefingReady": "Briefing · klar"
+  }
+}

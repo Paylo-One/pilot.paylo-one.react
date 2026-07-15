@@ -1,0 +1,26 @@
+{
+  "groups": {
+    "workspace": "Workspace",
+    "system": "System",
+    "account": "Konto"
+  },
+  "items": {
+    "briefing": "Briefing",
+    "actions": "Aktionen",
+    "diary": "Tagebuch",
+    "people": "Personen & Unternehmen",
+    "sources": "Quellen",
+    "intelligence": "Intelligence",
+    "mcp": "MCP-Zugriff",
+    "invitations": "Einladungen",
+    "settings": "Einstellungen",
+    "billing": "Abrechnung"
+  },
+  "plannedTitle": "{label} — noch nicht verfügbar",
+  "mobile": {
+    "openMenu": "Menü öffnen",
+    "closeMenu": "Menü schließen",
+    "label": "Workspace-Navigation"
+  },
+  "primaryLabel": "Hauptnavigation"
+}

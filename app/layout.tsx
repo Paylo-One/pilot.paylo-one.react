@@ -38,18 +38,35 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Locale + messages are resolved per request (cookie -> Accept-Language ->
+  // English) by i18n/request.ts. Wiring the provider here is what makes
+  // useTranslations()/getTranslations() work anywhere in the tree, and puts the
+  // correct BCP-47 `dir`/`lang` on <html> for accessibility and formatting.
+  const locale = await getLocale();
+  const messages = await getMessages();
+  const resolved = isLocale(locale) ? locale : defaultLocale;
+  const { dir } = localeConfig[resolved];
+
   return (
-    <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`}>
+    <html
+      lang={resolved}
+      dir={dir}
+      className={`${plexSans.variable} ${plexMono.variable}`}
+    >
       {/* suppressHydrationWarning: browser extensions (e.g. Grammarly) inject
           data-* attributes onto <body> before React hydrates. This suppresses
           the warning for <body>'s own attributes only — one level deep — so it
           does not mask real hydration mismatches in the app. */}
-      <body suppressHydrationWarning>{children}</body>
+      <body suppressHydrationWarning>
+        <NextIntlClientProvider locale={resolved} messages={messages}>
+          {children}
+        </NextIntlClientProvider>
+      </body>
     </html>
   );
 }

@@ -1,0 +1,63 @@
+{
+  "eyebrow": "Instellingen",
+  "title": "Workspace & besturing",
+  "lead": "Uw workspace-identiteit, de intelligence die deze aandrijft, uw beveiligings- en privacypositie, en de vertrouwensgaranties eronder. U kunt uw gegevens inzien, exporteren en verwijderen; u houdt de regie.",
+  "tags": {
+    "available": "Beschikbaar",
+    "readOnly": "Alleen-lezen",
+    "planned": "Gepland"
+  },
+  "groups": {
+    "workspace": "Workspace & u",
+    "intelligence": "Intelligence",
+    "invitations": "Uitnodigingen",
+    "security": "Beveiliging & privacy",
+    "tools": "Toolstoegang & vertrouwen"
+  },
+  "sectionsAria": "Instellingensecties",
+  "nav": {
+    "workspace": "Workspace",
+    "intelligence": "Intelligence",
+    "invitations": "Uitnodigingen",
+    "security": "Beveiliging & privacy",
+    "tools": "Toolstoegang & vertrouwen"
+  },
+  "tenant": {
+    "label": "Tenant",
+    "title": "Workspace",
+    "subdomain": "Subdomein",
+    "signedInAs": "Ingelogd als",
+    "role": "Rol",
+    "onboarding": "Onboarding",
+    "onboardingActive": "Alleen op uitnodiging · actief"
+  },
+  "language": {
+    "label": "Taal",
+    "title": "Taal & regio",
+    "description": "Kies de taal voor uw workspace en door AI gegenereerde content. Uw keuze wordt opgeslagen in uw profiel en volgt u op al uw apparaten. Datums, tijden en getallen worden opgemaakt volgens de taal die u kiest.",
+    "fieldLabel": "Weergavetaal"
+  },
+  "profile": {
+    "label": "Profiel",
+    "title": "Uw profiel",
+    "displayName": "Weergavenaam",
+    "displayNamePlaceholder": "Hoe u verschijnt in de workspace",
+    "timezone": "Tijdzone",
+    "timezoneHint": "Bepaalt wanneer uw dagelijkse briefing wordt voorbereid.",
+    "briefingTime": "Briefingtijd",
+    "saved": "Profiel opgeslagen.",
+    "save": "Profiel opslaan",
+    "saving": "Opslaan…"
+  },
+  "invitations": {
+    "label": "Uitnodigingen",
+    "title": "Uw persoonlijke uitnodigingslink",
+    "description": "Paylo One is alleen op uitnodiging. Met uw link kunnen de mensen die u kiest hun eigen workspace aanvragen. Beheer de link, kopieer deze en bekijk wie er is toegetreden op de pagina Uitnodigingen.",
+    "status": "Status",
+    "preparing": "Voorbereiden",
+    "manage": "Uitnodigingen beheren",
+    "linkPaused": "Link gepauzeerd",
+    "limitReached": "Uitnodigingslimiet bereikt",
+    "available": "{count, plural, one {# uitnodiging beschikbaar} other {# uitnodigingen beschikbaar}}"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "actions": {
+    "save": "Speichern",
+    "saving": "Wird gespeichert…",
+    "cancel": "Abbrechen",
+    "close": "Schließen",
+    "signOut": "Abmelden",
+    "continue": "Weiter",
+    "back": "Zurück",
+    "manage": "Verwalten",
+    "retry": "Erneut versuchen",
+    "upgrade": "Upgrade"
+  },
+  "state": {
+    "loading": "Wird geladen…",
+    "saved": "Gespeichert",
+    "error": "Etwas ist schiefgelaufen",
+    "empty": "Noch nichts vorhanden"
+  },
+  "availability": {
+    "available": "Verfügbar",
+    "readOnly": "Schreibgeschützt",
+    "planned": "Geplant",
+    "comingSoon": "Demnächst",
+    "active": "Aktiv"
+  },
+  "placeholder": "—"
+}

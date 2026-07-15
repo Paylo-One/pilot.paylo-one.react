@@ -1,0 +1,10 @@
+{
+  "eyebrow": "Kontoen er inaktiv",
+  "title": "Fakturering krever oppmerksomhet",
+  "lead": "Du kan fortsatt logge inn og administrere kontoen din, men arbeidsområdefunksjonene er satt på pause til faktureringen er aktiv igjen.",
+  "stateEyebrow": "Tilgangsstatus",
+  "stateTitle": "Kjernefunksjonene er satt på pause",
+  "stateFallback": "begrenset",
+  "rationale": "Velg en plan, oppdater betalingsopplysningene, eller start abonnementet på nytt for å gjenopprette tilgangen til briefing, handlinger, dagbok, kilder og innsikt.",
+  "viewBilling": "Vis faktureringsdetaljer"
+}

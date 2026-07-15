@@ -1,0 +1,26 @@
+{
+  "groups": {
+    "workspace": "Workspace",
+    "system": "System",
+    "account": "Konto"
+  },
+  "items": {
+    "briefing": "Briefing",
+    "actions": "Handlinger",
+    "diary": "Dagbog",
+    "people": "Personer og virksomheder",
+    "sources": "Kilder",
+    "intelligence": "Intelligence",
+    "mcp": "MCP-adgang",
+    "invitations": "Invitationer",
+    "settings": "Indstillinger",
+    "billing": "Fakturering"
+  },
+  "plannedTitle": "{label} — endnu ikke åben",
+  "mobile": {
+    "openMenu": "Åbn menu",
+    "closeMenu": "Luk menu",
+    "label": "Workspace-navigation"
+  },
+  "primaryLabel": "Primær navigation"
+}

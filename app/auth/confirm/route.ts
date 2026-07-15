@@ -23,6 +23,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { appHostBaseUrl, tenantBaseUrl } from "@/lib/config";
 import { safeNextPath } from "@/lib/auth-redirect";
 import { findPrimaryTenantSlug } from "@/modules/identity-tenant/server";
+import { seedLocaleCookieFromProfile } from "@/lib/i18n/locale-cookie";
 
 /** HTML-attribute escaping for values echoed into the interstitial form. */
 function escapeHtml(value: string): string {
@@ -154,16 +155,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   if (next.startsWith("/activate/")) {
-    return NextResponse.redirect(`${appHostBaseUrl()}${next}`, { status: 303 });
+    const response = NextResponse.redirect(`${appHostBaseUrl()}${next}`, { status: 303 });
+    if (userId) await seedLocaleCookieFromProfile(supabase, userId, response);
+    return response;
   }
 
   // If the user already owns a workspace, skip onboarding and go straight to it.
   if (userId) {
     const slug = await findPrimaryTenantSlug(userId);
     if (slug) {
-      return NextResponse.redirect(tenantBaseUrl(slug), { status: 303 });
+      const response = NextResponse.redirect(tenantBaseUrl(slug), { status: 303 });
+      // Carry the user's stored language into their workspace (ADR-052).
+      await seedLocaleCookieFromProfile(supabase, userId, response);
+      return response;
     }
   }
 
-  return NextResponse.redirect(`${appHostBaseUrl()}${next}`, { status: 303 });
+  const response = NextResponse.redirect(`${appHostBaseUrl()}${next}`, { status: 303 });
+  if (userId) await seedLocaleCookieFromProfile(supabase, userId, response);
+  return response;
 }

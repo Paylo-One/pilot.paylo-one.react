@@ -12,6 +12,15 @@
  * `scripts/sync-shared-messages.mjs`.
  */
 
+/**
+ * Cookie carrying the resolved locale. Written on login / settings-save from
+ * `user_profiles.locale` and read first by i18n/request.ts (see that file for
+ * the full resolution precedence). One year, lax, path=/ — it is a durable
+ * preference, not a session token, and carries no sensitive data.
+ */
+export const LOCALE_COOKIE = "NEXT_LOCALE";
+export const LOCALE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year, in seconds
+
 /** Supported locale identifiers (used in URLs, cookies, message folders). */
 export const locales = ["en", "nl", "de", "fr", "no", "da", "es"] as const;
 

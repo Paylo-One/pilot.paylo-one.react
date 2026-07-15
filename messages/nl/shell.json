@@ -1,0 +1,18 @@
+{
+  "greeting": {
+    "morning": "Goedemorgen",
+    "afternoon": "Goedemiddag",
+    "evening": "Goedenavond"
+  },
+  "workspace": {
+    "label": "Workspace",
+    "tenantTitle": "Uw geïsoleerde workspace"
+  },
+  "operator": "Operator",
+  "status": {
+    "sourcesTitle": "Synchronisatiestatus van bronnen",
+    "sourcesIdle": "Bronnen · inactief",
+    "briefingTitle": "Status dagelijkse briefing",
+    "briefingReady": "Briefing · gereed"
+  }
+}

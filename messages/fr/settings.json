@@ -1,0 +1,63 @@
+{
+  "eyebrow": "Paramètres",
+  "title": "Espace de travail et contrôles",
+  "lead": "L'identité de votre espace de travail, l'intelligence qui l'anime, votre posture de sécurité et de confidentialité, ainsi que les garanties de confiance sous-jacentes. Vous pouvez consulter, exporter et supprimer vos données ; vous gardez la main.",
+  "tags": {
+    "available": "Disponible",
+    "readOnly": "Lecture seule",
+    "planned": "Prévu"
+  },
+  "groups": {
+    "workspace": "Espace de travail et vous",
+    "intelligence": "Intelligence",
+    "invitations": "Invitations",
+    "security": "Sécurité et confidentialité",
+    "tools": "Accès aux outils et confiance"
+  },
+  "sectionsAria": "Sections des paramètres",
+  "nav": {
+    "workspace": "Espace de travail",
+    "intelligence": "Intelligence",
+    "invitations": "Invitations",
+    "security": "Sécurité et confidentialité",
+    "tools": "Accès aux outils et confiance"
+  },
+  "tenant": {
+    "label": "Locataire",
+    "title": "Espace de travail",
+    "subdomain": "Sous-domaine",
+    "signedInAs": "Connecté en tant que",
+    "role": "Rôle",
+    "onboarding": "Intégration",
+    "onboardingActive": "Sur invitation · actif"
+  },
+  "language": {
+    "label": "Langue",
+    "title": "Langue et région",
+    "description": "Choisissez la langue de votre espace de travail et des contenus générés par l'IA. Votre choix est enregistré dans votre profil et vous suit sur tous vos appareils. Les dates, heures et nombres sont formatés selon la langue sélectionnée.",
+    "fieldLabel": "Langue d'affichage"
+  },
+  "profile": {
+    "label": "Profil",
+    "title": "Votre profil",
+    "displayName": "Nom affiché",
+    "displayNamePlaceholder": "Comment vous apparaissez dans l'espace de travail",
+    "timezone": "Fuseau horaire",
+    "timezoneHint": "Détermine le moment de préparation de votre briefing quotidien.",
+    "briefingTime": "Heure du briefing",
+    "saved": "Profil enregistré.",
+    "save": "Enregistrer le profil",
+    "saving": "Enregistrement…"
+  },
+  "invitations": {
+    "label": "Invitations",
+    "title": "Votre lien d'invitation privé",
+    "description": "Paylo One est accessible uniquement sur invitation. Votre lien permet aux personnes de votre choix de demander leur propre espace de travail. Gérez-le, copiez-le et suivez les personnes qui ont rejoint sur la page Invitations.",
+    "status": "Statut",
+    "preparing": "Préparation",
+    "manage": "Gérer les invitations",
+    "linkPaused": "Lien suspendu",
+    "limitReached": "Limite d'invitations atteinte",
+    "available": "{count, plural, one {# invitation disponible} other {# invitations disponibles}}"
+  }
+}

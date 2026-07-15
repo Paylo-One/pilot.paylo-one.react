@@ -1,0 +1,13 @@
+{
+  "titleActive": "Gratis prøveperiode — velg en plan før den utløper",
+  "titleEnded": "Den gratis prøveperioden din er utløpt",
+  "ctaActive": "Vis planer",
+  "ctaEnded": "Velg en plan",
+  "units": {
+    "day": "dag",
+    "days": "dager",
+    "hours": "t",
+    "minutes": "min",
+    "seconds": "sek"
+  }
+}

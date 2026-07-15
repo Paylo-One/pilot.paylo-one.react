@@ -1,0 +1,10 @@
+{
+  "eyebrow": "Compte inactif",
+  "title": "La facturation requiert votre attention",
+  "lead": "Vous pouvez toujours vous connecter et gérer votre compte, mais les fonctionnalités de l'espace de travail sont suspendues jusqu'à la réactivation de la facturation.",
+  "stateEyebrow": "État de l'accès",
+  "stateTitle": "Les fonctionnalités essentielles sont suspendues",
+  "stateFallback": "restreint",
+  "rationale": "Choisissez une formule, mettez à jour vos informations de paiement ou relancez votre abonnement pour rétablir l'accès au briefing, aux actions, au journal, aux sources et à l'intelligence.",
+  "viewBilling": "Voir les détails de facturation"
+}

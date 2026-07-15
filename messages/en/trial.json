@@ -1,0 +1,13 @@
+{
+  "titleActive": "Free trial — choose a plan before it ends",
+  "titleEnded": "Your free trial has ended",
+  "ctaActive": "View plans",
+  "ctaEnded": "Choose a plan",
+  "units": {
+    "day": "day",
+    "days": "days",
+    "hours": "hrs",
+    "minutes": "min",
+    "seconds": "sec"
+  }
+}

@@ -12,6 +12,7 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createLlmClient, llmChatModel, llmTranscriptionModel, hasLlm } from "@/lib/llm";
+import { languageDirective, resolveResponseLanguage } from "@/lib/i18n/ai-language";
 import { requireTenantContext } from "@/modules/identity-tenant/server";
 import { diaryService, type DiaryEntry } from "@/modules/diary";
 import { auditService } from "@/modules/audit";
@@ -526,6 +527,13 @@ export async function generateWeeklySummaryAction(): Promise<DiaryActionState> {
   if (hasLlm()) {
     try {
       const client = createLlmClient();
+      // Localise the summary prose to the user's language (ADR-052). This is a
+      // direct-SDK path (not the Model Gateway), so the directive is applied
+      // here at the call site; the JSON keys stay English (they are the schema).
+      const responseLanguage = await resolveResponseLanguage();
+      const systemPrompt =
+        "Summarise a private operator diary for a weekly review. Keep it calm, concise, and useful. Do not invent facts. Return JSON with arrays: keyReflections, importantDecisions, notableRisks, followUpsCreated, recurringThemes, nextWeekAttention. Keep these JSON keys in English; write the array contents in the requested language." +
+        (responseLanguage ? languageDirective(responseLanguage) : "");
       const response = await client.chat.completions.create({
         model: llmChatModel(),
         temperature: 0.2,
@@ -533,8 +541,7 @@ export async function generateWeeklySummaryAction(): Promise<DiaryActionState> {
         messages: [
           {
             role: "system",
-            content:
-              "Summarise a private operator diary for a weekly review. Keep it calm, concise, and useful. Do not invent facts. Return JSON with arrays: keyReflections, importantDecisions, notableRisks, followUpsCreated, recurringThemes, nextWeekAttention.",
+            content: systemPrompt,
           },
           {
             role: "user",

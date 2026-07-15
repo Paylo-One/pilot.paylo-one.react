@@ -17,6 +17,7 @@
  */
 
 import { headers } from "next/headers";
+import { getTranslations } from "next-intl/server";
 import {
   requireTenantContext,
   getSignedInUser,
@@ -30,11 +31,14 @@ import { WorkspaceNav } from "@/components/workspace-nav";
 import { MobileNav } from "@/components/mobile-nav";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { OnboardingWizard } from "@/components/onboarding-wizard";
+import { resolveActiveLocale } from "@/i18n/request";
+import { formatDate } from "@/lib/i18n/format";
 
-function greeting(hour: number): string {
-  if (hour < 12) return "Good morning";
-  if (hour < 18) return "Good afternoon";
-  return "Good evening";
+/** Message key for the time-of-day greeting. */
+function greetingKey(hour: number): "morning" | "afternoon" | "evening" {
+  if (hour < 12) return "morning";
+  if (hour < 18) return "afternoon";
+  return "evening";
 }
 
 export default async function AppLayout({
@@ -59,8 +63,11 @@ export default async function AppLayout({
     .eq("user_id", ctx.userId)
     .maybeSingle();
 
+  const locale = await resolveActiveLocale();
+  const t = await getTranslations("shell");
+  const tc = await getTranslations("common");
   const now = new Date();
-  const dateLabel = now.toLocaleDateString("en-GB", {
+  const dateLabel = formatDate(locale, now, {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -81,10 +88,10 @@ export default async function AppLayout({
           </div>
         </div>
 
-        <div className="tenant-chip" title="Your isolated workspace">
+        <div className="tenant-chip" title={t("workspace.tenantTitle")}>
           <span className="tenant-chip__dot" aria-hidden="true" />
           <div className="tenant-chip__body">
-            <div className="tenant-chip__label">Workspace</div>
+            <div className="tenant-chip__label">{t("workspace.label")}</div>
             <div className="tenant-chip__value">
               {ctx.tenantSlug}.paylo.one
             </div>
@@ -95,7 +102,7 @@ export default async function AppLayout({
 
         <div className="nav__footer">
           <span className="nav__operator" title={user?.email ?? undefined}>
-            {user?.email ?? "Operator"}
+            {user?.email ?? t("operator")}
           </span>
           <form action="/auth/signout" method="post">
             <button type="submit" className="nav__signout">
@@ -112,7 +119,7 @@ export default async function AppLayout({
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                 <path d="M16 17l5-5-5-5M21 12H9" />
               </svg>
-              <span>Sign out</span>
+              <span>{tc("actions.signOut")}</span>
             </button>
           </form>
         </div>
@@ -127,18 +134,20 @@ export default async function AppLayout({
           </div>
           <div className="topbar__context">
             <span className="topbar__date">{dateLabel}</span>
-            <span className="topbar__greeting">{greeting(now.getHours())}</span>
+            <span className="topbar__greeting">
+              {t(`greeting.${greetingKey(now.getHours())}`)}
+            </span>
           </div>
           <div className="topbar__indicators">
             {/* System indicators are scaffold-level: they reflect designed
                 status surfaces, not a live sync/generation pipeline. */}
-            <span className="status-pill" title="Source synchronisation status">
+            <span className="status-pill" title={t("status.sourcesTitle")}>
               <span className="status-pill__dot status-pill__dot--ok" />
-              Sources · idle
+              {t("status.sourcesIdle")}
             </span>
-            <span className="status-pill" title="Daily briefing status">
+            <span className="status-pill" title={t("status.briefingTitle")}>
               <span className="status-pill__dot status-pill__dot--accent" />
-              Briefing · ready
+              {t("status.briefingReady")}
             </span>
           </div>
         </header>

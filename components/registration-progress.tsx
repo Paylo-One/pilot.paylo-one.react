@@ -1,16 +1,19 @@
+import { getTranslations } from "next-intl/server";
+
 interface RegistrationProgressProps {
   current: 1 | 2 | 3;
 }
 
 const STEPS = [
-  { number: 1, label: "Invitation" },
-  { number: 2, label: "Identity" },
-  { number: 3, label: "Workspace" },
+  { number: 1, key: "invitation" },
+  { number: 2, key: "identity" },
+  { number: 3, key: "workspace" },
 ] as const;
 
-export function RegistrationProgress({ current }: RegistrationProgressProps) {
+export async function RegistrationProgress({ current }: RegistrationProgressProps) {
+  const t = await getTranslations("auth.registration");
   return (
-    <ol className="registration-progress" aria-label="Registration progress">
+    <ol className="registration-progress" aria-label={t("label")}>
       {STEPS.map((step) => {
         const state =
           step.number < current
@@ -27,7 +30,7 @@ export function RegistrationProgress({ current }: RegistrationProgressProps) {
             <span className="registration-progress__number">
               {state === "complete" ? "✓" : step.number}
             </span>
-            <span>{step.label}</span>
+            <span>{t(`steps.${step.key}`)}</span>
           </li>
         );
       })}

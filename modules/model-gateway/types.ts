@@ -86,6 +86,13 @@ export interface GatewayRequest {
   readonly promptVersionId?: string;
   /** Why the call is made; "test" flags the metering row (default "agent"). */
   readonly invocationKind?: "agent" | "test";
+  /**
+   * The language the model should respond in, as an English endonym from the
+   * supported-locale set (e.g. "Dutch"). Set from the user's locale at the
+   * Gateway boundary (see service.invoke). Undefined → English (no directive).
+   * MUST come from `localeConfig`, never raw request input (ADR-052 §safety).
+   */
+  readonly responseLanguage?: string;
   /** Tenant-filtered retrieval context for prompt assembly. */
   readonly retrievalContext: readonly RetrievalContextItem[];
   /** Source references that must be carried through onto the output. */

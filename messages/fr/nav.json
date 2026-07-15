@@ -1,0 +1,26 @@
+{
+  "groups": {
+    "workspace": "Espace de travail",
+    "system": "Système",
+    "account": "Compte"
+  },
+  "items": {
+    "briefing": "Briefing",
+    "actions": "Actions",
+    "diary": "Journal",
+    "people": "Personnes et entreprises",
+    "sources": "Sources",
+    "intelligence": "Intelligence",
+    "mcp": "Accès MCP",
+    "invitations": "Invitations",
+    "settings": "Paramètres",
+    "billing": "Facturation"
+  },
+  "plannedTitle": "{label} — pas encore ouvert",
+  "mobile": {
+    "openMenu": "Ouvrir le menu",
+    "closeMenu": "Fermer le menu",
+    "label": "Navigation de l'espace de travail"
+  },
+  "primaryLabel": "Navigation principale"
+}

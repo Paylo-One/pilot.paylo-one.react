@@ -14,6 +14,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import {
   type Availability,
   AVAILABILITY_LABELS,
@@ -21,22 +22,17 @@ import {
 
 interface NavItem {
   href: string;
-  label: string;
+  /** Key under the `nav.items` message namespace. */
+  labelKey: string;
   tag?: string;
   /** Defaults to "available". Non-available items render disabled. */
   availability?: Availability;
   icon: React.ReactNode;
 }
 
-/**
- * The People surface is the relationship layer (people + companies). The label
- * is kept here as a single configurable constant — change it in one place to
- * "People", "Relationships", etc. without touching the route.
- */
-const PEOPLE_NAV_LABEL = "People & Companies";
-
 interface NavGroup {
-  label: string;
+  /** Key under the `nav.groups` message namespace. */
+  labelKey: string;
   items: NavItem[];
 }
 
@@ -53,11 +49,11 @@ const ICON_PROPS = {
 
 const GROUPS: NavGroup[] = [
   {
-    label: "Workspace",
+    labelKey: "workspace",
     items: [
       {
         href: "/briefing",
-        label: "Briefing",
+        labelKey: "briefing",
         icon: (
           <svg {...ICON_PROPS}>
             <path d="M4 5h16M4 10h16M4 15h10M4 20h6" />
@@ -66,7 +62,7 @@ const GROUPS: NavGroup[] = [
       },
       {
         href: "/actions",
-        label: "Actions",
+        labelKey: "actions",
         icon: (
           <svg {...ICON_PROPS}>
             <path d="M9 11l3 3L22 4" />
@@ -76,7 +72,7 @@ const GROUPS: NavGroup[] = [
       },
       {
         href: "/diary",
-        label: "Diary",
+        labelKey: "diary",
         icon: (
           <svg {...ICON_PROPS}>
             <path d="M6 3h11a2 2 0 0 1 2 2v16a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
@@ -86,7 +82,7 @@ const GROUPS: NavGroup[] = [
       },
       {
         href: "/people",
-        label: PEOPLE_NAV_LABEL,
+        labelKey: "people",
         icon: (
           <svg {...ICON_PROPS}>
             <circle cx="9" cy="8" r="3" />
@@ -98,11 +94,11 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: "System",
+    labelKey: "system",
     items: [
       {
         href: "/sources",
-        label: "Sources",
+        labelKey: "sources",
         icon: (
           <svg {...ICON_PROPS}>
             <path d="M12 2v6M12 16v6" />
@@ -113,7 +109,7 @@ const GROUPS: NavGroup[] = [
       },
       {
         href: "/intelligence",
-        label: "Intelligence",
+        labelKey: "intelligence",
         icon: (
           <svg {...ICON_PROPS} fill="currentColor" stroke="none">
             <path d="M8.6 4.4 10.5 9l4.6 1.9-4.6 1.9-1.9 4.6-1.9-4.6-4.6-1.9L6.7 9l1.9-4.6Z" />
@@ -124,7 +120,7 @@ const GROUPS: NavGroup[] = [
       },
       {
         href: "/mcp",
-        label: "MCP Access",
+        labelKey: "mcp",
         icon: (
           <svg {...ICON_PROPS}>
             <path d="M12 2 3 7v10l9 5 9-5V7l-9-5Z" />
@@ -135,11 +131,11 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: "Account",
+    labelKey: "account",
     items: [
       {
         href: "/invitations",
-        label: "Invitations",
+        labelKey: "invitations",
         icon: (
           <svg {...ICON_PROPS}>
             <path d="M3 6.5h13v11H3z" />
@@ -150,7 +146,7 @@ const GROUPS: NavGroup[] = [
       },
       {
         href: "/settings",
-        label: "Settings",
+        labelKey: "settings",
         icon: (
           <svg {...ICON_PROPS}>
             <path d="M4 6h16M4 12h16M4 18h16" />
@@ -162,7 +158,7 @@ const GROUPS: NavGroup[] = [
       },
       {
         href: "/billing",
-        label: "Billing",
+        labelKey: "billing",
         icon: (
           <svg {...ICON_PROPS}>
             <path d="M4 7h16v10H4z" />
@@ -181,13 +177,15 @@ export function WorkspaceNav({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  const t = useTranslations("nav");
 
   return (
-    <nav className="nav" aria-label="Primary">
+    <nav className="nav" aria-label={t("primaryLabel")}>
       {GROUPS.map((group) => (
-        <div key={group.label} className="nav__group">
-          <span className="nav__group-label">{group.label}</span>
+        <div key={group.labelKey} className="nav__group">
+          <span className="nav__group-label">{t(`groups.${group.labelKey}`)}</span>
           {group.items.map((item) => {
+            const label = t(`items.${item.labelKey}`);
             const planned =
               item.availability && item.availability !== "available";
 
@@ -200,10 +198,10 @@ export function WorkspaceNav({
                   key={item.href}
                   className="nav__item nav__item--planned"
                   aria-disabled="true"
-                  title={`${AVAILABILITY_LABELS[item.availability!]} — not yet open`}
+                  title={t("plannedTitle", { label: AVAILABILITY_LABELS[item.availability!] })}
                 >
                   {item.icon}
-                  <span>{item.label}</span>
+                  <span>{label}</span>
                   <span className="nav__item-tag">
                     {AVAILABILITY_LABELS[item.availability!]}
                   </span>
@@ -222,7 +220,7 @@ export function WorkspaceNav({
                 onClick={onNavigate}
               >
                 {item.icon}
-                <span>{item.label}</span>
+                <span>{label}</span>
                 {item.tag ? (
                   <span className="nav__item-tag">{item.tag}</span>
                 ) : null}

@@ -1,0 +1,28 @@
+{
+  "actions": {
+    "save": "Opslaan",
+    "saving": "Opslaan…",
+    "cancel": "Annuleren",
+    "close": "Sluiten",
+    "signOut": "Uitloggen",
+    "continue": "Doorgaan",
+    "back": "Terug",
+    "manage": "Beheren",
+    "retry": "Opnieuw proberen",
+    "upgrade": "Upgraden"
+  },
+  "state": {
+    "loading": "Laden…",
+    "saved": "Opgeslagen",
+    "error": "Er is iets misgegaan",
+    "empty": "Hier is nog niets"
+  },
+  "availability": {
+    "available": "Beschikbaar",
+    "readOnly": "Alleen-lezen",
+    "planned": "Gepland",
+    "comingSoon": "Binnenkort beschikbaar",
+    "active": "Actief"
+  },
+  "placeholder": "—"
+}

@@ -16,6 +16,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { BrandMark } from "@/components/brand-mark";
 import { PayloWordmark } from "@/components/paylo-wordmark";
 import { WorkspaceNav } from "@/components/workspace-nav";
@@ -28,6 +29,9 @@ export function MobileNav({
   email: string | null;
 }) {
   const [open, setOpen] = useState(false);
+  const t = useTranslations("nav");
+  const tShell = useTranslations("shell");
+  const tCommon = useTranslations("common");
 
   useEffect(() => {
     if (!open) return;
@@ -47,7 +51,7 @@ export function MobileNav({
       <button
         type="button"
         className="mobile-nav__trigger"
-        aria-label={open ? "Close menu" : "Open menu"}
+        aria-label={open ? t("mobile.closeMenu") : t("mobile.openMenu")}
         aria-expanded={open}
         aria-controls="mobile-drawer"
         onClick={() => setOpen((v) => !v)}
@@ -74,7 +78,7 @@ export function MobileNav({
           className="drawer__panel"
           role="dialog"
           aria-modal="true"
-          aria-label="Workspace navigation"
+          aria-label={t("mobile.label")}
         >
           <div className="drawer__head">
             <div className="brand">
@@ -87,7 +91,7 @@ export function MobileNav({
             <button
               type="button"
               className="drawer__close"
-              aria-label="Close menu"
+              aria-label={t("mobile.closeMenu")}
               onClick={() => setOpen(false)}
             >
               <svg
@@ -103,10 +107,10 @@ export function MobileNav({
             </button>
           </div>
 
-          <div className="tenant-chip" title="Your isolated workspace">
+          <div className="tenant-chip" title={tShell("workspace.tenantTitle")}>
             <span className="tenant-chip__dot" aria-hidden="true" />
             <div className="tenant-chip__body">
-              <div className="tenant-chip__label">Workspace</div>
+              <div className="tenant-chip__label">{tShell("workspace.label")}</div>
               <div className="tenant-chip__value">{tenantSlug}.paylo.one</div>
             </div>
           </div>
@@ -115,7 +119,7 @@ export function MobileNav({
 
           <div className="nav__footer">
             <span className="nav__operator" title={email ?? undefined}>
-              {email ?? "Operator"}
+              {email ?? tShell("operator")}
             </span>
             <form action="/auth/signout" method="post">
               <button type="submit" className="nav__signout">
@@ -132,7 +136,7 @@ export function MobileNav({
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                   <path d="M16 17l5-5-5-5M21 12H9" />
                 </svg>
-                <span>Sign out</span>
+                <span>{tCommon("actions.signOut")}</span>
               </button>
             </form>
           </div>

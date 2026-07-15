@@ -1,0 +1,28 @@
+{
+  "actions": {
+    "save": "Gem",
+    "saving": "Gemmer…",
+    "cancel": "Annuller",
+    "close": "Luk",
+    "signOut": "Log ud",
+    "continue": "Fortsæt",
+    "back": "Tilbage",
+    "manage": "Administrer",
+    "retry": "Prøv igen",
+    "upgrade": "Opgrader"
+  },
+  "state": {
+    "loading": "Indlæser…",
+    "saved": "Gemt",
+    "error": "Noget gik galt",
+    "empty": "Der er intet her endnu"
+  },
+  "availability": {
+    "available": "Tilgængelig",
+    "readOnly": "Skrivebeskyttet",
+    "planned": "Planlagt",
+    "comingSoon": "Kommer snart",
+    "active": "Aktiv"
+  },
+  "placeholder": "—"
+}

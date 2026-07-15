@@ -1,0 +1,10 @@
+{
+  "eyebrow": "Konto inaktiv",
+  "title": "Abrechnung erfordert Aufmerksamkeit",
+  "lead": "Sie können sich weiterhin anmelden und Ihr Konto verwalten, doch die Workspace-Funktionen pausieren, bis die Abrechnung wieder aktiv ist.",
+  "stateEyebrow": "Zugriffsstatus",
+  "stateTitle": "Kernfunktionen sind pausiert",
+  "stateFallback": "eingeschränkt",
+  "rationale": "Wählen Sie einen Tarif, aktualisieren Sie Ihre Zahlungsdaten oder reaktivieren Sie Ihr Abonnement, um den Zugriff auf Briefing, Aktionen, Tagebuch, Quellen und Intelligence wiederherzustellen.",
+  "viewBilling": "Abrechnungsdetails ansehen"
+}
