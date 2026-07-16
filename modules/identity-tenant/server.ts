@@ -78,7 +78,9 @@ async function requestTenantSlug(): Promise<string | null> {
  * RLS-scoped client so membership is enforced by the database, not trusted from
  * the host.
  */
-export async function resolveTenantContext(): Promise<TenantContextResolution> {
+export async function resolveTenantContext(options?: {
+  readonly allowSuspended?: boolean;
+}): Promise<TenantContextResolution> {
   const user = await getSignedInUser();
   if (!user) return { kind: "unauthenticated" };
 
@@ -94,7 +96,10 @@ export async function resolveTenantContext(): Promise<TenantContextResolution> {
     .eq("slug", slug)
     .maybeSingle();
 
-  if (!tenant || tenant.status !== "active") {
+  const allowedStatus =
+    tenant?.status === "active" ||
+    (options?.allowSuspended === true && tenant?.status === "suspended");
+  if (!tenant || !allowedStatus) {
     return { kind: "forbidden", user, slug };
   }
 
@@ -135,6 +140,27 @@ export async function requireTenantContext(): Promise<TenantContext> {
       redirect(`${appHostBaseUrl()}/sign-in?error=not_a_member`);
   }
   // Unreachable: the switch above is exhaustive and non-ok cases redirect().
+  throw new Error("unreachable tenant-context resolution");
+}
+
+/**
+ * Resolve membership for the app shell even when access is suspended. The
+ * shell immediately applies the authoritative tenant-access guard; ordinary
+ * API handlers and server actions continue using requireTenantContext(), which
+ * denies suspended tenants by default.
+ */
+export async function requireTenantContextForAccessGate(): Promise<TenantContext> {
+  const resolution = await resolveTenantContext({ allowSuspended: true });
+  switch (resolution.kind) {
+    case "ok":
+      return resolution.context;
+    case "unauthenticated":
+      redirect(`${appHostBaseUrl()}/sign-in`);
+    case "no_tenant_host":
+      redirect(`${appHostBaseUrl()}/onboarding`);
+    case "forbidden":
+      redirect(`${appHostBaseUrl()}/sign-in?error=not_a_member`);
+  }
   throw new Error("unreachable tenant-context resolution");
 }
 

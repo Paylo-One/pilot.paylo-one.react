@@ -2,13 +2,13 @@
  * modules/billing/entitlements.ts
  *
  * The entitlement RESOLVER: the one place that turns a tenant's subscription +
- * overrides + add-ons + account-state into the typed `Entitlements` contract
+ * overrides + authoritative tenant access into the typed `Entitlements` contract
  * from `plans.ts`. Feature code never reads `tenants.plan` or the plan string
  * directly — it asks the resolver, then gates with the pure helpers in
  * `guards.ts` (`requireCapability` / `requireWithinLimit`).
  *
  * Resolution order (highest precedence last):
- *   plan defaults  →  active add-ons  →  admin overrides  →  account-state collapse
+ *   tenant access  →  plan defaults  →  active add-ons  →  admin overrides
  *
  * Governance:
  *  - governance/docs/02-monetisation/billing-subscription-logical-design.md §7 (enforcement) + §8 (model)
@@ -51,15 +51,6 @@ import {
  * the ops-chosen mapping once backfill completes.
  */
 const GRANDFATHER_PLAN: PlanKey = "plan_executive";
-
-/** Statuses that still grant the plan's product entitlements. */
-const LIVE_STATUSES: ReadonlySet<SubscriptionStatus> = new Set([
-  "trialing",
-  "active",
-]);
-
-/** Statuses in which new AI/ingestion is paused but existing data stays readable. */
-const PAUSED_STATUSES: ReadonlySet<SubscriptionStatus> = new Set(["past_due", "grace"]);
 
 /** The subscription fields the resolver needs. */
 interface SubscriptionRow {
@@ -108,15 +99,31 @@ export async function resolveEntitlements(
       );
     }
 
+    // 2. Tenant access is authoritative. Subscription/payment states are
+    // operational signals only and never collapse product access by themselves.
+    const { data: tenant, error: tenantErr } = await db
+      .from("tenants")
+      .select("status")
+      .eq("id", ctx.tenantId)
+      .maybeSingle<{ status: string }>();
+    if (tenantErr) {
+      return err(new AppError("internal", "Failed to read tenant access", {
+        tenantId: ctx.tenantId,
+        cause: tenantErr.message,
+      }));
+    }
+    if (!tenant || tenant.status !== "active") {
+      return ok({
+        ...LOCKED_BASELINE,
+        planKey: sub?.plan_key ?? GRANDFATHER_PLAN,
+        status: "suspended",
+      });
+    }
+
     // No subscription row → grandfather during the backfill window (observe-only).
     if (!sub) {
       const ent = planEntitlements(GRANDFATHER_PLAN, "active");
       return ok(ent);
-    }
-
-    // 2. Suspended / (no row counts as live above) → collapse to locked baseline.
-    if (!LIVE_STATUSES.has(sub.status)) {
-      return ok({ ...LOCKED_BASELINE, planKey: sub.plan_key, status: sub.status });
     }
 
     // 3. Plan defaults.
@@ -141,9 +148,6 @@ export async function resolveEntitlements(
       );
     }
     ent = applyOverrides(ent, (overrides ?? []) as OverrideRow[]);
-
-    // 6. Account-state flags (pause AI/ingestion in past_due/grace).
-    ent = applyAccountState(ent, sub.status);
 
     return ok(ent);
   } catch (cause) {
@@ -185,12 +189,4 @@ function applyOverrides(ent: Entitlements, overrides: readonly OverrideRow[]): E
     // type mismatch → ignore the override
   }
   return next as unknown as Entitlements;
-}
-
-/** Set the paused flags for dunning states; other states leave them undefined. */
-function applyAccountState(ent: Entitlements, status: SubscriptionStatus): Entitlements {
-  if (PAUSED_STATUSES.has(status)) {
-    return { ...ent, aiPaused: true, ingestionPaused: true };
-  }
-  return ent;
 }

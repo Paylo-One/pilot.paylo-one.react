@@ -67,7 +67,10 @@ const CTX: TenantContext = {
 };
 
 function withDb(config: DbConfig) {
-  dbHolder.current = makeMockDb(config);
+  dbHolder.current = makeMockDb({
+    tenants: { single: { data: { status: "active" }, error: null } },
+    ...config,
+  });
 }
 
 function subRow(plan_key: string, status: SubscriptionStatus) {
@@ -112,55 +115,36 @@ describe("resolveEntitlements — plan defaults", () => {
   });
 });
 
-describe("resolveEntitlements — account state", () => {
-  it("collapses a suspended subscription to the locked baseline (plan + status preserved)", async () => {
+describe("resolveEntitlements — access authority", () => {
+  it("does not let a subscription suspension override active tenant access", async () => {
     withDb({ tenant_subscriptions: subRow("plan_command", "suspended") });
     const ent = await resolveOrThrow();
     expect(ent.status).toBe("suspended");
     expect(ent.planKey).toBe("plan_command");
-    expect(ent.canCreateActions).toBe(false);
-    expect(ent.canUseRealtimeMonitoring).toBe(false);
-    expect(ent.maxConnectedSources).toBe(0);
-    expect(ent.monthlyAiTokenAllowance).toBe(0);
+    expect(ent.canCreateActions).toBe(true);
+    expect(ent.maxConnectedSources).toBe(
+      PLAN_ENTITLEMENTS.plan_command.maxConnectedSources,
+    );
   });
 
-  it("collapses an expired subscription to the locked baseline", async () => {
+  it("retains plan capabilities for expired, overdue, and unpaid billing states", async () => {
     withDb({ tenant_subscriptions: subRow("plan_executive", "expired") });
-    const ent = await resolveOrThrow();
-    expect(ent.status).toBe("expired");
-    expect(ent.canUseBYOAgent).toBe(false);
-    expect(ent.maxBriefingsPerDay).toBe(0);
-  });
-
-  it("collapses past_due to the locked baseline", async () => {
+    expect((await resolveOrThrow()).maxConnectedSources).toBe(8);
     withDb({ tenant_subscriptions: subRow("plan_executive", "past_due") });
-    const ent = await resolveOrThrow();
-    expect(ent.maxConnectedSources).toBe(0);
-    expect(ent.canCreateActions).toBe(false);
-  });
-
-  it("collapses grace to the locked baseline", async () => {
-    withDb({ tenant_subscriptions: subRow("plan_command", "grace") });
-    const ent = await resolveOrThrow();
-    expect(ent.maxConnectedSources).toBe(0);
-    expect(ent.canUseRealtimeMonitoring).toBe(false);
-  });
-
-  it("collapses cancelled to the locked baseline", async () => {
-    withDb({ tenant_subscriptions: subRow("plan_executive", "cancelled") });
-    const ent = await resolveOrThrow();
-    expect(ent.maxConnectedSources).toBe(0);
-    expect(ent.canUseBYOAgent).toBe(false);
-  });
-
-  it("collapses unpaid and incomplete to the locked baseline", async () => {
+    expect((await resolveOrThrow()).canCreateActions).toBe(true);
     withDb({ tenant_subscriptions: subRow("plan_executive", "unpaid") });
-    const unpaid = await resolveOrThrow();
-    expect(unpaid.maxConnectedSources).toBe(0);
+    expect((await resolveOrThrow()).maxBriefingsPerDay).toBeGreaterThan(0);
+  });
 
-    withDb({ tenant_subscriptions: subRow("plan_executive", "incomplete") });
-    const incomplete = await resolveOrThrow();
-    expect(incomplete.canCreateActions).toBe(false);
+  it("collapses capabilities when the tenant itself is suspended", async () => {
+    withDb({
+      tenants: { single: { data: { status: "suspended" }, error: null } },
+      tenant_subscriptions: subRow("plan_command", "active"),
+    });
+    const ent = await resolveOrThrow();
+    expect(ent.status).toBe("suspended");
+    expect(ent.canCreateActions).toBe(false);
+    expect(ent.maxConnectedSources).toBe(0);
   });
 });
 
@@ -247,9 +231,10 @@ describe("resolveEntitlements — overrides", () => {
     expect(ent.maxConnectedSources).toBe(3); // untouched
   });
 
-  it("does not apply overrides once collapsed by a suspended state", async () => {
+  it("does not apply overrides once tenant access is suspended", async () => {
     withDb({
-      tenant_subscriptions: subRow("plan_command", "suspended"),
+      tenants: { single: { data: { status: "suspended" }, error: null } },
+      tenant_subscriptions: subRow("plan_command", "active"),
       tenant_entitlement_overrides: {
         list: { data: [{ entitlement_key: "canUseRealtimeMonitoring", value: true }], error: null },
       },
