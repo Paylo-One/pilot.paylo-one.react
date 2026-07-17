@@ -41,10 +41,10 @@ describe("mapStripeSubscriptionStatus", () => {
   });
 });
 
-describe("restricted billing routes", () => {
-  it("allows billing and account routes while restricted", () => {
-    expect(isBillingRouteAllowedWhileRestricted("/billing")).toBe(true);
-    expect(isBillingRouteAllowedWhileRestricted("/settings/billing")).toBe(true);
+describe("suspended tenant routes", () => {
+  it("allows only the inactive screen and sign-out while suspended", () => {
+    expect(isBillingRouteAllowedWhileRestricted("/billing")).toBe(false);
+    expect(isBillingRouteAllowedWhileRestricted("/settings/billing")).toBe(false);
     expect(isBillingRouteAllowedWhileRestricted("/account-inactive")).toBe(true);
     expect(isBillingRouteAllowedWhileRestricted("/auth/signout")).toBe(true);
   });

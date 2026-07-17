@@ -19,7 +19,7 @@
 import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import {
-  requireTenantContext,
+  requireTenantContextForAccessGate,
   getSignedInUser,
 } from "@/modules/identity-tenant/server";
 import { enforceBillingAccessForPath } from "@/modules/billing/access-guard";
@@ -47,12 +47,15 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   // Fails closed (redirects) when not signed in / not a member of this tenant.
-  const ctx = await requireTenantContext();
+  const ctx = await requireTenantContextForAccessGate();
   const requestHeaders = await headers();
-  await enforceBillingAccessForPath(
+  const tenantAccess = await enforceBillingAccessForPath(
     ctx,
     requestHeaders.get("x-paylo-request-path"),
   );
+  if (tenantAccess.status === "suspended") {
+    return <div className="workspace__main">{children}</div>;
+  }
   const user = await getSignedInUser();
   const billingAccess = await getBillingAccess(ctx.tenantId);
 
