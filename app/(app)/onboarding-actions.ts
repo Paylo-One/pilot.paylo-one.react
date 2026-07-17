@@ -22,6 +22,12 @@ export interface OnboardingInput {
 export interface OnboardingResult {
   ok: boolean;
   error: string | null;
+  /**
+   * Sources the user asked to auto-refresh that could not be configured
+   * (e.g. plan connection limit reached, or a transient DB error). Onboarding
+   * still completes; these can be reconnected later from Settings → Sources.
+   */
+  failedSources?: SourceSystem[];
 }
 
 /** Basic IANA-style timezone shape check; empty falls back to UTC. */
@@ -47,7 +53,51 @@ export async function completeOnboardingAction(
     const timezone = normaliseTimezone(input.timezone);
     const briefingTime = normaliseBriefingTime(input.briefingTime);
 
-    // 1. Update the user's profile with timezone, briefing time, and completed status.
+    // 1. Configure selected auto-refresh sources (best-effort).
+    //    Source setup must not gate onboarding: a single provider failing
+    //    (e.g. `ensureSourceConnection` throwing on a plan connection limit, or
+    //    a transient update error) previously aborted the whole action after
+    //    earlier sources were already flipped to "connected", leaving the user
+    //    stuck at the final step with no way to finish. Accumulate per-source
+    //    failures and continue; the sources that did connect are kept and the
+    //    rest are reported back for later retry.
+    const failedSources: SourceSystem[] = [];
+    for (const sys of input.syncSources) {
+      try {
+        // Ensure the source connection exists
+        const connId = await ensureSourceConnection(ctx, sys, {
+          displayName: sys.charAt(0).toUpperCase() + sys.slice(1),
+          storagePolicy: "summaries_only",
+        });
+
+        // Update refresh & sync settings
+        const { error: connErr } = await supabase
+          .from("source_connections")
+          .update({
+            auto_refresh_enabled: true,
+            sync_frequency: "daily",
+            next_sync_at: new Date().toISOString(),
+            status: "connected",
+          })
+          .eq("id", connId);
+
+        if (connErr) {
+          throw new Error(connErr.message);
+        }
+      } catch (sourceErr) {
+        failedSources.push(sys);
+        console.warn(
+          `[onboarding] source configuration failed for ${sys}:`,
+          sourceErr instanceof Error ? sourceErr.message : sourceErr,
+        );
+      }
+    }
+
+    // 2. Commit the profile last: timezone, briefing time, and completion.
+    //    This is the authoritative "onboarding done" signal, so it runs after
+    //    the best-effort source setup — that way we never mark onboarding
+    //    complete (and dismiss the wizard) when the core preferences failed to
+    //    persist, and a partial source failure no longer discards a valid setup.
     const { error: profileErr } = await supabase
       .from("user_profiles")
       .update({
@@ -62,30 +112,6 @@ export async function completeOnboardingAction(
       throw new Error(`Profile update failed: ${profileErr.message}`);
     }
 
-    // 2. Configure selected auto-refresh sources
-    for (const sys of input.syncSources) {
-      // Ensure the source connection exists
-      const connId = await ensureSourceConnection(ctx, sys, {
-        displayName: sys.charAt(0).toUpperCase() + sys.slice(1),
-        storagePolicy: "summaries_only",
-      });
-
-      // Update refresh & sync settings
-      const { error: connErr } = await supabase
-        .from("source_connections")
-        .update({
-          auto_refresh_enabled: true,
-          sync_frequency: "daily",
-          next_sync_at: new Date().toISOString(),
-          status: "connected",
-        })
-        .eq("id", connId);
-
-      if (connErr) {
-        throw new Error(`Source configuration failed for ${sys}: ${connErr.message}`);
-      }
-    }
-
     // 3. Log onboarding completion audit event
     await auditService.record(ctx, {
       action: "profile.onboarding.completed",
@@ -93,13 +119,18 @@ export async function completeOnboardingAction(
         timezone,
         briefingTime,
         syncSources: input.syncSources,
+        failedSources,
       },
     });
 
     // Revalidate the root layout path to dismiss the wizard overlay
     revalidatePath("/", "layout");
 
-    return { ok: true, error: null };
+    return {
+      ok: true,
+      error: null,
+      failedSources: failedSources.length > 0 ? failedSources : undefined,
+    };
   } catch (err) {
     return {
       ok: false,

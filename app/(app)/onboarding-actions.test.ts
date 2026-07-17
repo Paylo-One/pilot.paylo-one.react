@@ -108,4 +108,56 @@ describe("completeOnboardingAction", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toContain("Profile update failed: DB constraint error");
   });
+
+  it("completes onboarding and reports sources that could not be configured", async () => {
+    // First source (github) fails hard (e.g. plan connection limit); the second
+    // (slack) succeeds. Onboarding must still complete without discarding it.
+    mockEnsureSourceConnection.mockRejectedValueOnce(
+      new Error("source_connection_limit_reached"),
+    );
+
+    const input = {
+      timezone: "Europe/London",
+      briefingTime: "07:30",
+      syncSources: ["github" as const, "slack" as const],
+    };
+
+    const result = await completeOnboardingAction(input);
+
+    // Onboarding completes despite the partial failure...
+    expect(result.ok).toBe(true);
+    expect(result.error).toBeNull();
+    // ...and the failed source is reported back for later retry.
+    expect(result.failedSources).toEqual(["github"]);
+
+    // Both sources were attempted (no early abort).
+    expect(mockEnsureSourceConnection).toHaveBeenCalledTimes(2);
+
+    // The profile is still committed as complete.
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ onboarding_completed: true }),
+    );
+
+    // The audit trail records which sources failed.
+    expect(mockAuditRecord).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        action: "profile.onboarding.completed",
+        metadata: expect.objectContaining({ failedSources: ["github"] }),
+      }),
+    );
+  });
+
+  it("omits failedSources when every source configures cleanly", async () => {
+    const input = {
+      timezone: "Europe/London",
+      briefingTime: "07:30",
+      syncSources: ["github" as const],
+    };
+
+    const result = await completeOnboardingAction(input);
+
+    expect(result.ok).toBe(true);
+    expect(result.failedSources).toBeUndefined();
+  });
 });
