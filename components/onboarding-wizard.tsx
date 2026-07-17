@@ -249,6 +249,7 @@ export function OnboardingWizard({
   const [focusAreas, setFocusAreas] = useState<FocusId[]>(["actions", "decisions", "people"]);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [partialSources, setPartialSources] = useState<string[] | null>(null);
 
   const stepIndex = STEPS.findIndex((item) => item.id === step);
   const selectedRhythm =
@@ -291,7 +292,11 @@ export function OnboardingWizard({
         return {
           secondary: "Adjust Setup",
           onSecondary: () => setStep("rhythm"),
-          primary: isSubmitting ? "Opening Workspace..." : "Open My Workspace",
+          primary: partialSources
+            ? "Enter Pilot"
+            : isSubmitting
+              ? "Opening Workspace..."
+              : "Open My Workspace",
           onPrimary: handleComplete,
           primaryDisabled: isSubmitting,
           secondaryDisabled: isSubmitting,
@@ -321,6 +326,13 @@ export function OnboardingWizard({
   }
 
   async function handleComplete() {
+    // Second click after a partial-source warning: the setup is already saved,
+    // so just enter the workspace.
+    if (partialSources) {
+      onComplete?.();
+      router.refresh();
+      return;
+    }
     setIsSubmitting(true);
     setError(null);
     startTransition(async () => {
@@ -334,6 +346,14 @@ export function OnboardingWizard({
         setError(
           "We could not save your setup. Please check your connection and try again.",
         );
+        return;
+      }
+      if (res.failedSources && res.failedSources.length > 0) {
+        // Onboarding saved, but some sources could not be connected. Surface
+        // which ones and let the user acknowledge before entering — they can
+        // reconnect anytime from Settings → Sources.
+        setIsSubmitting(false);
+        setPartialSources(res.failedSources.map(sourceLabel));
         return;
       }
       onComplete?.();
@@ -514,6 +534,13 @@ export function OnboardingWizard({
               {error ? (
                 <p className="onboarding-error" role="alert" aria-live="polite">
                   {error}
+                </p>
+              ) : null}
+              {partialSources ? (
+                <p className="onboarding-warning" role="status" aria-live="polite">
+                  You&rsquo;re set up. We couldn&rsquo;t connect{" "}
+                  {partialSources.join(", ")} right now — you can reconnect
+                  anytime from Settings &rarr; Sources.
                 </p>
               ) : null}
             </div>
@@ -1403,6 +1430,16 @@ function OnboardingStyles() {
         border-radius: var(--radius-md);
         background: var(--colour-danger-tint);
         color: var(--colour-danger);
+        padding: 12px;
+        line-height: var(--leading-snug);
+      }
+
+      .onboarding-warning {
+        margin: var(--space-md) 0 0;
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-md);
+        background: var(--colour-surface-muted);
+        color: var(--colour-text-secondary);
         padding: 12px;
         line-height: var(--leading-snug);
       }
