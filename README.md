@@ -113,8 +113,9 @@ paste upload works without it.
 
 News Briefing is optional and off by default. Open **Sources → News**, choose
 categories/keywords/monitored entities, enable RSS and/or GDELT, then use
-**Fetch now**. Scheduled ingestion calls `POST /api/news/ingest` with
-`Authorization: Bearer $NEWS_INGESTION_TOKEN`. Full implementation and API
+**Fetch now**. Inngest dispatches durable per-tenant ingestion jobs every four
+hours; the internal `POST /api/news/ingest` endpoint can enqueue the same jobs
+with `Authorization: Bearer $NEWS_INGESTION_TOKEN`. Full implementation and API
 contracts are in [`docs/news-briefing.md`](docs/news-briefing.md).
 
 Checks:

@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { briefingState } = vi.hoisted(() => ({
+const { briefingState, newsMocks } = vi.hoisted(() => ({
   briefingState: { id: null as string | null },
+  newsMocks: {
+    run: vi.fn(),
+    listEnabledTenantIds: vi.fn(),
+  },
 }));
 
 vi.mock("@/lib/supabase/secret", () => ({
@@ -128,9 +132,18 @@ vi.mock("@/modules/source-connection/discord", () => ({
 vi.mock("@/modules/source-connection/whatsapp-sync", () => ({
   syncActiveWhatsAppMonitors: vi.fn(),
 }));
+vi.mock("@/modules/news/ingest", () => ({
+  runNewsIngestion: newsMocks.run,
+}));
+vi.mock("@/modules/news/server", () => ({
+  listEnabledNewsTenantIds: newsMocks.listEnabledTenantIds,
+}));
 
 import {
   BRIEFING_FALLBACK_DELAY,
+  newsIngestionDedupeKey,
+  newsIngestDispatchFunction,
+  newsIngestFunction,
   sourceSyncFunction,
 } from "@/lib/inngest";
 
@@ -149,6 +162,35 @@ function sourceSyncHandler(): SourceSyncHandler {
   return (sourceSyncFunction as unknown as { fn: SourceSyncHandler }).fn;
 }
 
+type NewsDispatchHandler = (input: {
+  step: {
+    run: <T>(id: string, fn: () => Promise<T> | T) => Promise<T>;
+    sendEvent: ReturnType<typeof vi.fn>;
+  };
+}) => Promise<unknown>;
+
+type NewsIngestHandler = (input: {
+  event: {
+    data: {
+      tenantId: string;
+      dedupeKey: string;
+      trigger: "scheduled" | "manual" | "internal" | "recovery";
+    };
+  };
+  step: {
+    run: <T>(id: string, fn: () => Promise<T> | T) => Promise<T>;
+  };
+}) => Promise<unknown>;
+
+function newsDispatchHandler(): NewsDispatchHandler {
+  return (newsIngestDispatchFunction as unknown as { fn: NewsDispatchHandler })
+    .fn;
+}
+
+function newsWorkerHandler(): NewsIngestHandler {
+  return (newsIngestFunction as unknown as { fn: NewsIngestHandler }).fn;
+}
+
 function createStep() {
   return {
     run: <T>(_id: string, fn: () => Promise<T> | T) => Promise.resolve(fn()),
@@ -160,6 +202,8 @@ function createStep() {
 describe("source-sync briefing recovery", () => {
   beforeEach(() => {
     briefingState.id = null;
+    newsMocks.run.mockReset();
+    newsMocks.listEnabledTenantIds.mockReset();
     vi.spyOn(console, "log").mockImplementation(() => undefined);
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
   });
@@ -227,5 +271,88 @@ describe("source-sync briefing recovery", () => {
         data: { tenantId: "tenant-1", runId: "run-1" },
       },
     );
+  });
+});
+
+describe("durable news ingestion", () => {
+  beforeEach(() => {
+    newsMocks.run.mockReset();
+    newsMocks.listEnabledTenantIds.mockReset();
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("fans out a scheduled event for every enabled tenant", async () => {
+    newsMocks.listEnabledTenantIds.mockResolvedValue(["tenant-1", "tenant-2"]);
+    const sendEvent = vi.fn().mockResolvedValue({ ids: ["one", "two"] });
+    const fixedTime = "2026-07-18T08:00:00.000Z";
+    const step = {
+      run: <T>(id: string, fn: () => Promise<T> | T) =>
+        id === "resolve-news-dispatch-time"
+          ? Promise.resolve(fixedTime as T)
+          : Promise.resolve(fn()),
+      sendEvent,
+    };
+
+    const result = await newsDispatchHandler()({ step });
+
+    expect(result).toEqual({ dispatched: 2 });
+    expect(sendEvent).toHaveBeenCalledWith("fan-out-news-ingestion", [
+      {
+        name: "news/ingest",
+        data: {
+          tenantId: "tenant-1",
+          dedupeKey: newsIngestionDedupeKey("tenant-1", new Date(fixedTime)),
+          trigger: "scheduled",
+        },
+      },
+      {
+        name: "news/ingest",
+        data: {
+          tenantId: "tenant-2",
+          dedupeKey: newsIngestionDedupeKey("tenant-2", new Date(fixedTime)),
+          trigger: "scheduled",
+        },
+      },
+    ]);
+  });
+
+  it("runs the real ingestion pipeline for a tenant event", async () => {
+    newsMocks.run.mockResolvedValue({
+      fetched: 8,
+      deduped: 3,
+      stored: 5,
+      candidates: 2,
+      providerErrors: [],
+    });
+    const step = {
+      run: <T>(_id: string, fn: () => Promise<T> | T) => Promise.resolve(fn()),
+    };
+
+    const result = await newsWorkerHandler()({
+      event: {
+        data: {
+          tenantId: "tenant-1",
+          dedupeKey: "tenant-1:1",
+          trigger: "recovery",
+        },
+      },
+      step,
+    });
+
+    expect(newsMocks.run).toHaveBeenCalledWith("tenant-1");
+    expect(result).toEqual({
+      success: true,
+      tenantId: "tenant-1",
+      trigger: "recovery",
+      fetched: 8,
+      deduped: 3,
+      stored: 5,
+      candidates: 2,
+      providerErrors: [],
+    });
   });
 });

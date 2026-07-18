@@ -158,13 +158,7 @@ export function NewsSourceConfig({ data }: { data: NewsAdminData }) {
         setError(result.error);
         return;
       }
-      const providerNote =
-        result.providerErrors.length > 0
-          ? ` ${result.providerErrors.length} provider error${result.providerErrors.length === 1 ? "" : "s"} were isolated.`
-          : "";
-      setMessage(
-        `Fetched ${result.fetched}; stored ${result.stored}; ${result.candidates} met the relevance threshold.${providerNote}`,
-      );
+      setMessage("News ingestion queued. Results will appear here shortly.");
       router.refresh();
     });
   }

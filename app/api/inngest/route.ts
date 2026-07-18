@@ -11,6 +11,7 @@ import { appHostBaseUrl } from "@/lib/config";
 import {
   inngest,
   briefingGenerateFunction,
+  newsIngestDispatchFunction,
   newsIngestFunction,
   sourceSyncFunction,
   schedulerDispatchFunction,
@@ -31,6 +32,7 @@ export const { GET, POST, PUT } = serve({
   servePath: "/api/inngest",
   functions: [
     briefingGenerateFunction,
+    newsIngestDispatchFunction,
     newsIngestFunction,
     sourceSyncFunction,
     schedulerDispatchFunction,

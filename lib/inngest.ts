@@ -25,6 +25,8 @@ import {
   syncDiscordChannels,
 } from "@/modules/source-connection/discord";
 import { syncActiveWhatsAppMonitors } from "@/modules/source-connection/whatsapp-sync";
+import { runNewsIngestion } from "@/modules/news/ingest";
+import { listEnabledNewsTenantIds } from "@/modules/news/server";
 import { calculateNextSyncAt } from "@/lib/sync-schedule";
 
 // 1. Initialize the Inngest client
@@ -50,7 +52,9 @@ export type BriefingGeneratePayload = {
 };
 
 export type NewsIngestPayload = {
-  tenantId?: string;
+  tenantId: string;
+  dedupeKey: string;
+  trigger: "scheduled" | "manual" | "internal" | "recovery";
 };
 
 export type SourceSyncPayload = {
@@ -77,6 +81,34 @@ export const briefingGenerateEvent = eventType("briefing/generate", {
 export const newsIngestEvent = eventType("news/ingest", {
   schema: staticSchema<NewsIngestPayload>(),
 });
+
+const NEWS_INGESTION_BUCKET_MS = 5 * 60 * 1000;
+
+export function newsIngestionDedupeKey(
+  tenantId: string,
+  at = new Date(),
+): string {
+  return `${tenantId}:${Math.floor(at.getTime() / NEWS_INGESTION_BUCKET_MS)}`;
+}
+
+export async function enqueueNewsIngestions(
+  tenantIds: readonly string[],
+  trigger: NewsIngestPayload["trigger"],
+): Promise<string[]> {
+  if (tenantIds.length === 0) return [];
+  const now = new Date();
+  const response = await inngest.send(
+    tenantIds.map((tenantId) => ({
+      name: "news/ingest" as const,
+      data: {
+        tenantId,
+        dedupeKey: newsIngestionDedupeKey(tenantId, now),
+        trigger,
+      },
+    })),
+  );
+  return response.ids;
+}
 
 export const sourceSyncEvent = eventType("source/sync", {
   schema: staticSchema<SourceSyncPayload>(),
@@ -706,56 +738,61 @@ export const operatingReviewFunction = inngest.createFunction(
   },
 );
 
-/**
- * Background handler for news ingestion.
- * This is triggered by the "news/ingest" event.
- */
+/** Every four hours, fan out one durable ingestion job per enabled tenant. */
+export const newsIngestDispatchFunction = inngest.createFunction(
+  {
+    id: "news-ingest-dispatch",
+    name: "Dispatch Scheduled News Ingestion",
+    concurrency: { limit: 1 },
+    triggers: [{ cron: "0 */4 * * *" }],
+  },
+  async ({ step }) => {
+    const tenantIds = await step.run("list-enabled-news-tenants", () =>
+      listEnabledNewsTenantIds(),
+    );
+    if (tenantIds.length === 0) return { dispatched: 0 };
+
+    const dispatchTime = await step.run("resolve-news-dispatch-time", () =>
+      new Date().toISOString(),
+    );
+    await step.sendEvent(
+      "fan-out-news-ingestion",
+      tenantIds.map((tenantId) => ({
+        name: "news/ingest" as const,
+        data: {
+          tenantId,
+          dedupeKey: newsIngestionDedupeKey(tenantId, new Date(dispatchTime)),
+          trigger: "scheduled" as const,
+        },
+      })),
+    );
+    console.log(
+      `[news/dispatch] queued ${tenantIds.length} enabled tenant(s)`,
+    );
+    return { dispatched: tenantIds.length };
+  },
+);
+
+/** Durable per-tenant worker for the real News ingestion pipeline. */
 export const newsIngestFunction = inngest.createFunction(
   {
     id: "news-ingest",
     name: "Ingest and Rank News",
+    concurrency: { limit: 1 },
+    retries: 2,
+    idempotency: "event.data.dedupeKey",
     triggers: [newsIngestEvent],
   },
   async ({ event, step }) => {
-    const { tenantId } = event.data;
+    const { tenantId, trigger } = event.data;
+    if (!tenantId) throw new Error("Missing tenantId in news ingestion event");
 
-    await step.run("initialize-ingestion", () => {
-      if (tenantId) {
-        console.log(
-          `[news/ingest] Starting news ingestion for single tenant: ${tenantId}`,
-        );
-      } else {
-        console.log(
-          `[news/ingest] Starting global news ingestion for all enabled tenants`,
-        );
-      }
-    });
-
-    await step.run("fetch-rss-gdelt", () => {
-      console.log(
-        `[news/ingest] Running RSS and GDELT 2.0 adapters to fetch normalized news items`,
-      );
-      return { itemsFetched: 42 };
-    });
-
-    await step.run("deduplicate-and-rank", () => {
-      console.log(
-        `[news/ingest] Deduplicating items and running classification/ranking algorithms`,
-      );
-      return { rankedCount: 15 };
-    });
-
-    await step.run("finalize-run", () => {
-      console.log(
-        `[news/ingest] Persisting external signals and updates for ingestion run`,
-      );
-    });
-
-    return {
-      success: true,
-      message: tenantId
-        ? `News ingestion completed for tenant ${tenantId}`
-        : "Global news ingestion completed for all enabled tenants",
-    };
+    const result = await step.run("run-news-ingestion", () =>
+      runNewsIngestion(tenantId),
+    );
+    console.log(
+      `[news/ingest] tenant=${tenantId} trigger=${trigger} fetched=${result.fetched} deduped=${result.deduped} stored=${result.stored} candidates=${result.candidates} providerErrors=${result.providerErrors.length}`,
+    );
+    return { success: true, tenantId, trigger, ...result };
   },
 );

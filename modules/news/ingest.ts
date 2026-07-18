@@ -481,24 +481,31 @@ export async function runNewsIngestion(
     const query = buildQuery(prefs);
     const blocked = prefs.blockedSources.map((source) => source.toLowerCase());
 
-    const fetched: NormalisedNewsItem[] = [];
-    for (const runtime of runtimes) {
-      if (!runtime.enabled) continue;
+    const activeProviders = runtimes.flatMap((runtime) => {
+      if (!runtime.enabled) return [];
       const provider = getNewsProvider(runtime.key);
-      if (!provider || provider.tier !== "production") continue;
-      try {
-        fetched.push(
-          ...(await provider.fetchLatest(query, {
-            feedUrls: runtime.feedUrls,
-          })),
-        );
-      } catch (cause) {
-        result.providerErrors.push({
-          provider: runtime.key,
-          error: cause instanceof Error ? cause.message : "fetch_failed",
-        });
+      if (!provider || provider.tier !== "production") return [];
+      return [{ runtime, provider }];
+    });
+    const providerResults = await Promise.allSettled(
+      activeProviders.map(({ runtime, provider }) =>
+        provider.fetchLatest(query, { feedUrls: runtime.feedUrls }),
+      ),
+    );
+    const fetched: NormalisedNewsItem[] = [];
+    providerResults.forEach((providerResult, index) => {
+      if (providerResult.status === "fulfilled") {
+        fetched.push(...providerResult.value);
+        return;
       }
-    }
+      result.providerErrors.push({
+        provider: activeProviders[index]!.runtime.key,
+        error:
+          providerResult.reason instanceof Error
+            ? providerResult.reason.message
+            : "fetch_failed",
+      });
+    });
     result.fetched = fetched.length;
 
     const { data: existingRows, error: existingError } = await secret
