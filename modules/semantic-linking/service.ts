@@ -11,9 +11,9 @@ import "server-only";
  */
 
 import { createHash } from "node:crypto";
+import { llmEmbeddingModel } from "@/lib/llm";
 import { createSupabaseSecretClient } from "@/lib/supabase/secret";
 import {
-  DEFAULT_EMBEDDING_MODEL_ID,
   modelGateway,
   type EmbedResult,
 } from "@/modules/model-gateway";
@@ -537,7 +537,7 @@ export interface SemanticLinkingService {
 
 export const semanticLinkingService: SemanticLinkingService = {
   async processTenant(ctx) {
-    const embeddingModel = DEFAULT_EMBEDDING_MODEL_ID;
+    const embeddingModel = llmEmbeddingModel();
     const inputs = await loadKnowledgeInputs(ctx.tenantId);
     const existingHashes = await loadExistingHashes(ctx.tenantId, embeddingModel);
     const changed = inputs.filter(

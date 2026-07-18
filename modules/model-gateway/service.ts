@@ -32,6 +32,7 @@ import {
 } from "@/modules/shared";
 import { modelUsageCostService } from "@/modules/model-usage-cost";
 import { resolveResponseLanguage } from "@/lib/i18n/ai-language";
+import { llmEmbeddingModel } from "@/lib/llm";
 import { getAdapter } from "./adapters";
 import { livePipeline } from "./live-pipeline";
 import type { GatewayPipeline } from "./pipeline";
@@ -137,7 +138,7 @@ export function createModelGateway(
       const modelId =
         req.requestedModelId ??
         req.modelPolicy?.orderedModelIds?.[0] ??
-        DEFAULT_EMBEDDING_MODEL_ID;
+        llmEmbeddingModel();
       const modelInvocationId = randomUUID();
       const adapter = getAdapter("openai");
       try {
