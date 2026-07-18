@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { runNewsIngestion } from "@/modules/news/ingest";
+import { enqueueNewsIngestions } from "@/lib/inngest";
 import { listEnabledNewsTenantIds } from "@/modules/news/server";
 
 const PayloadSchema = z.object({ tenantId: z.string().uuid().optional() }).strict();
@@ -37,17 +37,17 @@ export async function POST(request: Request) {
   const tenantIds = parsed.tenantId
     ? [parsed.tenantId]
     : await listEnabledNewsTenantIds();
-  const runs = [];
-  for (const tenantId of tenantIds) {
-    try {
-      runs.push({ tenantId, ok: true, result: await runNewsIngestion(tenantId) });
-    } catch (cause) {
-      runs.push({
-        tenantId,
-        ok: false,
-        error: cause instanceof Error ? cause.message : "ingestion_failed",
-      });
-    }
+  try {
+    const eventIds = await enqueueNewsIngestions(tenantIds, "internal");
+    return NextResponse.json(
+      { queued: tenantIds, eventIds },
+      { status: 202 },
+    );
+  } catch (cause) {
+    console.error("[news/ingest-api] failed to enqueue ingestion", cause);
+    return NextResponse.json(
+      { error: "news_ingestion_enqueue_failed" },
+      { status: 500 },
+    );
   }
-  return NextResponse.json({ runs });
 }

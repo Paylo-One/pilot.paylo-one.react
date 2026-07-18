@@ -111,8 +111,11 @@ Content-Type: application/json
 {"tenantId":"optional-tenant-uuid"}
 ```
 
-Omit `tenantId` to process all enabled tenants. The MVP processes tenants
-sequentially. Production orchestration should fan out one durable job per tenant.
+Omit `tenantId` to enqueue all enabled tenants. The endpoint returns `202` after
+publishing one durable `news/ingest` event per tenant; it does not perform the
+provider fetch in the request. Inngest also runs the same fan-out every four
+hours (`0 */4 * * *`). The per-tenant worker has bounded retries, idempotency,
+and global concurrency `1` to protect provider rate limits.
 
 ## Ranking and feedback
 
@@ -144,9 +147,12 @@ ingestion.
 ## Operations
 
 - Set `NEWS_INGESTION_TOKEN` for the internal trigger.
-- Schedule `POST /api/news/ingest` until Inngest is wired.
+- Keep the Inngest app synced to `/api/inngest`; its dispatcher schedules News
+  every four hours and the manual/internal triggers use the same worker.
 - Monitor `news_ingestion_run` for partial/failed runs and provider errors.
 - Keep feed lists small and trusted; provider calls have a 12-second timeout.
+- GDELT `429` and transient `5xx` responses use bounded `Retry-After` or
+  exponential backoff before being recorded as an isolated provider error.
 - A provider outage should result in a partial run, never a failed core memo.
 
 ## Testing
@@ -175,10 +181,9 @@ Manual acceptance:
 
 ## Remaining production decisions
 
-- Wire durable scheduled fan-out with Inngest, retries, and concurrency limits.
 - Add Guardian once commercial terms and key management are approved.
 - Replace the bounded keyword overlap with richer project/entity correlation
   and add LLM enrichment through the Model Gateway, retaining heuristic fallback.
 - Define retention windows for provider raw metadata and old News items.
-- Add provider-specific rate-limit/backoff policies and operational alerts.
+- Add operational alerts for repeated partial/failed provider runs.
 - Add automated fixture, integration, RLS, and end-to-end test suites.

@@ -23,6 +23,9 @@ import { isIP } from "node:net";
 
 const FETCH_TIMEOUT_MS = 12_000;
 const USER_AGENT = "PayloOne-NewsBriefing/1.0 (+https://paylo.one)";
+const MAX_PROVIDER_ATTEMPTS = 3;
+const MAX_PROVIDER_RETRY_MS = 3_000;
+const RETRYABLE_PROVIDER_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 function isPrivateIp(address: string): boolean {
   if (address === "::1" || address.startsWith("fc") || address.startsWith("fd") || address.startsWith("fe80:")) {
@@ -75,6 +78,48 @@ async function timedFetch(url: string, init?: RequestInit): Promise<Response> {
   } finally {
     clearTimeout(timer);
   }
+}
+
+function retryDelayMs(response: Response, attempt: number): number {
+  const retryAfter = response.headers.get("retry-after")?.trim();
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    const parsed = Number.isFinite(seconds)
+      ? seconds * 1_000
+      : Date.parse(retryAfter) - Date.now();
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return Math.min(parsed, MAX_PROVIDER_RETRY_MS);
+    }
+  }
+  return Math.min(250 * 2 ** attempt, MAX_PROVIDER_RETRY_MS);
+}
+
+/** Bounded Retry-After/exponential backoff for rate-limited provider calls. */
+export async function fetchNewsWithRetry(
+  url: string,
+  init?: RequestInit,
+  options: {
+    fetcher?: (url: string, init?: RequestInit) => Promise<Response>;
+    sleep?: (milliseconds: number) => Promise<void>;
+  } = {},
+): Promise<Response> {
+  const fetcher = options.fetcher ?? timedFetch;
+  const sleep =
+    options.sleep ??
+    ((milliseconds: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+
+  for (let attempt = 0; attempt < MAX_PROVIDER_ATTEMPTS; attempt += 1) {
+    const response = await fetcher(url, init);
+    const shouldRetry =
+      RETRYABLE_PROVIDER_STATUSES.has(response.status) &&
+      attempt < MAX_PROVIDER_ATTEMPTS - 1;
+    if (!shouldRetry) return response;
+
+    await response.body?.cancel().catch(() => undefined);
+    await sleep(retryDelayMs(response, attempt));
+  }
+  throw new Error("news_provider_retry_exhausted");
 }
 
 function decodeEntities(text: string): string {
@@ -257,7 +302,9 @@ const gdeltProvider: NewsProvider = {
       maxrecords: String(Math.min(query.limit ?? 75, 250)),
       sort: "datedesc",
     });
-    const res = await timedFetch(`https://api.gdeltproject.org/api/v2/doc/doc?${params.toString()}`);
+    const res = await fetchNewsWithRetry(
+      `https://api.gdeltproject.org/api/v2/doc/doc?${params.toString()}`,
+    );
     if (!res.ok) throw new Error(`gdelt_${res.status}`);
     // GDELT occasionally returns non-JSON on bad queries; guard the parse.
     const text = await res.text();
@@ -285,7 +332,7 @@ const gdeltProvider: NewsProvider = {
   },
   async test() {
     try {
-      const res = await timedFetch(
+      const res = await fetchNewsWithRetry(
         "https://api.gdeltproject.org/api/v2/doc/doc?query=test&mode=ArtList&format=json&maxrecords=1",
       );
       return res.ok

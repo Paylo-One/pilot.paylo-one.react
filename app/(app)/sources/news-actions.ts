@@ -7,7 +7,7 @@ import {
   type NewsProviderView,
   type NewsTenantPreferences,
 } from "@/modules/news";
-import { runNewsIngestion } from "@/modules/news/ingest";
+import { enqueueNewsIngestions } from "@/lib/inngest";
 import { updateNewsPreferences } from "@/modules/news/preferences";
 import {
   recordNewsFeedback,
@@ -66,14 +66,7 @@ export async function testNewsProviderAction(input: {
 }
 
 export async function runNewsIngestionAction(): Promise<
-  | {
-      ok: true;
-      fetched: number;
-      deduped: number;
-      stored: number;
-      candidates: number;
-      providerErrors: { provider: string; error: string }[];
-    }
+  | { ok: true; queued: true; eventId: string | null }
   | { ok: false; error: string }
 > {
   const ctx = await requireTenantContext();
@@ -81,13 +74,12 @@ export async function runNewsIngestionAction(): Promise<
     return { ok: false, error: "Only workspace owners and admins can fetch News." };
   }
   try {
-    const result = await runNewsIngestion(ctx.tenantId);
-    revalidateNews();
-    return { ok: true, ...result };
+    const [eventId] = await enqueueNewsIngestions([ctx.tenantId], "manual");
+    return { ok: true, queued: true, eventId: eventId ?? null };
   } catch (cause) {
     return {
       ok: false,
-      error: cause instanceof Error ? cause.message : "News ingestion failed.",
+      error: cause instanceof Error ? cause.message : "News ingestion could not be queued.",
     };
   }
 }
