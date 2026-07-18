@@ -32,6 +32,12 @@ export const inngest = new Inngest({
   id: "paylo-one-app",
 });
 
+// A completed source run must never depend indefinitely on a downstream
+// function being registered correctly in Inngest Cloud. Give intelligence
+// processing time to enrich the memo, then let the already-registered source
+// handler recover the hand-off if no briefing was linked to the run.
+export const BRIEFING_FALLBACK_DELAY = "10m";
+
 // 2. Define the static event payload types (types must be aliases, not interfaces, as per v4 specs)
 export type BriefingGeneratePayload = {
   tenantId: string;
@@ -245,18 +251,17 @@ export const schedulerDispatchFunction = inngest.createFunction(
       return { dispatched: 0 };
     }
 
-    await step.run("fan-out-source-syncs", async () => {
-      await inngest.send(
-        dispatches.map((d) => ({
-          name: "source/sync" as const,
-          data: {
-            runId: d.run_id,
-            tenantId: d.tenant_id,
-            connectionId: d.connection_id,
-          },
-        })),
-      );
-    });
+    await step.sendEvent(
+      "fan-out-source-syncs",
+      dispatches.map((d) => ({
+        name: "source/sync" as const,
+        data: {
+          runId: d.run_id,
+          tenantId: d.tenant_id,
+          connectionId: d.connection_id,
+        },
+      })),
+    );
 
     console.log(
       `[scheduler-dispatch] dispatched ${dispatches.length} source/sync job(s)`,
@@ -391,15 +396,42 @@ export const sourceSyncFunction = inngest.createFunction(
       // Process the freshly-ingested batch (classify, extract actions /
       // decisions / risks, synthesise topics) BEFORE the briefing, so the memo
       // reads enriched signals. The intelligence step then triggers the memo.
-      await step.run("trigger-intelligence-processing", async () => {
-        console.log(
-          `[source/sync] run ${runId} complete — triggering intelligence/process for tenant ${tenantId}`,
+      console.log(
+        `[source/sync] run ${runId} complete — triggering intelligence/process for tenant ${tenantId}`,
+      );
+      await step.sendEvent("trigger-intelligence-processing", {
+        name: "intelligence/process",
+        data: { tenantId, runId },
+      });
+
+      // Registration drift previously left intelligence/process unhandled and
+      // silently blocked every Daily Memo. Keep the preferred enriched path,
+      // but recover through this existing source-sync function after a durable
+      // wait if no briefing has been linked to the run.
+      await step.sleep("wait-for-briefing", BRIEFING_FALLBACK_DELAY);
+      const hasBriefing = await step.run("check-briefing-produced", async () => {
+        const { data, error } = await supabase
+          .from("scheduled_sync_runs")
+          .select("briefing_id")
+          .eq("id", runId)
+          .maybeSingle();
+        if (error) {
+          throw new Error(
+            `Failed to check briefing state for sync run ${runId}: ${error.message}`,
+          );
+        }
+        return Boolean(data?.briefing_id);
+      });
+
+      if (!hasBriefing) {
+        console.warn(
+          `[source/sync] run ${runId} has no memo after ${BRIEFING_FALLBACK_DELAY} — triggering briefing/generate fallback`,
         );
-        await inngest.send({
-          name: "intelligence/process",
+        await step.sendEvent("recover-missing-briefing", {
+          name: "briefing/generate",
           data: { tenantId, runId },
         });
-      });
+      }
     }
 
     return {
@@ -470,17 +502,28 @@ export const briefingGenerateFunction = inngest.createFunction(
       if (!result.ok) {
         throw new Error(result.error.message);
       }
-      return result.value.briefingId ?? null;
+      const briefingId = result.value.briefingId;
+      if (!briefingId) {
+        throw new Error(
+          `Daily Memo completed without a briefing ID for tenant ${tenantId}`,
+        );
+      }
+      return briefingId;
     });
 
     // Record which cycle produced which memo (provenance + idempotency backstop).
     if (runId && briefingId) {
       await step.run("link-run-to-briefing", async () => {
-        await supabase
+        const { error } = await supabase
           .from("scheduled_sync_runs")
           .update({ briefing_id: briefingId })
           .eq("id", runId)
           .is("briefing_id", null);
+        if (error) {
+          throw new Error(
+            `Failed to link briefing ${briefingId} to sync run ${runId}: ${error.message}`,
+          );
+        }
       });
     }
 
@@ -516,33 +559,37 @@ export const intelligenceProcessFunction = inngest.createFunction(
     const supabase = createSupabaseSecretClient();
 
     await step.run("run-intelligence-batch", async () => {
-      const { ctx } = await resolveTenantJobContext(supabase, tenantId);
-      if (!ctx.userId) {
-        throw new Error(
-          `No owner/member found for tenant ${tenantId}; cannot process intelligence.`,
-        );
-      }
-      const result = await agentOrchestrationService.run(ctx, {
-        kind: "intelligence_batch",
-      });
-      if (!result.ok) {
-        // Never block the briefing on processing — log and continue.
+      try {
+        const { ctx } = await resolveTenantJobContext(supabase, tenantId);
+        if (!ctx.userId) {
+          throw new Error(
+            `No owner/member found for tenant ${tenantId}; cannot process intelligence.`,
+          );
+        }
+        const result = await agentOrchestrationService.run(ctx, {
+          kind: "intelligence_batch",
+        });
+        if (!result.ok) {
+          throw new Error(result.error.message);
+        }
+        return { ok: true };
+      } catch (cause) {
         console.error(
           `[intelligence/process] batch failed for tenant ${tenantId}:`,
-          result.error.message,
+          cause instanceof Error ? cause.message : cause,
         );
+        return { ok: false };
       }
-      return { ok: result.ok };
     });
 
     await step.run("refresh-semantic-links", async () => {
-      const { ctx } = await resolveTenantJobContext(supabase, tenantId);
-      if (!ctx.userId) {
-        throw new Error(
-          `No owner/member found for tenant ${tenantId}; cannot process semantic links.`,
-        );
-      }
       try {
+        const { ctx } = await resolveTenantJobContext(supabase, tenantId);
+        if (!ctx.userId) {
+          throw new Error(
+            `No owner/member found for tenant ${tenantId}; cannot process semantic links.`,
+          );
+        }
         const result = await semanticLinkingService.processTenant(ctx);
         console.log(
           `[intelligence/process] semantic links refreshed for tenant ${tenantId}: embedded=${result.embedded}, skipped=${result.skipped}, suggested=${result.suggestedLinks}`,
@@ -558,14 +605,12 @@ export const intelligenceProcessFunction = inngest.createFunction(
     });
 
     // Hand off to the briefing, preserving the runId for idempotency/provenance.
-    await step.run("trigger-briefing-generation", async () => {
-      console.log(
-        `[intelligence/process] tenant ${tenantId} processed — triggering briefing/generate`,
-      );
-      await inngest.send({
-        name: "briefing/generate",
-        data: { tenantId, runId },
-      });
+    console.log(
+      `[intelligence/process] tenant ${tenantId} processed — triggering briefing/generate`,
+    );
+    await step.sendEvent("trigger-briefing-generation", {
+      name: "briefing/generate",
+      data: { tenantId, runId },
     });
 
     return { success: true, tenantId, runId: runId ?? null };
@@ -595,14 +640,13 @@ export const operatingReviewDispatchFunction = inngest.createFunction(
 
     if (tenantIds.length === 0) return { dispatched: 0 };
 
-    await step.run("fan-out-operating-reviews", async () => {
-      await inngest.send(
-        tenantIds.map((tenantId) => ({
-          name: "operating/review" as const,
-          data: { tenantId },
-        })),
-      );
-    });
+    await step.sendEvent(
+      "fan-out-operating-reviews",
+      tenantIds.map((tenantId) => ({
+        name: "operating/review" as const,
+        data: { tenantId },
+      })),
+    );
 
     console.log(
       `[operating-review-dispatch] dispatched ${tenantIds.length} review(s)`,
