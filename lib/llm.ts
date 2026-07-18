@@ -78,6 +78,18 @@ export function llmChatModel(): string {
   );
 }
 
+/**
+ * Embedding model id for the active provider. Requesty requires the provider
+ * prefix even for OpenAI models; hosted OpenAI expects the bare model id.
+ */
+export function llmEmbeddingModel(): string {
+  const configured = process.env.LLM_EMBEDDING_MODEL?.trim();
+  if (configured) return configured;
+  return isEuInference()
+    ? "openai/text-embedding-3-small"
+    : "text-embedding-3-small";
+}
+
 /** Transcription model id for the active provider (Diary voice notes). */
 export function llmTranscriptionModel(): string {
   return (
