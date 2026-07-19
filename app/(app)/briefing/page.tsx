@@ -37,6 +37,7 @@ import { RefinementActions } from "@/components/refinement/refinement-actions";
 import { FeedbackChip } from "@/components/refinement/feedback-chip";
 import { NewsFeedbackBar } from "@/components/news/news-feedback-bar";
 import { NEWS_CATEGORY_LABELS, type ExternalSignalView } from "@/modules/news";
+import { calendarDayInTimeZone, hourInTimeZone } from "@/lib/tz-day";
 
 /* --- Formatting ----------------------------------------------------------- */
 
@@ -63,15 +64,15 @@ function formatTime(value: string | null, timezone: string): string {
   });
 }
 
-function formatDate(value: string | null): string {
+function formatDate(value: string | null, timezone: string): string {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-}
-
-function isSameDay(a: Date, b: Date): boolean {
-  return a.toDateString() === b.toDateString();
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    timeZone: timezone,
+  });
 }
 
 function titleCase(kind: string): string {
@@ -96,13 +97,20 @@ interface AttentionItem {
  * Collapse the real action statuses into one prioritised queue: overdue first,
  * then due today, then follow-ups owed, then what you're waiting on. This is the
  * single "what needs me" surface — not four competing coloured boxes.
+ *
+ * "Overdue" and "due today" are judged against the operator's local calendar
+ * day (via `timezone`), not the UTC server clock — otherwise a due date shifts
+ * by a day near midnight and the triage lies.
  */
-function buildAttention(actions: SuggestedActionView[], now: Date): AttentionItem[] {
-  const isPast = (s: string) => {
-    const d = new Date(s);
-    return d < now && !isSameDay(d, now);
-  };
-  const isToday = (s: string) => isSameDay(new Date(s), now);
+function buildAttention(
+  actions: SuggestedActionView[],
+  now: Date,
+  timezone: string,
+): AttentionItem[] {
+  const today = calendarDayInTimeZone(now, timezone);
+  const dayOf = (s: string) => calendarDayInTimeZone(new Date(s), timezone);
+  const isPast = (s: string) => dayOf(s) < today;
+  const isToday = (s: string) => dayOf(s) === today;
   const live = (a: SuggestedActionView) =>
     a.status !== "completed" && a.status !== "cancelled";
 
@@ -118,7 +126,7 @@ function buildAttention(actions: SuggestedActionView[], now: Date): AttentionIte
         when: "Overdue",
         whenTone: "overdue",
         status: { label: "Overdue", tone: "risk" },
-        meta: `Was due ${formatDate(a.dueAt)}`,
+        meta: `Was due ${formatDate(a.dueAt, timezone)}`,
         rank: 0,
       });
       continue;
@@ -146,7 +154,7 @@ function buildAttention(actions: SuggestedActionView[], now: Date): AttentionIte
         when: "Follow-up",
         whenTone: "today",
         status: { label: "Follow up", tone: "info" },
-        meta: a.followUpAt ? `Scheduled ${formatDate(a.followUpAt)}` : undefined,
+        meta: a.followUpAt ? `Scheduled ${formatDate(a.followUpAt, timezone)}` : undefined,
         rank: 2,
       });
       continue;
@@ -158,7 +166,7 @@ function buildAttention(actions: SuggestedActionView[], now: Date): AttentionIte
         when: "Waiting on",
         whenTone: "neutral",
         status: { label: "Waiting", tone: "neutral" },
-        meta: a.followUpAt ? `Chase ${formatDate(a.followUpAt)}` : undefined,
+        meta: a.followUpAt ? `Chase ${formatDate(a.followUpAt, timezone)}` : undefined,
         rank: 3,
       });
     }
@@ -295,7 +303,7 @@ function AttentionSection({
 
 /* --- Risks you're tracking (private diary) -------------------------------- */
 
-function RisksSection({ risks }: { risks: DiaryEntry[] }) {
+function RisksSection({ risks, timezone }: { risks: DiaryEntry[]; timezone: string }) {
   return (
     <section id="risks" className="card">
       <div className="briefing-section__head">
@@ -329,7 +337,7 @@ function RisksSection({ risks }: { risks: DiaryEntry[] }) {
           <div className="attention-list">
             {risks.slice(0, 5).map((risk) => (
               <article className="attention-row" key={risk.id}>
-                <div className="attention-row__when">{formatDate(risk.createdAt)}</div>
+                <div className="attention-row__when">{formatDate(risk.createdAt, timezone)}</div>
                 <div className="attention-row__main">
                   <p className="attention-row__title">
                     {risk.transcript || risk.body || "Diary risk"}
@@ -470,7 +478,13 @@ function RealReferences({ section }: { section: BriefingSectionView }) {
   );
 }
 
-function ExternalSignals({ signals }: { signals: readonly ExternalSignalView[] }) {
+function ExternalSignals({
+  signals,
+  timezone,
+}: {
+  signals: readonly ExternalSignalView[];
+  timezone: string;
+}) {
   if (signals.length === 0) return null;
   return (
     <section className="memo__section">
@@ -492,7 +506,7 @@ function ExternalSignals({ signals }: { signals: readonly ExternalSignalView[] }
             <div className="source-ref-row">
               <span className="source-ref">
                 <span className="source-ref__system">{signal.sourceName}</span>
-                {signal.publishedAt ? <span>{formatDate(signal.publishedAt)}</span> : null}
+                {signal.publishedAt ? <span>{formatDate(signal.publishedAt, timezone)}</span> : null}
               </span>
               {signal.category ? (
                 <span className="chip">{NEWS_CATEGORY_LABELS[signal.category]}</span>
@@ -544,7 +558,8 @@ export default async function BriefingPage() {
   const hasSources = connections.length > 0;
 
   const now = new Date();
-  const attention = buildAttention(actions, now);
+  const localHour = hourInTimeZone(now, timezone);
+  const attention = buildAttention(actions, now, timezone);
   const isStale = briefing?.status === "stale";
 
   /* -- State: no connected sources -- */
@@ -556,7 +571,7 @@ export default async function BriefingPage() {
             <div>
               <p className="eyebrow">Daily briefing</p>
               <h1 className="briefing__title">
-                {greeting(now.getHours())}
+                {greeting(localHour)}
                 {name ? `, ${name}` : ""}.
               </h1>
               <p className="briefing__lead">
@@ -626,7 +641,7 @@ export default async function BriefingPage() {
           <div>
             <p className="eyebrow">Daily briefing</p>
             <h1 className="briefing__title">
-              {greeting(now.getHours())}
+              {greeting(localHour)}
               {name ? `, ${name}` : ""}.
             </h1>
             <p className="briefing__lead">
@@ -699,7 +714,7 @@ export default async function BriefingPage() {
         {/* -- Priority lane -- */}
         <AttentionSection items={attention} hasAnyActions={actions.length > 0} />
 
-        <RisksSection risks={activeRisks} />
+        <RisksSection risks={activeRisks} timezone={timezone} />
 
         {/* -- The memo -- */}
         {briefing ? (
@@ -738,7 +753,7 @@ export default async function BriefingPage() {
               </section>
             ))}
 
-            <ExternalSignals signals={briefing.externalSignals} />
+            <ExternalSignals signals={briefing.externalSignals} timezone={timezone} />
           </div>
         ) : (
           <div className="briefing-onboard" id="memo">
