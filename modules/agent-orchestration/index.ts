@@ -41,6 +41,7 @@ import {
 } from "@/modules/model-gateway";
 import { appendExternalSignalsToBriefing } from "@/modules/news/briefing";
 import { checkBriefingLimit } from "@/modules/briefing/server";
+import { buildAttributedMemoPayload, clamp } from "./memo-attribution";
 
 export type AgentKind =
   | "daily_memo"
@@ -80,8 +81,6 @@ export interface AgentOrchestrationService {
 
 /** How many recent items to consider for a Daily Memo run. */
 const MEMO_ITEM_LIMIT = 25;
-/** Default confidence when the model does not supply one for a reference. */
-const DEFAULT_CONFIDENCE = 0.7;
 
 /** Strict domain schema for the Daily Memo agent's structured output. */
 const MemoSectionSchema = z.object({
@@ -106,27 +105,12 @@ const MemoSchema = z.object({
 
 type Memo = z.infer<typeof MemoSchema>;
 
-/** Clamp text to a bound so prompts/excerpts stay cost- and storage-bounded. */
-function clamp(text: string, max: number): string {
-  const trimmed = text.trim();
-  return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed;
-}
-
 /** A condensed, model-facing summary of a source item (summaries over raw). */
 function itemSummary(item: StoredSourceItem): string {
   const head = item.title ? `${item.title}` : "(untitled)";
   const body = item.body ? ` — ${clamp(item.body, 500)}` : "";
   const author = item.author ? ` [from: ${item.author}]` : "";
   return clamp(`(${item.system}) ${head}${body}${author}`, 800);
-}
-
-/** A short, real excerpt for a source reference (never fabricated). */
-function itemExcerpt(item: StoredSourceItem): string {
-  return clamp(item.title || item.body || `(${item.system} item)`, 160);
-}
-
-function roundConfidence(value: number): number {
-  return Math.round(Math.min(1, Math.max(0, value)) * 1000) / 1000;
 }
 
 async function appendNewsSafely(
@@ -176,7 +160,7 @@ async function persistQuietDayMemo(
           kind: "executive_summary",
           position: 0,
           title: "A quiet day",
-          body: "Nothing new has come in from your connected channels. Connect a source or capture a note, then regenerate.",
+          body: "Nothing new has come in from your connected channels. Connect a source or capture a note — your next briefing will pick it up automatically.",
           references: [],
         },
       ],
@@ -209,9 +193,14 @@ async function persistQuietDayMemo(
 
 /**
  * Persist a synthesised memo: the briefing, its ordered sections, the suggested
- * actions, and a source reference for every section/action (best-effort mapping
- * from the model's item id tokens, with a fallback so the trust contract holds
- * whenever items exist).
+ * actions, and a source reference for every section/action, mapped from the
+ * model's item id tokens.
+ *
+ * Trust contract: a section/action that cannot be attributed to a real retrieved
+ * item is DROPPED rather than back-filled with an unrelated item as false
+ * provenance ("if an insight cannot be attributed, it is not shown" —
+ * governance daily-memo.md / ai-agent-architecture.md Source Attribution). If
+ * nothing survives attribution, we fall back to the honest "quiet day" memo.
  */
 async function persistMemo(
   ctx: TenantContext,
@@ -222,56 +211,17 @@ async function persistMemo(
   promptVersionDbId: string | null,
 ): Promise<Result<AgentRunResult>> {
   const secret = createSupabaseSecretClient();
-  // A deterministic fallback reference target (most recent item) so every
-  // section/action can cite at least one real item.
-  const fallbackItem =
-    tokenToItem.size > 0 ? [...tokenToItem.values()][0] : null;
 
-  // Resolve a list of model-supplied tokens to real, de-duplicated items.
-  const resolveItems = (tokens: readonly string[]): StoredSourceItem[] => {
-    const seen = new Set<string>();
-    const resolved: StoredSourceItem[] = [];
-    for (const token of tokens) {
-      const item = tokenToItem.get(token.trim());
-      if (item && !seen.has(item.id)) {
-        seen.add(item.id);
-        resolved.push(item);
-      }
-    }
-    if (resolved.length === 0 && fallbackItem) resolved.push(fallbackItem);
-    return resolved;
-  };
+  // Resolve references and drop any unattributed section/action (see contract above).
+  const { sections: sectionsPayload, actions: actionsPayload, droppedSections, droppedActions } =
+    buildAttributedMemoPayload(memo, tokenToItem);
 
-  // Build a source-reference payload for a section/action from its item tokens.
-  const buildRefs = (tokens: readonly string[], confidence: number) =>
-    resolveItems(tokens).map((item) => ({
-      source_item_id: item.id,
-      source_system: item.system,
-      item_timestamp: item.occurredAt,
-      confidence,
-      excerpt_or_pointer: itemExcerpt(item),
-    }));
-
-  // Sections (ordered) + their source references.
-  const sectionsPayload = memo.sections.map((section, index) => ({
-    kind: section.kind,
-    position: index,
-    title: section.title,
-    body: section.body,
-    references: buildRefs(
-      section.sourceItemIds,
-      roundConfidence(section.confidence ?? DEFAULT_CONFIDENCE),
-    ),
-  }));
-
-  // Suggested actions (status 'inbox') + their source references.
-  const actionsPayload = memo.actions.map((action) => ({
-    status: "inbox",
-    created_from: "briefing",
-    title: action.title,
-    rationale: action.rationale,
-    references: buildRefs(action.sourceItemIds, DEFAULT_CONFIDENCE),
-  }));
+  // If the model produced nothing that can be honestly attributed to a real
+  // item, do not ship an empty or fabricated memo — surface the honest quiet-day
+  // memo instead.
+  if (sectionsPayload.length === 0) {
+    return persistQuietDayMemo(ctx, agentRunId);
+  }
 
   // Persist the briefing, sections, actions, and references atomically: a single
   // DB function runs in its own transaction, so a failure on any insert rolls the
@@ -304,8 +254,12 @@ async function persistMemo(
     metadata: {
       kind: "daily_memo",
       itemsConsidered,
-      sections: memo.sections.length + (news.count > 0 ? 1 : 0),
+      sections: sectionsPayload.length + (news.count > 0 ? 1 : 0),
       actions: actionsPayload.length,
+      // Attribution coverage: how many model outputs were withheld for lacking a
+      // real source reference (trust-contract observability).
+      droppedSections,
+      droppedActions,
       promptVersionId: promptVersionDbId,
       externalSignals: news.count,
       externalSignalsError: news.error,
