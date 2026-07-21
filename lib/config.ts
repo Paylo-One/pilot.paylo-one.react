@@ -113,6 +113,43 @@ export function stripeProductExecutive(): string {
   return process.env.STRIPE_PRODUCT_EXECUTIVE?.trim() || stripeProductBasic();
 }
 
+// --- Paddle Billing (server-side only) ---------------------------------------
+//
+// Paddle fulfils the public self-service tiers sold on the marketing site.
+// PADDLE_API_KEY authenticates outbound Paddle API calls; PADDLE_WEBHOOK_SECRET
+// is the notification destination's SIGNING SECRET (a different credential,
+// used only to verify inbound webhooks). Never conflate the two.
+
+/**
+ * Paddle environment. MUST be set explicitly to "sandbox" or "production" —
+ * the SDK environment follows this value and never defaults silently.
+ */
+export function paddleEnv(): "sandbox" | "production" {
+  const env = process.env.PADDLE_ENV?.trim();
+  if (env !== "sandbox" && env !== "production") {
+    throw new Error('PADDLE_ENV must be set to "sandbox" or "production"');
+  }
+  return env;
+}
+
+/** Paddle API key (outbound API calls). Server-only; never expose. */
+export function paddleApiKey(): string {
+  const key = process.env.PADDLE_API_KEY?.trim();
+  if (!key) throw new Error("PADDLE_API_KEY is not set");
+  return key;
+}
+
+/**
+ * Paddle webhook SIGNING SECRET for /api/webhooks/paddle. This is the
+ * notification destination's secret (Paddle > Developer tools > Notifications),
+ * NOT the API key.
+ */
+export function paddleWebhookSecret(): string {
+  const secret = process.env.PADDLE_WEBHOOK_SECRET?.trim();
+  if (!secret) throw new Error("PADDLE_WEBHOOK_SECRET is not set");
+  return secret;
+}
+
 /** Dev server port (used to build absolute cross-host URLs locally). */
 export function devPort(): string {
   return process.env.PORT?.trim() || "3000";

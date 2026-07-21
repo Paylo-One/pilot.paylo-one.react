@@ -59,6 +59,23 @@ export {
   type BillingAccessStatus,
 } from "./status";
 
+// Paddle fulfilment surface (pure helpers; server-only pieces live in
+// paddle.ts / paddle-webhooks.ts and must be imported from there directly).
+export {
+  mapPaddleSubscriptionStatus,
+  subscriptionGrantsAccess,
+  type PaddleSubscriptionStatus,
+  type PaddleScheduledChange,
+  type PaddleScheduledChangeAction,
+} from "./paddle-status";
+export {
+  paddlePlanFromPriceId,
+  paddlePlanKeyForPriceId,
+  PADDLE_PRICE_OPTIONS,
+  type PaddleBillingTierKey,
+  type PaddleBillingInterval,
+} from "./paddle-plans";
+
 /**
  * The billing service surface. `getStatus` is preserved for existing callers
  * but now derives the status from the resolved entitlements rather than a

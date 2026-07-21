@@ -28,6 +28,7 @@ import { isSelectableSubdomain } from "@/lib/tenant/host";
 import { seedTenantPrompts } from "@/modules/prompt-versioning/server";
 import { referralService } from "@/modules/referral";
 import { createTrialBillingAccess } from "@/modules/billing/access";
+import { linkPaddleCustomerByEmail } from "@/modules/billing/paddle-webhooks";
 
 /** Header set by proxy.ts for a valid tenant subdomain (untrusted hint). */
 const TENANT_SLUG_HEADER = "x-paylo-tenant-slug";
@@ -329,6 +330,23 @@ export async function provisionTenantForUser(input: {
       target: tenant.id,
       metadata: { via: "onboarding" },
     });
+  }
+
+  // Anonymous marketing-site Paddle checkouts are identified by email only:
+  // if this user's email matches an unlinked Paddle customer, link it now and
+  // promote any staged subscriptions into tenant_subscriptions. Best-effort —
+  // a linking failure must never block provisioning (the customer stays
+  // unlinked and can be linked on a later webhook or by an operator).
+  // NOTE: the invitation/activation path (modules/identity-tenant/activation.ts)
+  // is intentionally NOT wired — invited tenants are provisioned by admins, not
+  // by self-service Paddle checkout. TODO(billing): revisit if invitations ever
+  // coexist with Paddle self-service purchases.
+  if (input.email) {
+    try {
+      await linkPaddleCustomerByEmail(input.email, tenant.id as string);
+    } catch {
+      /* non-fatal: linking retries on the next customer webhook */
+    }
   }
 
   // Every new owner gets their own referral code. Best-effort: Settings also
