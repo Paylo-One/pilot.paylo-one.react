@@ -140,6 +140,7 @@ export async function requireTenantContext(): Promise<TenantContext> {
       redirect(`${appHostBaseUrl()}/sign-in?error=not_a_member`);
   }
   // Unreachable: the switch above is exhaustive and non-ok cases redirect().
+  /* v8 ignore next -- defensive runtime guard for future union variants */
   throw new Error("unreachable tenant-context resolution");
 }
 
@@ -161,6 +162,7 @@ export async function requireTenantContextForAccessGate(): Promise<TenantContext
     case "forbidden":
       redirect(`${appHostBaseUrl()}/sign-in?error=not_a_member`);
   }
+  /* v8 ignore next -- defensive runtime guard for future union variants */
   throw new Error("unreachable tenant-context resolution");
 }
 

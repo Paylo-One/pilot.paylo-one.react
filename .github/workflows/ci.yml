@@ -26,6 +26,8 @@ jobs:
       # Unit tests. The runtime tenant-isolation suite self-skips here (no test
       # DB env), so this stays fast and DB-free.
       - run: npm test
+      - name: Authentication coverage gate
+        run: npm run test:coverage:auth
       # Dependency hygiene: enforce the release-readiness "zero known
       # vulnerabilities" bar. Fails only on high/critical advisories so routine
       # low/moderate noise doesn't block PRs.

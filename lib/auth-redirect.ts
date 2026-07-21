@@ -1,7 +1,13 @@
 export function safeNextPath(nextPath: string): string {
-  return nextPath.startsWith("/") && !nextPath.startsWith("//")
-    ? nextPath
-    : "/onboarding";
+  if (!nextPath.startsWith("/")) return "/onboarding";
+
+  // Parse against a fixed dummy origin instead of relying on string prefixes.
+  // URL parsers treat backslashes as slashes, so values such as `/\\evil.test`
+  // can otherwise become network-path references in some clients.
+  const base = "https://paylo.invalid";
+  const destination = new URL(nextPath, base);
+  if (destination.origin !== base) return "/onboarding";
+  return `${destination.pathname}${destination.search}${destination.hash}`;
 }
 
 /**

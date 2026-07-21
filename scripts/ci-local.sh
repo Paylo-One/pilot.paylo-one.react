@@ -20,6 +20,8 @@ echo "==> quality: typecheck"
 npm run typecheck
 echo "==> quality: unit tests (integration self-skips without DB env)"
 npm test
+echo "==> quality: authentication coverage gate"
+npm run test:coverage:auth
 echo "==> quality: dependency audit (high/critical)"
 npm audit --audit-level=high
 

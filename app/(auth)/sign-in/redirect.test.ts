@@ -25,6 +25,14 @@ describe("magicLinkRedirectUrl", () => {
     ).toBe("/onboarding?ref=ABC123");
   });
 
+  it("appends a referral code to an existing query string", () => {
+    expect(
+      magicLinkRedirectUrl("https://app.paylo.one", "/onboarding?step=profile", "ABC123"),
+    ).toBe(
+      "https://app.paylo.one/auth/confirm?next=%2Fonboarding%3Fstep%3Dprofile%26ref%3DABC123",
+    );
+  });
+
   it("omits ref when no referral code is supplied", () => {
     expect(magicLinkRedirectUrl("https://app.paylo.one", "/onboarding")).toBe(
       "https://app.paylo.one/auth/confirm?next=%2Fonboarding",
@@ -44,5 +52,7 @@ describe("magicLinkRedirectUrl", () => {
     expect(safeNextPath("/activate/valid-token")).toBe("/activate/valid-token");
     expect(safeNextPath("//example.com")).toBe("/onboarding");
     expect(safeNextPath("https://example.com")).toBe("/onboarding");
+    expect(safeNextPath("/\\\\example.com/phish")).toBe("/onboarding");
+    expect(safeNextPath("not a URL")).toBe("/onboarding");
   });
 });

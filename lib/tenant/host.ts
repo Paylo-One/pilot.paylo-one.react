@@ -60,7 +60,8 @@ export function isSelectableSubdomain(label: string): boolean {
 export function resolveHost(host: string | null, apex: string): HostResolution {
   if (!host) return { kind: "invalid" };
 
-  const hostname = host.split(":")[0]?.toLowerCase().trim() ?? "";
+  // split() always returns at least one element for a non-null string.
+  const hostname = host.split(":")[0]!.toLowerCase().trim();
   if (hostname.length === 0) return { kind: "invalid" };
 
   // Apex itself or www -> marketing/auth, not a tenant.

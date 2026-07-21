@@ -32,7 +32,11 @@ export async function GET(request: NextRequest) {
   }
 
   if (next.startsWith("/activate/")) {
-    return NextResponse.redirect(`${appHostBaseUrl()}${next}`);
+    const response = NextResponse.redirect(`${appHostBaseUrl()}${next}`);
+    if (data.user?.id) {
+      await seedLocaleCookieFromProfile(supabase, data.user.id, response);
+    }
+    return response;
   }
 
   // If the user already owns a workspace, skip onboarding and go straight to it.
