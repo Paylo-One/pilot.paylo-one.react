@@ -14,85 +14,14 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  ENTITY_TYPE_LABELS,
-  type PersonLinkSuggestion,
-  type ResolvedRelationship,
+import type {
+  ConnectionSuggestion,
+  PersonLinkSuggestion,
 } from "@/modules/people/people.types";
 import type { DuplicateSuggestion } from "@/modules/people/correlation";
 import { PersonLinkSuggestionCard } from "@/components/people/person-link-suggestion";
-import {
-  runCorrelationAction,
-  confirmLinkAction,
-  rejectLinkAction,
-} from "@/app/(app)/people/actions";
-
-function SuggestedLinkCard({ link }: { link: ResolvedRelationship }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [done, setDone] = useState<"confirmed" | "rejected" | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  function act(kind: "confirmed" | "rejected") {
-    setError(null);
-    startTransition(async () => {
-      const res =
-        kind === "confirmed"
-          ? await confirmLinkAction({ linkId: link.id })
-          : await rejectLinkAction({ linkId: link.id });
-      if (res.ok) {
-        setDone(kind);
-        router.refresh();
-      } else {
-        setError(res.error ?? "Failed.");
-      }
-    });
-  }
-
-  return (
-    <article className="link-suggestion">
-      <div className="link-suggestion__main">
-        <p className="memo-item__title">
-          {link.relationshipLabel} {link.otherLabel}{" "}
-          <span className="mono">· {ENTITY_TYPE_LABELS[link.otherType]}</span>
-        </p>
-        {link.evidenceSummary ? (
-          <p className="action-card__rationale" style={{ marginTop: "var(--space-xs)" }}>
-            {link.evidenceSummary}
-          </p>
-        ) : null}
-        <p className="repo-row__meta mono">{Math.round(link.confidence * 100)}% confidence</p>
-        {error ? <p className="form-message form-message--error">{error}</p> : null}
-      </div>
-      <div className="link-suggestion__controls">
-        {done ? (
-          <span className={`status status--${done === "rejected" ? "neutral" : "ok"}`}>
-            {done === "confirmed" ? "Linked" : "Dismissed"}
-          </span>
-        ) : (
-          <>
-            <button
-              type="button"
-              className="btn btn--accent-outline btn--sm"
-              disabled={pending}
-              onClick={() => act("confirmed")}
-            >
-              Confirm
-            </button>
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm"
-              disabled={pending}
-              onClick={() => act("rejected")}
-            >
-              Not right
-            </button>
-          </>
-        )}
-      </div>
-    </article>
-  );
-}
+import { ConnectionSuggestions } from "@/components/people/connection-suggestions";
+import { runCorrelationAction } from "@/app/(app)/people/actions";
 
 function DuplicateCard({ dup }: { dup: DuplicateSuggestion }) {
   return (
@@ -128,7 +57,7 @@ export function CorrelationInbox({
   duplicates,
 }: {
   identitySuggestions: readonly PersonLinkSuggestion[];
-  suggestedLinks: readonly ResolvedRelationship[];
+  suggestedLinks: readonly ConnectionSuggestion[];
   duplicates: readonly DuplicateSuggestion[];
 }) {
   const router = useRouter();
@@ -182,16 +111,7 @@ export function CorrelationInbox({
             </div>
           ) : null}
 
-          {suggestedLinks.length > 0 ? (
-            <div className="inbox__group">
-              <p className="inbox__group-title">Possible semantic connections</p>
-              <div className="stack gap-sm">
-                {suggestedLinks.map((l) => (
-                  <SuggestedLinkCard key={l.id} link={l} />
-                ))}
-              </div>
-            </div>
-          ) : null}
+          <ConnectionSuggestions suggestions={suggestedLinks} />
 
           {duplicates.length > 0 ? (
             <div className="inbox__group">

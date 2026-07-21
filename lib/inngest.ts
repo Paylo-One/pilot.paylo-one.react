@@ -3,6 +3,7 @@ import { createSupabaseSecretClient } from "@/lib/supabase/secret";
 import type { TenantContext, TenantRole } from "@/modules/shared";
 import { agentOrchestrationService } from "@/modules/agent-orchestration";
 import { semanticLinkingService } from "@/modules/semantic-linking";
+import { recomputePersonConnections } from "@/modules/people/person-connections";
 import { getIntegrationAccessToken } from "@/modules/source-connection/server";
 import { syncActiveRepositories } from "@/modules/source-connection/github-repos";
 import { syncActiveResources as syncActiveNotionResources } from "@/modules/source-connection/notion";
@@ -633,6 +634,23 @@ export const intelligenceProcessFunction = inngest.createFunction(
           cause instanceof Error ? cause.message : cause,
         );
         return { embedded: 0, skipped: 0, suggestedLinks: 0 };
+      }
+    });
+
+    await step.run("refresh-person-connections", async () => {
+      try {
+        const result = await recomputePersonConnections(tenantId);
+        console.log(
+          `[intelligence/process] person connections refreshed for tenant ${tenantId}: ` +
+            `pairs=${result.pairsEvaluated}, created=${result.created}, updated=${result.updated}, hidden=${result.hidden}`,
+        );
+        return result;
+      } catch (cause) {
+        console.error(
+          `[intelligence/process] person connections failed for tenant ${tenantId}:`,
+          cause instanceof Error ? cause.message : cause,
+        );
+        return null;
       }
     });
 

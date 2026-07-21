@@ -14,10 +14,10 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   IMPORTANCE_LABELS,
+  type ConnectionSuggestion,
   type Person,
   type PersonImportanceLevel,
   type PersonLinkSuggestion,
-  type ResolvedRelationship,
 } from "@/modules/people/people.types";
 import type { Company } from "@/modules/companies/company.types";
 import type { DuplicateSuggestion } from "@/modules/people/correlation";
@@ -42,7 +42,7 @@ export function PeopleSurface({
   people: readonly Person[];
   companies: readonly Company[];
   identitySuggestions: readonly PersonLinkSuggestion[];
-  suggestedLinks: readonly ResolvedRelationship[];
+  suggestedLinks: readonly ConnectionSuggestion[];
   duplicates: readonly DuplicateSuggestion[];
 }) {
   const router = useRouter();

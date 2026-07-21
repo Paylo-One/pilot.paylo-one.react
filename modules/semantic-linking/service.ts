@@ -13,10 +13,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { llmEmbeddingModel } from "@/lib/llm";
 import { createSupabaseSecretClient } from "@/lib/supabase/secret";
-import {
-  modelGateway,
-  type EmbedResult,
-} from "@/modules/model-gateway";
+import { modelGateway } from "@/modules/model-gateway";
 import type { TenantContext } from "@/modules/shared";
 import type { EntityType, LinkVisibility } from "@/modules/people/people.types";
 
@@ -47,6 +44,7 @@ interface MatchRow {
   entity_id: string;
   owner_user_id: string | null;
   visibility: string;
+  content_hash: string;
   similarity: number;
 }
 
@@ -62,7 +60,49 @@ export interface SemanticCandidateInput {
   readonly similarity: number;
 }
 
-export const SEMANTIC_LINK_MIN_SCORE = 0.78;
+/**
+ * Semantic suggestion policy.
+ *
+ * Embeddings for ALL entity types (including every source item) are kept as a
+ * retrieval/index layer — but only pairs that can carry an explainable graph
+ * edge may become suggested links. Message↔message pairs are never suggested:
+ * they connect content to content, not people to people, and duplicate sync
+ * ingestion made them ~100%-similar noise that drowned the review queue.
+ * Person↔person semantic similarity is also excluded here — it feeds the
+ * evidence-based connection pipeline (modules/people/person-connections.ts)
+ * as one weak supporting signal instead of creating raw edges directly.
+ *
+ * Same-type pairs (action↔action) demand a higher bar than cross-type pairs,
+ * and two entities with identical canonical text are treated as duplicate
+ * records, not a relationship.
+ */
+// Keys are the two entity types sorted alphabetically (see pairId).
+const SUGGESTIBLE_PAIRS: ReadonlySet<string> = new Set([
+  "company|person",
+  "action|person",
+  "action|company",
+  "diary_entry|person",
+  "company|diary_entry",
+  "action|diary_entry",
+  "action|action",
+]);
+
+/** Minimum cosine similarity for a suggestion (cross-type pairs). */
+export const SEMANTIC_LINK_MIN_SCORE = 0.85;
+/** Same-type pairs (e.g. action↔action) need near-certainty. */
+export const SEMANTIC_LINK_MIN_SCORE_SAME_TYPE = 0.9;
+
+function pairId(a: SemanticEntityType, b: SemanticEntityType): string {
+  return [a, b].sort().join("|");
+}
+
+export function isSuggestiblePair(a: SemanticEntityType, b: SemanticEntityType): boolean {
+  return SUGGESTIBLE_PAIRS.has(pairId(a, b));
+}
+
+export function minScoreFor(a: SemanticEntityType, b: SemanticEntityType): number {
+  return a === b ? SEMANTIC_LINK_MIN_SCORE_SAME_TYPE : SEMANTIC_LINK_MIN_SCORE;
+}
 
 const ENTITY_ORDER: Record<SemanticEntityType, number> = {
   person: 10,
@@ -104,19 +144,16 @@ function entityKey(entityType: string, entityId: string): string {
   return `${entityType}:${entityId}`;
 }
 
-function scoreBoost(sourceType: SemanticEntityType, targetType: SemanticEntityType): number {
-  const pair = new Set([sourceType, targetType]);
-  if (pair.has("person") && pair.has("company")) return 0.08;
-  if (pair.has("person") && pair.has("action")) return 0.06;
-  if (pair.has("company") && pair.has("action")) return 0.05;
-  if (pair.has("diary_entry") && (pair.has("person") || pair.has("action"))) return 0.04;
-  if (sourceType === targetType) return -0.04;
-  return 0.02;
-}
-
+/**
+ * Score a semantic candidate: the raw similarity, clamped — no additive
+ * boosts. Pair-type policy is expressed by `isSuggestiblePair` +
+ * `minScoreFor`, not by inflating the score. Returns 0 for pairs that may
+ * never become suggestions.
+ */
 export function scoreSemanticCandidate(input: SemanticCandidateInput): number {
-  const score = input.similarity + scoreBoost(input.sourceType, input.targetType);
-  return Math.max(0, Math.min(0.99, Math.round(score * 1000) / 1000));
+  if (!isSuggestiblePair(input.sourceType, input.targetType)) return 0;
+  if (input.similarity < minScoreFor(input.sourceType, input.targetType)) return 0;
+  return Math.max(0, Math.min(0.99, Math.round(input.similarity * 1000) / 1000));
 }
 
 export function relationshipTypeFor(
@@ -386,7 +423,7 @@ async function upsertEmbeddings(
   tenantId: string,
   embeddingModel: string,
   inputs: readonly KnowledgeEmbeddingInput[],
-  result: EmbedResult,
+  vectors: readonly (readonly number[])[],
 ): Promise<void> {
   if (inputs.length === 0) return;
   const rows = inputs.map((input, index) => ({
@@ -396,7 +433,7 @@ async function upsertEmbeddings(
     owner_user_id: input.ownerUserId,
     content_hash: contentHashFor(input.text),
     embedding_model: embeddingModel,
-    embedding: result.embeddings[index],
+    embedding: vectors[index],
     visibility: input.visibility,
   }));
   const secret = createSupabaseSecretClient();
@@ -435,9 +472,11 @@ async function upsertSuggestedSemanticLink(
     return false;
   }
 
+  // Plain-language evidence — never a raw vector score. `similarity` is kept
+  // in the confidence column for ranking, not shown as the explanation.
+  void similarity;
   const evidence =
-    `${source.label} and ${target.label} are semantically close ` +
-    `(${Math.round(similarity * 100)}% vector similarity).`;
+    `“${source.label}” and “${target.label}” read closely related in your recent activity.`;
   const visibility = linkVisibilityFor(source, target);
 
   if (existingRow) {
@@ -487,6 +526,9 @@ async function generateSemanticLinks(
     const source = inputs[index];
     const embedding = embeddings[index];
     if (!source || !embedding) continue;
+    // Only entities that can anchor an explainable edge query for neighbours.
+    if (source.entityType === "source_item") continue;
+    const sourceHash = contentHashFor(source.text);
 
     const { data, error } = await secret.rpc("match_knowledge_embeddings", {
       p_tenant_id: tenantId,
@@ -509,13 +551,15 @@ async function generateSemanticLinks(
           visibility: row.visibility as EmbeddingVisibility,
           ownerUserId: row.owner_user_id,
         } satisfies KnowledgeEmbeddingInput);
+      // Identical canonical text = duplicate record, not a relationship.
+      if (row.content_hash === sourceHash) continue;
       const similarity = Number(row.similarity);
       const score = scoreSemanticCandidate({
         sourceType: source.entityType,
         targetType: target.entityType,
         similarity,
       });
-      if (score < SEMANTIC_LINK_MIN_SCORE) continue;
+      if (score <= 0) continue;
       if (await upsertSuggestedSemanticLink(tenantId, source, target, score, similarity)) {
         suggested += 1;
       }
@@ -548,21 +592,38 @@ export const semanticLinkingService: SemanticLinkingService = {
       return { embedded: 0, skipped: inputs.length, suggestedLinks: 0 };
     }
 
+    // Embed each distinct text once — duplicate sync ingestion produces many
+    // entities with identical canonical text; paying per copy is pure waste.
+    const uniqueTexts: string[] = [];
+    const indexByHash = new Map<string, number>();
+    for (const input of changed) {
+      const hash = contentHashFor(input.text);
+      if (!indexByHash.has(hash)) {
+        indexByHash.set(hash, uniqueTexts.length);
+        uniqueTexts.push(input.text);
+      }
+    }
+
     const embedResult = await modelGateway.embed({
       ctx,
       dataClassification: "restricted",
-      inputs: changed.map((input) => input.text),
+      inputs: uniqueTexts,
       requestedModelId: embeddingModel,
       agentRunId: "semantic-linking",
     });
     if (!embedResult.ok) throw embedResult.error;
 
-    await upsertEmbeddings(ctx.tenantId, embeddingModel, changed, embedResult.value);
+    const vectors = changed.map(
+      (input) =>
+        embedResult.value.embeddings[indexByHash.get(contentHashFor(input.text)) ?? 0] ?? [],
+    );
+
+    await upsertEmbeddings(ctx.tenantId, embeddingModel, changed, vectors);
     const suggestedLinks = await generateSemanticLinks(
       ctx.tenantId,
       embeddingModel,
       changed,
-      embedResult.value.embeddings,
+      vectors,
     );
 
     return {

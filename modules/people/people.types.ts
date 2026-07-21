@@ -290,7 +290,26 @@ export interface EntityLink {
   readonly visibility: LinkVisibility;
   readonly firstSeenAt: string;
   readonly lastSeenAt: string;
+  /** Structured scoring signals (entity_links.evidence), when present. */
+  readonly evidenceSignals: readonly ConnectionEvidenceSignal[];
+  readonly evidenceCount: number;
 }
+
+/**
+ * One structured scoring signal behind a connection, as stored in
+ * `entity_links.evidence` — plain-language `detail` is what the UI shows.
+ * Kinds mirror modules/people/connection-scoring.ts.
+ */
+export interface ConnectionEvidenceSignal {
+  readonly kind: string;
+  readonly count?: number;
+  readonly lastAt?: string;
+  readonly detail: string;
+  readonly sample?: string;
+}
+
+/** Non-technical strength band for a connection (see connection-scoring.ts). */
+export type ConnectionStrength = "strong" | "relevant" | "possible" | "hidden";
 
 /**
  * An edge resolved for display: the other endpoint's label and type, the kind,
@@ -307,6 +326,32 @@ export interface ResolvedRelationship {
   readonly origin: LinkOrigin;
   readonly status: LinkStatus;
   readonly evidenceSummary: string | null;
+  /** Structured evidence, when the scoring pipeline produced it. */
+  readonly evidenceSignals: readonly ConnectionEvidenceSignal[];
+  readonly evidenceCount: number;
+}
+
+/**
+ * A suggested (or decided) connection resolved for the review queue, with BOTH
+ * endpoints labelled — "Garren ↔ Jobrie", not "mentioned with 84b3a429".
+ */
+export interface ConnectionSuggestion {
+  readonly id: string;
+  readonly aType: EntityType;
+  readonly aId: string;
+  readonly aLabel: string;
+  readonly bType: EntityType;
+  readonly bId: string;
+  readonly bLabel: string;
+  readonly relationshipType: string;
+  readonly relationshipLabel: string;
+  readonly confidence: number;
+  readonly strength: Exclude<ConnectionStrength, "hidden">;
+  readonly origin: LinkOrigin;
+  /** One-line, human reason (never a raw similarity score). */
+  readonly headline: string | null;
+  readonly evidenceSignals: readonly ConnectionEvidenceSignal[];
+  readonly evidenceCount: number;
 }
 
 export const ENTITY_TYPE_LABELS: Record<EntityType, string> = {

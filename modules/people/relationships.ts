@@ -18,6 +18,8 @@ import "server-only";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
+  type ConnectionEvidenceSignal,
+  type ConnectionSuggestion,
   type EntityLink,
   type EntityType,
   type LinkOrigin,
@@ -26,6 +28,7 @@ import {
   type ResolvedRelationship,
   relationshipKindLabel,
 } from "./people.types";
+import { tierForConfidence } from "./connection-scoring";
 
 interface LinkRow {
   id: string;
@@ -42,10 +45,17 @@ interface LinkRow {
   visibility: string;
   first_seen_at: string;
   last_seen_at: string;
+  evidence: { signals?: ConnectionEvidenceSignal[] } | null;
+  evidence_count: number | null;
 }
 
 const LINK_COLS =
-  "id, source_entity_type, source_entity_id, target_entity_type, target_entity_id, relationship_type, confidence, origin, status, evidence_summary, source_reference, visibility, first_seen_at, last_seen_at";
+  "id, source_entity_type, source_entity_id, target_entity_type, target_entity_id, relationship_type, confidence, origin, status, evidence_summary, source_reference, visibility, first_seen_at, last_seen_at, evidence, evidence_count";
+
+function evidenceSignalsOf(row: LinkRow): ConnectionEvidenceSignal[] {
+  const signals = row.evidence?.signals;
+  return Array.isArray(signals) ? signals.filter((s) => s && typeof s.detail === "string") : [];
+}
 
 function mapLink(row: LinkRow): EntityLink {
   return {
@@ -63,6 +73,8 @@ function mapLink(row: LinkRow): EntityLink {
     visibility: row.visibility as LinkVisibility,
     firstSeenAt: row.first_seen_at,
     lastSeenAt: row.last_seen_at,
+    evidenceSignals: evidenceSignalsOf(row),
+    evidenceCount: row.evidence_count ?? 0,
   };
 }
 
@@ -247,6 +259,8 @@ function resolveOther(
     origin: link.origin,
     status: link.status,
     evidenceSummary: link.evidenceSummary,
+    evidenceSignals: link.evidenceSignals,
+    evidenceCount: link.evidenceCount,
   };
 }
 
@@ -277,19 +291,56 @@ export async function listRelationshipsFor(
     .sort((a, b) => b.confidence - a.confidence);
 }
 
-/** Pending system-suggested edges, resolved for the correlation inbox. */
-export async function listSuggestedLinks(): Promise<ResolvedRelationship[]> {
+/** Cap on suggestions surfaced to the review queue at once. */
+const CONNECTION_SUGGESTION_LIMIT = 30;
+
+/**
+ * Pending system-suggested connections for the review queue: person↔person and
+ * person↔company edges only (entities the People surface is about — never
+ * message↔message pairs), both endpoints labelled, ranked by strength, hidden
+ * tier filtered out, bounded. The queue shows the strongest work-relationships
+ * first instead of a thousand raw similarity hits.
+ */
+export async function listConnectionSuggestions(): Promise<ConnectionSuggestion[]> {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("entity_links")
     .select(LINK_COLS)
     .eq("status", "suggested")
-    .order("confidence", { ascending: false });
+    .in("source_entity_type", ["person", "company"])
+    .in("target_entity_type", ["person", "company"])
+    .order("confidence", { ascending: false })
+    .limit(200);
   if (error) throw new Error(error.message);
-  const links = await filterReadableLinks(((data ?? []) as LinkRow[]).map(mapLink));
+
+  const links = ((data ?? []) as LinkRow[])
+    .map(mapLink)
+    .filter((l) => l.visibility !== "hidden")
+    .filter((l) => tierForConfidence(l.confidence) !== "hidden");
   const labels = await resolveLabels(links);
-  // Present from the source endpoint's perspective.
-  return links.map((l) => resolveOther(l, l.sourceType, l.sourceId, labels));
+  const labelOf = (type: EntityType, id: string) =>
+    labels.get(`${type}:${id}`) ?? `${type} ${id.slice(0, 8)}`;
+
+  return links.slice(0, CONNECTION_SUGGESTION_LIMIT).map((l) => {
+    const strength = tierForConfidence(l.confidence);
+    return {
+      id: l.id,
+      aType: l.sourceType,
+      aId: l.sourceId,
+      aLabel: labelOf(l.sourceType, l.sourceId),
+      bType: l.targetType,
+      bId: l.targetId,
+      bLabel: labelOf(l.targetType, l.targetId),
+      relationshipType: l.relationshipType,
+      relationshipLabel: relationshipKindLabel(l.relationshipType),
+      confidence: l.confidence,
+      strength: strength === "hidden" ? "possible" : strength,
+      origin: l.origin,
+      headline: l.evidenceSummary,
+      evidenceSignals: l.evidenceSignals,
+      evidenceCount: l.evidenceCount,
+    } satisfies ConnectionSuggestion;
+  });
 }
 
 export interface GraphNode {

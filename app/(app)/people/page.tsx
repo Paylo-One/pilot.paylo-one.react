@@ -12,7 +12,7 @@
 
 import { requireTenantContext } from "@/modules/identity-tenant/server";
 import { listPeople, listLinkSuggestions } from "@/modules/people/people-server";
-import { listSuggestedLinks } from "@/modules/people/relationships";
+import { listConnectionSuggestions } from "@/modules/people/relationships";
 import { detectDuplicatePeople } from "@/modules/people/correlation";
 import { listCompanies } from "@/modules/companies/companies-server";
 import { PeopleSurface } from "@/components/people/people-surface";
@@ -23,7 +23,7 @@ export default async function PeoplePage() {
     listPeople(),
     listCompanies(),
     listLinkSuggestions(),
-    listSuggestedLinks(),
+    listConnectionSuggestions(),
   ]);
   const duplicates = detectDuplicatePeople(people);
 

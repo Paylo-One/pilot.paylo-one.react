@@ -3988,6 +3988,108 @@ button.actions-view:hover {
   flex-shrink: 0;
 }
 
+/* Suggested connections — evidence-ranked, calm by default. Strength is a
+   word on the status chip, not a colour shout; evidence unfolds on demand. */
+.connection-card {
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  background: var(--colour-surface);
+}
+.connection-card--strong {
+  border-color: var(--colour-accent);
+}
+.connection-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+.connection-card__pair {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+.connection-card__name {
+  font-weight: 600;
+  color: var(--colour-text-primary);
+  text-decoration: none;
+}
+a.connection-card__name:hover {
+  color: var(--colour-accent);
+}
+.connection-card__kind {
+  font-size: var(--text-small);
+  color: var(--colour-text-tertiary);
+}
+.connection-card__tie {
+  color: var(--colour-text-tertiary);
+}
+.connection-card__reason {
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+  margin-top: var(--space-xs);
+  max-width: 70ch;
+}
+.connection-card__evidence {
+  margin-top: var(--space-xs);
+}
+.connection-card__why {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--text-small);
+  color: var(--colour-accent);
+  cursor: pointer;
+}
+.connection-card__why:hover {
+  text-decoration: underline;
+}
+.connection-card__signals {
+  list-style: none;
+  margin: var(--space-xs) 0 0;
+  padding: var(--space-sm) var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  border-radius: var(--radius-sm);
+  background: var(--colour-surface-sunken);
+}
+.connection-card__signal {
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.connection-card__sample {
+  color: var(--colour-text-tertiary);
+  overflow-wrap: anywhere;
+}
+.connection-card__controls {
+  display: flex;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+  margin-top: var(--space-sm);
+}
+.connection-reveal {
+  align-self: flex-start;
+  background: none;
+  border: 1px dashed var(--colour-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+  cursor: pointer;
+}
+.connection-reveal:hover {
+  color: var(--colour-text-primary);
+  border-color: var(--colour-text-tertiary);
+}
+
 /* ============================================================================
    REFINEMENT — feedback chips, refine rows, person-link controls
    ========================================================================== */

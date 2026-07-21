@@ -34,6 +34,7 @@ import {
   upsertEntityLink,
 } from "@/modules/people/relationships";
 import { generateCompanyLinkSuggestions } from "@/modules/companies/companies-server";
+import { recomputePersonConnections } from "@/modules/people/person-connections";
 import type { EntityType, IdentityType, SourceMappingSourceType } from "@/modules/people/people.types";
 
 type Result = { ok: boolean; error: string | null };
@@ -305,13 +306,19 @@ export async function runCorrelationAction(): Promise<{
 }> {
   const ctx = await requireTenantContext();
   try {
-    const [added, companyLinks] = await Promise.all([
+    const [added, companyLinks, connections] = await Promise.all([
       generateLinkSuggestions(ctx.tenantId),
       generateCompanyLinkSuggestions(ctx.tenantId),
+      recomputePersonConnections(ctx.tenantId),
     ]);
     await auditService.record(ctx, {
       action: "correlation.run",
-      metadata: { suggestionsAdded: added, companyLinks },
+      metadata: {
+        suggestionsAdded: added,
+        companyLinks,
+        connectionsCreated: connections.created,
+        connectionsUpdated: connections.updated,
+      },
     });
     revalidatePath("/people");
     return { ok: true, added, companyLinks, error: null };
