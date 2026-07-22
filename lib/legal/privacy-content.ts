@@ -1,8 +1,8 @@
 import type { LegalSection } from "./terms-content";
 import { COMPANY_DETAILS } from "@/lib/company";
 
-export const PRIVACY_VERSION = "2026-06-23.1";
-export const PRIVACY_EFFECTIVE_DATE = "23 June 2026";
+export const PRIVACY_VERSION = "2026-07-22.1";
+export const PRIVACY_EFFECTIVE_DATE = "22 July 2026";
 
 export const PRIVACY_SECTIONS: LegalSection[] = [
   {
@@ -100,8 +100,20 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     ],
   },
   {
+    id: "google-api-data",
+    heading: "11. Google API Data",
+    paragraphs: [
+      "When you connect a Google account, you authorise the Service to access your Google account email address, Gmail messages and labels, and Google Calendar calendars and events through Google application programming interfaces (APIs). We request read-only access. You choose which discovered Gmail labels and calendars to activate, and we ingest content only from those active sources.",
+      "We use Google user data to provide features that you request and that appear in the Service, including connected-source views, private briefings, summaries, context, and suggested actions. We may use artificial intelligence to process selected Google user data solely to provide these features to you and your workspace members.",
+      "We encrypt Google OAuth credentials and store them server-side. We store ingested Google user data and derived outputs in your tenant-isolated workspace, subject to the security, retention, and deletion practices described in this policy.",
+      "We may transfer only the Google user data necessary to our contracted infrastructure and artificial intelligence subprocessors to provide the user-facing features you request. We do not sell Google user data or use it for advertising, credit decisions, or training generalised artificial intelligence models. Our personnel do not read Google user data unless you give affirmative permission for specific data, access is necessary for security purposes, or the law requires it.",
+      `Disconnecting Google deletes the stored Google OAuth credentials and stops new ingestion. You can also revoke the Service's access through your Google Account settings. Data already ingested remains in your workspace until you delete the relevant content or workspace, or ask us to delete it by contacting ${COMPANY_DETAILS.accessEmail}.`,
+      "The Service's use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements.",
+    ],
+  },
+  {
     id: "data-retention",
-    heading: "11. Data Retention",
+    heading: "12. Data Retention",
     paragraphs: [
       "We retain your account information for as long as your account is active and for a reasonable period afterwards as needed to comply with our legal obligations, resolve disputes, and enforce our agreements.",
       "Workspace content, including connected-source data, uploaded files, and AI-generated outputs, is retained while the workspace exists. When you delete content, disconnect a source and delete its data, or delete a workspace, the corresponding data is removed from our active systems within a reasonable period and from backups in accordance with our backup rotation cycle.",
@@ -110,7 +122,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
   },
   {
     id: "data-security",
-    heading: "12. Data Security",
+    heading: "13. Data Security",
     paragraphs: [
       "We implement technical and organisational measures designed to protect your information against unauthorised access, alteration, disclosure, and destruction. These measures include encryption of data in transit and at rest, tenant isolation between workspaces, role-based access controls, and logging and monitoring of access to production systems.",
       "Credentials and session tokens for connected sources are encrypted and held server-side only; they are never sent to the browser. Access to production data by our personnel is restricted to what is necessary to operate and support the Service.",
@@ -119,7 +131,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
   },
   {
     id: "international-transfers",
-    heading: "13. International Transfers",
+    heading: "14. International Transfers",
     paragraphs: [
       "Your information may be processed and stored in countries other than the one in which you live, including countries that may have different data protection laws than your jurisdiction.",
       "Where we transfer personal information internationally, we use appropriate safeguards recognised by applicable law, such as standard contractual clauses or transfers to jurisdictions with an adequacy decision, and we require our subprocessors to do the same.",
@@ -127,7 +139,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
   },
   {
     id: "your-rights",
-    heading: "14. Your Rights",
+    heading: "15. Your Rights",
     paragraphs: [
       "Depending on your jurisdiction, you may have rights regarding your personal information, which may include the following:",
       `You can exercise many of these rights directly within the Service, for example by editing your account details, deleting content, or disconnecting sources. For other requests, contact us at ${COMPANY_DETAILS.accessEmail}. We will respond within the timeframes required by applicable law and may need to verify your identity before acting on a request. If you are unsatisfied with our response, you may have the right to lodge a complaint with a data protection authority.`,
@@ -143,7 +155,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
   },
   {
     id: "childrens-privacy",
-    heading: "15. Children's Privacy",
+    heading: "16. Children's Privacy",
     paragraphs: [
       "The Service is not directed at children and may not be used by anyone under the age of 16, or the minimum age required in your jurisdiction to consent to use online services.",
       `We do not knowingly collect personal information from children. If we become aware that we have collected personal information from a child without appropriate consent, we will delete it promptly. If you believe a child has provided us with personal information, please contact us at ${COMPANY_DETAILS.accessEmail}.`,
@@ -151,7 +163,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
   },
   {
     id: "changes-to-this-policy",
-    heading: "16. Changes to This Policy",
+    heading: "17. Changes to This Policy",
     paragraphs: [
       "We may update this Privacy Policy from time to time to reflect changes to the Service, our practices, or applicable law. The version identifier and effective date at the top of this policy indicate the current revision.",
       "If we make material changes, we will notify you by email or through the Service before the changes take effect. Your continued use of the Service after an updated policy takes effect constitutes your acknowledgement of the updated policy.",
@@ -159,7 +171,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
   },
   {
     id: "contact",
-    heading: "17. Contact",
+    heading: "18. Contact",
     paragraphs: [
       `If you have questions about this Privacy Policy or about how we handle your information, you can contact ${COMPANY_DETAILS.legalName} at ${COMPANY_DETAILS.accessEmail} or by post at ${COMPANY_DETAILS.postalAddress}. ${COMPANY_DETAILS.legalName} is registered with the Dutch Chamber of Commerce under ${COMPANY_DETAILS.kvkLabel}.`,
       "Requests to exercise your privacy rights, requests for our current subprocessor list, and privacy-related complaints should be directed to the same contact details. We will respond as soon as reasonably practicable.",
