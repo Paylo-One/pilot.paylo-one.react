@@ -118,6 +118,49 @@ hours; the internal `POST /api/news/ingest` endpoint can enqueue the same jobs
 with `Authorization: Bearer $NEWS_INGESTION_TOKEN`. Full implementation and API
 contracts are in [`docs/news-briefing.md`](docs/news-briefing.md).
 
+### Paddle fulfilment (webhooks + customer portal)
+
+Paddle fulfils the public self-service tiers (Starter/Pro/Advanced) sold on the
+marketing site. The app receives Paddle webhooks at
+`POST /api/webhooks/paddle`, mirrors state into `paddle_customers` /
+`tenant_subscriptions` (with `paddle_subscriptions_unlinked` staging anonymous
+checkouts until the buyer registers), and mints customer-portal sessions at
+`POST /api/billing/paddle-portal`.
+
+One-time operator setup (manual — do this in the Paddle dashboard matching
+`PADDLE_ENV`, sandbox first):
+
+1. **Developer tools → Authentication**: create/copy an API key into
+   `PADDLE_API_KEY`.
+2. **Developer tools → Notifications**: create a notification destination of
+   type *webhook* pointing at `https://<app-domain>/api/webhooks/paddle`,
+   subscribed to exactly these six event types: `subscription.created`,
+   `subscription.updated`, `subscription.canceled`, `customer.created`,
+   `customer.updated`, `transaction.completed`.
+3. Copy that destination's **signing secret** into `PADDLE_WEBHOOK_SECRET`.
+   This is a *different* credential from the API key — the API key
+   authenticates outbound calls, the signing secret verifies inbound webhooks.
+4. Set `PADDLE_ENV` (`sandbox` or `production`) and the six
+   `PADDLE_PRICE_*` ids (same variable names as the marketing repo).
+
+Until the secret is configured the endpoint answers 500, so Paddle keeps
+retrying and no events are lost; invalid signatures answer 400 and write
+nothing. Every verified event is ledgered in `billing_events` (idempotent on
+the Paddle event id) before any state change.
+
+> **Do not delete live fulfilment state.** Never delete (or suggest deleting)
+> the notification destination or its signing secret, the products/prices
+> behind the pricing page, or any customers/subscriptions/transactions in
+> Paddle or in the database (`paddle_customers`,
+> `paddle_subscriptions_unlinked` rows are stamped `promoted_at`, never
+> removed). The only deletable thing is a throwaway artifact you yourself
+> created purely for a test — name it and confirm first.
+
+Access posture (ADR-053): `tenants.status` is the sole access authority.
+Paddle payment states are operational signals only — webhook handlers never
+mutate `tenants.status`, `past_due` keeps access (banner-only), and a
+scheduled cancel/pause never revokes anything until Paddle applies it.
+
 Checks:
 
 ```bash

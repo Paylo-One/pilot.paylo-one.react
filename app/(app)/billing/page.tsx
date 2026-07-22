@@ -5,7 +5,11 @@ import {
 import { getBillingAccess } from "@/modules/billing/access";
 import { getTenantAccess } from "@/modules/identity-tenant/access";
 import { configuredPlanFromPriceId } from "@/modules/billing/stripe";
-import { ManageSubscriptionButton } from "./billing-actions";
+import { tenantHasPaddleBilling } from "@/modules/billing/paddle";
+import {
+  ManagePaddleBillingButton,
+  ManageSubscriptionButton,
+} from "./billing-actions";
 import { PlanComparison } from "./plan-comparison";
 
 function formatDate(value: string | null): string {
@@ -31,9 +35,11 @@ function restrictedCopy(freeAccessEndsAt: string, status: string): string {
 export default async function BillingPage() {
   const ctx = await requireTenantContext();
   const user = await getSignedInUser();
-  const [access, tenantAccess] = await Promise.all([
+  const [access, tenantAccess, hasPaddleBilling] = await Promise.all([
     getBillingAccess(ctx.tenantId),
     getTenantAccess(ctx.tenantId),
+    // Best-effort: a Paddle lookup failure must not break the billing page.
+    tenantHasPaddleBilling(ctx.tenantId).catch(() => false),
   ]);
   const configuredPlan = configuredPlanFromPriceId(access?.stripePriceId);
   const currentPlanName = configuredPlan?.tier.name ?? "Personal Operator";
@@ -135,7 +141,11 @@ export default async function BillingPage() {
             ) : null}
 
             <div style={{ marginTop: "var(--space-md)" }}>
-              <ManageSubscriptionButton canManage={!!access.stripeCustomerId} />
+              {hasPaddleBilling ? (
+                <ManagePaddleBillingButton />
+              ) : (
+                <ManageSubscriptionButton canManage={!!access.stripeCustomerId} />
+              )}
             </div>
           </section>
         </div>

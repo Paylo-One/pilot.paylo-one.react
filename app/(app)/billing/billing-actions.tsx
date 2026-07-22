@@ -56,3 +56,41 @@ export function ManageSubscriptionButton({ canManage }: { canManage: boolean }) 
     </div>
   );
 }
+
+/**
+ * Manage-billing action for Paddle-fulfilled subscriptions (public
+ * self-service tiers bought on the marketing site). Opens the Paddle customer
+ * portal; rendered only when a Paddle customer is linked to the workspace.
+ */
+export function ManagePaddleBillingButton() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function openPortal() {
+    setBusy(true);
+    setError(null);
+    try {
+      const url = await postForUrl("/api/billing/paddle-portal");
+      window.location.assign(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Billing flow failed.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="stack" style={{ gap: "var(--space-sm)" }}>
+      <div style={{ display: "flex", gap: "var(--space-sm)", flexWrap: "wrap" }}>
+        <button
+          type="button"
+          className="btn btn--secondary"
+          disabled={busy}
+          onClick={openPortal}
+        >
+          {busy ? "Opening…" : "Manage billing"}
+        </button>
+      </div>
+      {error ? <p className="alert alert--risk">{error}</p> : null}
+    </div>
+  );
+}
