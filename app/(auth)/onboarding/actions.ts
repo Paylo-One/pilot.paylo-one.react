@@ -21,6 +21,7 @@ import {
 } from "@/modules/identity-tenant/server";
 import { recordLegalAcceptances } from "@/modules/legal/server";
 import { REFERRAL_COOKIE, referralService } from "@/modules/referral";
+import { hasUnlinkedPaddleSubscriptionForEmail } from "@/modules/billing/paddle-webhooks";
 import { supabaseCookieOptions } from "@/lib/supabase/cookies";
 import { isSelectableSubdomain } from "@/lib/tenant/host";
 
@@ -53,12 +54,30 @@ export async function createWorkspace(
   const cookieStore = await cookies();
   // Cookie is primary; the hidden form field (seeded from the magic link's
   // `?ref=`) is the fallback when the cookie was lost over the email round-trip.
-  const formReferral = (formData.get("referralCode") as string | null) ?? undefined;
-  const referralCode = cookieStore.get(REFERRAL_COOKIE)?.value ?? formReferral;
-  if (!referralCode) redirect("/invite-unavailable?reason=referral-required");
+  const formReferral =
+    (formData.get("referralCode") as string | null) ?? undefined;
+  const candidateReferralCode =
+    cookieStore.get(REFERRAL_COOKIE)?.value ?? formReferral;
+  const referralValidation = candidateReferralCode
+    ? await referralService.validateCode(candidateReferralCode)
+    : null;
+  const referralCode =
+    referralValidation?.ok && referralValidation.value.status === "valid"
+      ? candidateReferralCode
+      : undefined;
 
-  const referralValidation = await referralService.validateCode(referralCode);
-  if (!referralValidation.ok || referralValidation.value.status !== "valid") {
+  let hasPaidCheckout = false;
+  if (!referralCode && user.email) {
+    try {
+      hasPaidCheckout = await hasUnlinkedPaddleSubscriptionForEmail(user.email);
+    } catch {
+      return {
+        error: "Could not confirm your subscription. Please try again.",
+      };
+    }
+  }
+
+  if (!referralCode && !hasPaidCheckout) {
     const options = supabaseCookieOptions();
     cookieStore.set(REFERRAL_COOKIE, "", {
       domain: options.domain,
@@ -68,13 +87,15 @@ export async function createWorkspace(
       maxAge: 0,
     });
     const reason =
-      referralValidation.ok &&
+      referralValidation?.ok &&
       (referralValidation.value.status === "exhausted" ||
         referralValidation.value.status === "suspended")
         ? "limit-reached"
-        : referralValidation.ok
+        : referralValidation?.ok
           ? "invalid"
-          : "unavailable";
+          : candidateReferralCode
+            ? "unavailable"
+            : "referral-required";
     redirect(`/invite-unavailable?reason=${reason}`);
   }
 
@@ -109,17 +130,20 @@ export async function createWorkspace(
     return { error: "Could not record your acceptance. Please try again." };
   }
 
-  const reservation = await referralService.reserve({
-    code: referralCode,
-    referredUserId: user.userId,
-    referredEmail: user.email,
-  });
-  if (!reservation.ok) {
+  const reservation = referralCode
+    ? await referralService.reserve({
+        code: referralCode,
+        referredUserId: user.userId,
+        referredEmail: user.email,
+      })
+    : null;
+  if (reservation && !reservation.ok) {
     return { error: "Could not confirm your invitation. Please try again." };
   }
   if (
-    reservation.value.outcome !== "reserved" ||
-    !reservation.value.reservationId
+    reservation?.ok &&
+    (reservation.value.outcome !== "reserved" ||
+      !reservation.value.reservationId)
   ) {
     const options = supabaseCookieOptions();
     cookieStore.set(REFERRAL_COOKIE, "", {
@@ -151,7 +175,9 @@ export async function createWorkspace(
     redirectTo = result.redirectTo;
     tenantId = result.tenantId;
   } catch (err) {
-    await referralService.releaseReservation(reservation.value.reservationId);
+    if (reservation?.ok && reservation.value.reservationId) {
+      await referralService.releaseReservation(reservation.value.reservationId);
+    }
     const code = err instanceof Error ? err.message : "unknown";
     if (code === "subdomain_taken") {
       return { error: "That subdomain is already taken. Try another." };
@@ -162,10 +188,12 @@ export async function createWorkspace(
     return { error: "Could not create your workspace. Please try again." };
   }
 
-  await referralService.completeReservation(
-    reservation.value.reservationId,
-    tenantId,
-  );
+  if (reservation?.ok && reservation.value.reservationId) {
+    await referralService.completeReservation(
+      reservation.value.reservationId,
+      tenantId,
+    );
+  }
 
   // Clear the referral cookie so a later signup in the same browser can't
   // accidentally re-credit a stale code. Match the apex scope it was set with.

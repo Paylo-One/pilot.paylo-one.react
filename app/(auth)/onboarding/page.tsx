@@ -14,6 +14,7 @@ import {
   findPrimaryTenantSlug,
 } from "@/modules/identity-tenant/server";
 import { REFERRAL_COOKIE, referralService } from "@/modules/referral";
+import { hasUnlinkedPaddleSubscriptionForEmail } from "@/modules/billing/paddle-webhooks";
 import { tenantBaseUrl, activeApex } from "@/lib/config";
 import { OnboardingForm } from "./onboarding-form";
 
@@ -38,19 +39,35 @@ export default async function OnboardingPage({
   // fallback. Re-validated below regardless of source.
   const cookieRef = (await cookies()).get(REFERRAL_COOKIE)?.value;
   const { ref: urlRef } = await searchParams;
-  const referralCode = cookieRef ?? urlRef;
-  if (!referralCode) redirect("/invite-unavailable?reason=referral-required");
+  const candidateReferralCode = cookieRef ?? urlRef;
+  const validation = candidateReferralCode
+    ? await referralService.validateCode(candidateReferralCode)
+    : null;
+  const referralCode =
+    validation?.ok && validation.value.status === "valid"
+      ? candidateReferralCode
+      : undefined;
 
-  const validation = await referralService.validateCode(referralCode);
-  if (!validation.ok || validation.value.status !== "valid") {
+  let hasPaidCheckout = false;
+  if (!referralCode && user.email) {
+    try {
+      hasPaidCheckout = await hasUnlinkedPaddleSubscriptionForEmail(user.email);
+    } catch {
+      redirect("/invite-unavailable?reason=unavailable");
+    }
+  }
+
+  if (!referralCode && !hasPaidCheckout) {
     const reason =
-      validation.ok &&
+      validation?.ok &&
       (validation.value.status === "exhausted" ||
         validation.value.status === "suspended")
         ? "limit-reached"
-        : validation.ok
+        : validation?.ok
           ? "invalid"
-          : "unavailable";
+          : candidateReferralCode
+            ? "unavailable"
+            : "referral-required";
     redirect(`/invite-unavailable?reason=${reason}`);
   }
 
@@ -59,12 +76,20 @@ export default async function OnboardingPage({
       <RegistrationProgress current={3} />
 
       <p className="eyebrow">Identity verified</p>
-      <h1 style={{ fontSize: "var(--text-h1)", margin: "var(--space-xs) 0 var(--space-sm)" }}>
+      <h1
+        style={{
+          fontSize: "var(--text-h1)",
+          margin: "var(--space-xs) 0 var(--space-sm)",
+        }}
+      >
         Set up your private workspace
       </h1>
       <p
         className="text-secondary"
-        style={{ marginBottom: "var(--space-lg)", fontSize: "var(--text-small)" }}
+        style={{
+          marginBottom: "var(--space-lg)",
+          fontSize: "var(--text-small)",
+        }}
       >
         Choose a name and your own Paylo.one address. Every row, file, and
         reference stays isolated inside this workspace.
