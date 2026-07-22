@@ -8,13 +8,65 @@ vi.mock("@/lib/supabase/secret", () => ({
   createSupabaseSecretClient: () => state.db,
 }));
 
-import { createPaddlePortalSession, resolvePaddleCustomerIdForTenant } from "./paddle";
+import {
+  createPaddlePortalSession,
+  hasPaddleSubscriptionForEmail,
+  resolvePaddleCustomerIdForTenant,
+} from "./paddle";
 
 let db: FakeSupabase;
 
 beforeEach(() => {
   db = createFakeSupabase();
   state.db = db;
+});
+
+describe("hasPaddleSubscriptionForEmail", () => {
+  it("accepts an access-granting subscription from the webhook mirror", async () => {
+    const hasMirroredSubscription = vi.fn().mockResolvedValue(true);
+    const findCustomerIds = vi.fn();
+    const hasAccessGrantingSubscription = vi.fn();
+
+    await expect(
+      hasPaddleSubscriptionForEmail(" Buyer@Example.com ", {
+        hasMirroredSubscription,
+        findCustomerIds,
+        hasAccessGrantingSubscription,
+      }),
+    ).resolves.toBe(true);
+
+    expect(hasMirroredSubscription).toHaveBeenCalledWith("buyer@example.com");
+    expect(findCustomerIds).not.toHaveBeenCalled();
+  });
+
+  it("falls back to Paddle when the mirror lookup fails", async () => {
+    const hasMirroredSubscription = vi
+      .fn()
+      .mockRejectedValue(new Error("mirror unavailable"));
+    const findCustomerIds = vi.fn().mockResolvedValue(["ctm_1"]);
+    const hasAccessGrantingSubscription = vi.fn().mockResolvedValue(true);
+
+    await expect(
+      hasPaddleSubscriptionForEmail("buyer@example.com", {
+        hasMirroredSubscription,
+        findCustomerIds,
+        hasAccessGrantingSubscription,
+      }),
+    ).resolves.toBe(true);
+
+    expect(findCustomerIds).toHaveBeenCalledWith("buyer@example.com");
+    expect(hasAccessGrantingSubscription).toHaveBeenCalledWith(["ctm_1"]);
+  });
+
+  it("rejects an email with no Paddle customer", async () => {
+    await expect(
+      hasPaddleSubscriptionForEmail("missing@example.com", {
+        hasMirroredSubscription: vi.fn().mockResolvedValue(false),
+        findCustomerIds: vi.fn().mockResolvedValue([]),
+        hasAccessGrantingSubscription: vi.fn().mockResolvedValue(false),
+      }),
+    ).resolves.toBe(false);
+  });
 });
 
 describe("resolvePaddleCustomerIdForTenant", () => {

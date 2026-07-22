@@ -21,7 +21,7 @@ import {
 } from "@/modules/identity-tenant/server";
 import { recordLegalAcceptances } from "@/modules/legal/server";
 import { REFERRAL_COOKIE, referralService } from "@/modules/referral";
-import { hasUnlinkedPaddleSubscriptionForEmail } from "@/modules/billing/paddle-webhooks";
+import { hasPaddleSubscriptionForEmail } from "@/modules/billing/paddle";
 import { supabaseCookieOptions } from "@/lib/supabase/cookies";
 import { isSelectableSubdomain } from "@/lib/tenant/host";
 
@@ -69,8 +69,9 @@ export async function createWorkspace(
   let hasPaidCheckout = false;
   if (!referralCode && user.email) {
     try {
-      hasPaidCheckout = await hasUnlinkedPaddleSubscriptionForEmail(user.email);
-    } catch {
+      hasPaidCheckout = await hasPaddleSubscriptionForEmail(user.email);
+    } catch (error) {
+      console.error("[billing] paid signup eligibility lookup failed", error);
       return {
         error: "Could not confirm your subscription. Please try again.",
       };

@@ -14,7 +14,7 @@ import {
   findPrimaryTenantSlug,
 } from "@/modules/identity-tenant/server";
 import { REFERRAL_COOKIE, referralService } from "@/modules/referral";
-import { hasUnlinkedPaddleSubscriptionForEmail } from "@/modules/billing/paddle-webhooks";
+import { hasPaddleSubscriptionForEmail } from "@/modules/billing/paddle";
 import { tenantBaseUrl, activeApex } from "@/lib/config";
 import { OnboardingForm } from "./onboarding-form";
 
@@ -51,8 +51,9 @@ export default async function OnboardingPage({
   let hasPaidCheckout = false;
   if (!referralCode && user.email) {
     try {
-      hasPaidCheckout = await hasUnlinkedPaddleSubscriptionForEmail(user.email);
-    } catch {
+      hasPaidCheckout = await hasPaddleSubscriptionForEmail(user.email);
+    } catch (error) {
+      console.error("[billing] paid signup eligibility lookup failed", error);
       redirect("/invite-unavailable?reason=unavailable");
     }
   }
