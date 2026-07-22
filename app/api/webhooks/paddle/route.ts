@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { paddleWebhookSecret } from "@/lib/config";
 import { unmarshalPaddleWebhook } from "@/modules/billing/paddle";
 import { processPaddleWebhookEvent } from "@/modules/billing/paddle-webhooks";
+import { isLivePaddleWebhookRequest } from "@/modules/billing/paddle-webhook-ips";
 
 /**
  * POST /api/webhooks/paddle — Paddle notification destination endpoint.
@@ -24,6 +25,19 @@ import { processPaddleWebhookEvent } from "@/modules/billing/paddle-webhooks";
  * replayed event ids are acknowledged without reprocessing.
  */
 export async function POST(request: Request) {
+  if (process.env.PADDLE_ENV === "production") {
+    try {
+      if (!(await isLivePaddleWebhookRequest(request))) {
+        return NextResponse.json({ error: "Webhook source is not allowed." }, { status: 403 });
+      }
+    } catch (error) {
+      // Fail closed if Paddle's authoritative list cannot be refreshed. A 503
+      // keeps the delivery retryable instead of accepting an unverified source.
+      console.error("[paddle-webhook] could not verify Paddle source IP", error);
+      return NextResponse.json({ error: "Webhook source verification unavailable." }, { status: 503 });
+    }
+  }
+
   const rawBody = await request.text();
 
   try {
