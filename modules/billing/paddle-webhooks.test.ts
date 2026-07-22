@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createFakeSupabase, type FakeSupabase } from "../../test/fakes/fake-supabase";
+import {
+  createFakeSupabase,
+  type FakeSupabase,
+} from "../../test/fakes/fake-supabase";
 
 const state = vi.hoisted(() => ({ db: null as unknown }));
 
@@ -9,6 +12,7 @@ vi.mock("@/lib/supabase/secret", () => ({
 }));
 
 import {
+  hasUnlinkedPaddleSubscriptionForEmail,
   linkPaddleCustomerByEmail,
   linkPaddleCustomerToTenant,
   processPaddleWebhookEvent,
@@ -50,7 +54,10 @@ function subscriptionEvent(overrides: {
   status?: string;
   customerId?: string;
   customData?: Record<string, unknown> | null;
-  scheduledChange?: { action: "cancel" | "pause" | "resume"; effectiveAt: string } | null;
+  scheduledChange?: {
+    action: "cancel" | "pause" | "resume";
+    effectiveAt: string;
+  } | null;
 }): PaddleWebhookEvent {
   return {
     eventId: overrides.eventId ?? "evt_sub_1",
@@ -114,7 +121,10 @@ describe("customer upsert + linking", () => {
 
   it("links via custom_data.tenant_id and never blanks an existing link", async () => {
     await processPaddleWebhookEvent(
-      customerEvent({ eventId: "evt_1", customData: { tenant_id: "tenant-1" } }),
+      customerEvent({
+        eventId: "evt_1",
+        customData: { tenant_id: "tenant-1" },
+      }),
     );
     expect(db.tables.paddle_customers[0]!.tenant_id).toBe("tenant-1");
 
@@ -130,6 +140,50 @@ describe("customer upsert + linking", () => {
       email: "renamed@example.com",
       tenant_id: "tenant-1",
     });
+  });
+});
+
+describe("self-service signup eligibility", () => {
+  it("accepts a verified email with an access-granting unlinked subscription", async () => {
+    db = createFakeSupabase({
+      paddle_customers: [
+        { customer_id: "ctm_1", email: "Buyer@Example.com", tenant_id: null },
+      ],
+      paddle_subscriptions_unlinked: [
+        {
+          subscription_id: "sub_1",
+          customer_id: "ctm_1",
+          status: "active",
+          promoted_at: null,
+        },
+      ],
+    });
+    state.db = db;
+
+    await expect(
+      hasUnlinkedPaddleSubscriptionForEmail("buyer@example.com"),
+    ).resolves.toBe(true);
+  });
+
+  it("rejects a customer without an access-granting subscription", async () => {
+    db = createFakeSupabase({
+      paddle_customers: [
+        { customer_id: "ctm_1", email: "buyer@example.com", tenant_id: null },
+      ],
+      paddle_subscriptions_unlinked: [
+        {
+          subscription_id: "sub_1",
+          customer_id: "ctm_1",
+          status: "canceled",
+          promoted_at: null,
+        },
+      ],
+    });
+    state.db = db;
+
+    await expect(
+      hasUnlinkedPaddleSubscriptionForEmail("buyer@example.com"),
+    ).resolves.toBe(false);
   });
 });
 
@@ -150,7 +204,10 @@ describe("subscription mirroring", () => {
 
   it("upserts tenant_subscriptions for a linked customer with mapped status", async () => {
     await processPaddleWebhookEvent(
-      customerEvent({ eventId: "evt_c", customData: { tenant_id: "tenant-1" } }),
+      customerEvent({
+        eventId: "evt_c",
+        customData: { tenant_id: "tenant-1" },
+      }),
     );
     await processPaddleWebhookEvent(subscriptionEvent({ eventId: "evt_s" }));
 
@@ -180,7 +237,10 @@ describe("subscription mirroring", () => {
 
   it("maps a paused subscription to the internal suspended state", async () => {
     await processPaddleWebhookEvent(
-      customerEvent({ eventId: "evt_c", customData: { tenant_id: "tenant-1" } }),
+      customerEvent({
+        eventId: "evt_c",
+        customData: { tenant_id: "tenant-1" },
+      }),
     );
     await processPaddleWebhookEvent(
       subscriptionEvent({ eventId: "evt_s", status: "paused" }),
@@ -190,12 +250,18 @@ describe("subscription mirroring", () => {
 
   it("mirrors a scheduled change without touching the status", async () => {
     await processPaddleWebhookEvent(
-      customerEvent({ eventId: "evt_c", customData: { tenant_id: "tenant-1" } }),
+      customerEvent({
+        eventId: "evt_c",
+        customData: { tenant_id: "tenant-1" },
+      }),
     );
     await processPaddleWebhookEvent(
       subscriptionEvent({
         eventId: "evt_s",
-        scheduledChange: { action: "cancel", effectiveAt: "2026-08-21T00:00:00Z" },
+        scheduledChange: {
+          action: "cancel",
+          effectiveAt: "2026-08-21T00:00:00Z",
+        },
       }),
     );
     expect(db.tables.tenant_subscriptions[0]!).toMatchObject({
@@ -215,7 +281,10 @@ describe("subscription mirroring", () => {
       status: "trialing",
     });
     await processPaddleWebhookEvent(
-      customerEvent({ eventId: "evt_c", customData: { tenant_id: "tenant-1" } }),
+      customerEvent({
+        eventId: "evt_c",
+        customData: { tenant_id: "tenant-1" },
+      }),
     );
     await processPaddleWebhookEvent(subscriptionEvent({ eventId: "evt_s" }));
 
@@ -230,7 +299,10 @@ describe("subscription mirroring", () => {
 
   it("ignores an event older than the last applied event (out-of-order guard)", async () => {
     await processPaddleWebhookEvent(
-      customerEvent({ eventId: "evt_c", customData: { tenant_id: "tenant-1" } }),
+      customerEvent({
+        eventId: "evt_c",
+        customData: { tenant_id: "tenant-1" },
+      }),
     );
     await processPaddleWebhookEvent(
       subscriptionEvent({
@@ -249,7 +321,11 @@ describe("subscription mirroring", () => {
       }),
     );
 
-    expect(stale).toMatchObject({ duplicate: false, handled: true, skipped: true });
+    expect(stale).toMatchObject({
+      duplicate: false,
+      handled: true,
+      skipped: true,
+    });
     expect(db.tables.tenant_subscriptions[0]!.status).toBe("active");
     // The stale event is still ledgered.
     expect(db.tables.billing_events).toHaveLength(3);
@@ -257,7 +333,10 @@ describe("subscription mirroring", () => {
 
   it("guards out-of-order delivery for unlinked (staged) subscriptions too", async () => {
     await processPaddleWebhookEvent(
-      subscriptionEvent({ eventId: "evt_newer", occurredAt: "2026-07-22T10:00:00Z" }),
+      subscriptionEvent({
+        eventId: "evt_newer",
+        occurredAt: "2026-07-22T10:00:00Z",
+      }),
     );
     const stale = await processPaddleWebhookEvent(
       subscriptionEvent({
@@ -274,7 +353,10 @@ describe("subscription mirroring", () => {
 describe("transaction.completed", () => {
   it("touches period fields only — no status or access side effects", async () => {
     await processPaddleWebhookEvent(
-      customerEvent({ eventId: "evt_c", customData: { tenant_id: "tenant-1" } }),
+      customerEvent({
+        eventId: "evt_c",
+        customData: { tenant_id: "tenant-1" },
+      }),
     );
     await processPaddleWebhookEvent(subscriptionEvent({ eventId: "evt_s" }));
 
@@ -321,8 +403,12 @@ describe("linking helpers", () => {
     });
     // Staged row is stamped promoted, not deleted (fulfilment state).
     expect(db.tables.paddle_subscriptions_unlinked).toHaveLength(1);
-    expect(db.tables.paddle_subscriptions_unlinked[0]!.promoted_at).toBeTruthy();
-    expect(db.tables.paddle_subscriptions_unlinked[0]!.promoted_tenant_id).toBe("tenant-9");
+    expect(
+      db.tables.paddle_subscriptions_unlinked[0]!.promoted_at,
+    ).toBeTruthy();
+    expect(db.tables.paddle_subscriptions_unlinked[0]!.promoted_tenant_id).toBe(
+      "tenant-9",
+    );
   });
 
   it("customer.updated carrying custom_data.tenant_id promotes staged subscriptions", async () => {
@@ -348,7 +434,10 @@ describe("linking helpers", () => {
     );
     await processPaddleWebhookEvent(subscriptionEvent({ eventId: "evt_s" }));
 
-    const result = await linkPaddleCustomerByEmail("buyer@example.com", "tenant-9");
+    const result = await linkPaddleCustomerByEmail(
+      "buyer@example.com",
+      "tenant-9",
+    );
 
     expect(result).toEqual({ linked: 1, promoted: 1 });
     expect(db.tables.paddle_customers[0]!.tenant_id).toBe("tenant-9");
@@ -357,9 +446,15 @@ describe("linking helpers", () => {
 
   it("linkPaddleCustomerByEmail never re-links an already linked customer", async () => {
     await processPaddleWebhookEvent(
-      customerEvent({ eventId: "evt_c", customData: { tenant_id: "tenant-1" } }),
+      customerEvent({
+        eventId: "evt_c",
+        customData: { tenant_id: "tenant-1" },
+      }),
     );
-    const result = await linkPaddleCustomerByEmail("buyer@example.com", "tenant-2");
+    const result = await linkPaddleCustomerByEmail(
+      "buyer@example.com",
+      "tenant-2",
+    );
     expect(result).toEqual({ linked: 0, promoted: 0 });
     expect(db.tables.paddle_customers[0]!.tenant_id).toBe("tenant-1");
   });

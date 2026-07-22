@@ -13,7 +13,7 @@ export function OnboardingForm({
 }: {
   apexSuffix: string;
   /** Threaded into the action so referral capture survives a lost cookie. */
-  referralCode: string;
+  referralCode?: string;
 }) {
   const [state, formAction, pending] = useActionState(createWorkspace, initial);
   const [step, setStep] = useState<WizardStep>(1);
@@ -31,8 +31,13 @@ export function OnboardingForm({
 
   return (
     <form className="card onboarding-wizard" action={formAction}>
-      <input type="hidden" name="referralCode" value={referralCode} />
-      <ol className="onboarding-wizard__progress" aria-label="Workspace setup progress">
+      {referralCode ? (
+        <input type="hidden" name="referralCode" value={referralCode} />
+      ) : null}
+      <ol
+        className="onboarding-wizard__progress"
+        aria-label="Workspace setup progress"
+      >
         {["Workspace", "Address", "Confirm"].map((label, index) => {
           const number = (index + 1) as WizardStep;
           return (
@@ -128,9 +133,7 @@ export function OnboardingForm({
               .{apexSuffix}
             </span>
           </div>
-          <p className="field__hint">
-            Use 3–32 letters, numbers, or hyphens.
-          </p>
+          <p className="field__hint">Use 3–32 letters, numbers, or hyphens.</p>
         </div>
 
         <div className="onboarding-wizard__actions">
@@ -173,7 +176,7 @@ export function OnboardingForm({
           </div>
           <div>
             <dt>Access</dt>
-            <dd>Private and referral verified</dd>
+            <dd>Private and identity verified</dd>
           </div>
         </dl>
 

@@ -66,7 +66,10 @@ export interface PaddleSubscriptionNotification {
   readonly billingCycle?: { readonly interval?: string | null } | null;
   readonly scheduledChange?: PaddleScheduledChangeNotification | null;
   readonly items?: ReadonlyArray<{
-    readonly price?: { readonly id?: string | null; readonly productId?: string | null } | null;
+    readonly price?: {
+      readonly id?: string | null;
+      readonly productId?: string | null;
+    } | null;
     readonly trialDates?: PaddleTimePeriod | null;
   }>;
 }
@@ -91,12 +94,17 @@ export const HANDLED_PADDLE_EVENT_TYPES = [
 
 // --- Ledger (idempotency) ----------------------------------------------------
 
-function customDataTenantId(customData?: PaddleCustomData | null): string | null {
+function customDataTenantId(
+  customData?: PaddleCustomData | null,
+): string | null {
   const value = customData?.["tenant_id"];
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-async function recordEvent(db: Db, event: PaddleWebhookEvent): Promise<{ duplicate: boolean }> {
+async function recordEvent(
+  db: Db,
+  event: PaddleWebhookEvent,
+): Promise<{ duplicate: boolean }> {
   const { error } = await db.from("billing_events").insert({
     provider: "paddle",
     provider_event_id: event.eventId,
@@ -144,12 +152,15 @@ async function handleCustomerEvent(
   if (readError) throw new Error(readError.message);
 
   // Never blank an established link: custom_data wins, existing link second.
-  const tenantId = customDataTenantId(customer.customData) ?? existing?.tenant_id ?? null;
+  const tenantId =
+    customDataTenantId(customer.customData) ?? existing?.tenant_id ?? null;
 
-  const { error } = await db.from("paddle_customers").upsert(
-    { customer_id: customer.id, email: customer.email, tenant_id: tenantId },
-    { onConflict: "customer_id" },
-  );
+  const { error } = await db
+    .from("paddle_customers")
+    .upsert(
+      { customer_id: customer.id, email: customer.email, tenant_id: tenantId },
+      { onConflict: "customer_id" },
+    );
   if (error) throw new Error(error.message);
 
   // A newly-arrived link promotes any staged subscriptions for this customer.
@@ -205,7 +216,8 @@ function subscriptionMirror(
     // TODO(plan-keys): provisional mapping until plan_starter/plan_pro/
     // plan_advanced exist — see modules/billing/paddle-plans.ts.
     plan_key: paddlePlanKeyForPriceId(priceId),
-    billing_interval: subscription.billingCycle?.interval === "year" ? "year" : "month",
+    billing_interval:
+      subscription.billingCycle?.interval === "year" ? "year" : "month",
     provider_customer_id: subscription.customerId,
     provider_subscription_id: subscription.id,
     paddle_price_id: priceId,
@@ -358,7 +370,7 @@ async function isStaleSubscriptionEvent(
   if (stagedError) throw new Error(stagedError.message);
   return Boolean(
     staged?.last_event_occurred_at &&
-      eventTime < Date.parse(staged.last_event_occurred_at),
+    eventTime < Date.parse(staged.last_event_occurred_at),
   );
 }
 
@@ -400,7 +412,11 @@ async function handleTransactionCompleted(
 ): Promise<{ tenantId: string | null }> {
   const transaction = event.data;
   const tenantId = transaction.customerId
-    ? await resolveTenantForCustomer(db, transaction.customerId, transaction.customData)
+    ? await resolveTenantForCustomer(
+        db,
+        transaction.customerId,
+        transaction.customData,
+      )
     : null;
 
   // Ledger + period touch only; no status or access side effects.
@@ -488,7 +504,10 @@ async function promoteUnlinkedSubscriptions(
     // Promotion stamps the staged row; it is never deleted (fulfilment state).
     const { error: stampError } = await db
       .from("paddle_subscriptions_unlinked")
-      .update({ promoted_tenant_id: tenantId, promoted_at: new Date().toISOString() })
+      .update({
+        promoted_tenant_id: tenantId,
+        promoted_at: new Date().toISOString(),
+      })
       .eq("subscription_id", row.subscription_id);
     if (stampError) throw new Error(stampError.message);
   }
@@ -537,10 +556,51 @@ export async function linkPaddleCustomerByEmail(
   let promoted = 0;
   const customers = (data ?? []) as Array<{ customer_id: string }>;
   for (const customer of customers) {
-    const result = await linkPaddleCustomerToTenant(customer.customer_id, tenantId, db);
+    const result = await linkPaddleCustomerToTenant(
+      customer.customer_id,
+      tenantId,
+      db,
+    );
     promoted += result.promoted;
   }
   return { linked: customers.length, promoted };
+}
+
+/**
+ * Whether a verified email owns an anonymous Paddle subscription that can be
+ * linked during self-service onboarding. This is deliberately a server-only
+ * lookup: raw Paddle customer and subscription rows are never exposed through
+ * end-user RLS policies.
+ */
+export async function hasUnlinkedPaddleSubscriptionForEmail(
+  email: string,
+  db: Db = createSupabaseSecretClient(),
+): Promise<boolean> {
+  const normalised = email.trim();
+  if (!normalised) return false;
+
+  const { data: customerRows, error: customerError } = await db
+    .from("paddle_customers")
+    .select("customer_id")
+    .ilike("email", normalised)
+    .is("tenant_id", null);
+  if (customerError) throw new Error(customerError.message);
+
+  const customerIds = (customerRows ?? []).map(
+    (row: { customer_id: string }) => row.customer_id,
+  );
+  if (customerIds.length === 0) return false;
+
+  const { data: subscriptions, error: subscriptionError } = await db
+    .from("paddle_subscriptions_unlinked")
+    .select("subscription_id")
+    .in("customer_id", customerIds)
+    .in("status", ["active", "trialing", "past_due"])
+    .is("promoted_at", null)
+    .limit(1);
+  if (subscriptionError) throw new Error(subscriptionError.message);
+
+  return (subscriptions ?? []).length > 0;
 }
 
 // --- Entry point -----------------------------------------------------------------
@@ -556,7 +616,9 @@ export async function processPaddleWebhookEvent(
   if (recorded.duplicate) return { duplicate: true, handled: true };
 
   try {
-    let outcome: { tenantId: string | null; skipped?: boolean } = { tenantId: null };
+    let outcome: { tenantId: string | null; skipped?: boolean } = {
+      tenantId: null,
+    };
     let handled = true;
 
     switch (event.eventType) {
@@ -587,7 +649,10 @@ export async function processPaddleWebhookEvent(
         break;
     }
 
-    await markProcessed(db, { eventId: event.eventId, tenantId: outcome.tenantId });
+    await markProcessed(db, {
+      eventId: event.eventId,
+      tenantId: outcome.tenantId,
+    });
     return { duplicate: false, handled, skipped: outcome.skipped };
   } catch (error) {
     await markProcessed(db, {
