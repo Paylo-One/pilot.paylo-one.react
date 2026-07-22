@@ -142,6 +142,10 @@ One-time operator setup (manual — do this in the Paddle dashboard matching
    authenticates outbound calls, the signing secret verifies inbound webhooks.
 4. Set `PADDLE_ENV` (`sandbox` or `production`) and the six
    `PADDLE_PRICE_*` ids (same variable names as the marketing repo).
+5. In production, the webhook route fetches Paddle's current live `/32` CIDRs
+   from `https://api.paddle.com/ips`, caches them for one hour, and rejects any
+   other Vercel-forwarded source IP. Do not replace this with a hard-coded list;
+   configure the Vercel WAF to bypass bot checks for the same webhook path.
 
 Until the secret is configured the endpoint answers 500, so Paddle keeps
 retrying and no events are lost; invalid signatures answer 400 and write
