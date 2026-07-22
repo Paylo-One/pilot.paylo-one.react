@@ -13,7 +13,10 @@ import "server-only";
 import { Environment, NodeRuntime, Paddle, Webhooks } from "@paddle/paddle-node-sdk";
 import { paddleApiKey, paddleEnv, paddleWebhookSecret } from "@/lib/config";
 import { createSupabaseSecretClient } from "@/lib/supabase/secret";
-import type { PaddleWebhookEvent } from "./paddle-webhooks";
+import {
+  hasUnlinkedPaddleSubscriptionForEmail,
+  type PaddleWebhookEvent,
+} from "./paddle-webhooks";
 
 /** Configured Paddle API client. Environment is explicit, never defaulted. */
 export function createPaddleClient(): Paddle {
@@ -21,6 +24,62 @@ export function createPaddleClient(): Paddle {
     environment:
       paddleEnv() === "production" ? Environment.production : Environment.sandbox,
   });
+}
+
+interface PaddleSignupEligibilityDeps {
+  readonly hasMirroredSubscription: (email: string) => Promise<boolean>;
+  readonly findCustomerIds: (email: string) => Promise<string[]>;
+  readonly hasAccessGrantingSubscription: (
+    customerIds: string[],
+  ) => Promise<boolean>;
+}
+
+function defaultSignupEligibilityDeps(): PaddleSignupEligibilityDeps {
+  const paddle = createPaddleClient();
+  return {
+    hasMirroredSubscription: hasUnlinkedPaddleSubscriptionForEmail,
+    findCustomerIds: async (email) => {
+      const customers = await paddle.customers
+        .list({ email: [email], perPage: 100 })
+        .next();
+      return customers.map((customer) => customer.id);
+    },
+    hasAccessGrantingSubscription: async (customerIds) => {
+      if (customerIds.length === 0) return false;
+      const subscriptions = await paddle.subscriptions
+        .list({
+          customerId: customerIds,
+          status: ["active", "trialing", "past_due"],
+          perPage: 1,
+        })
+        .next();
+      return subscriptions.length > 0;
+    },
+  };
+}
+
+/**
+ * Verify self-service signup eligibility for an authenticated email.
+ *
+ * The webhook mirror is the fast path. Paddle's API is the authoritative
+ * fallback when webhook delivery or migration rollout lags behind account
+ * setup, so paid users are never forced through the referral gate.
+ */
+export async function hasPaddleSubscriptionForEmail(
+  email: string,
+  deps: PaddleSignupEligibilityDeps = defaultSignupEligibilityDeps(),
+): Promise<boolean> {
+  const normalised = email.trim().toLowerCase();
+  if (!normalised) return false;
+
+  try {
+    if (await deps.hasMirroredSubscription(normalised)) return true;
+  } catch {
+    // Fall through to Paddle: a mirror outage must not reject a paid customer.
+  }
+
+  const customerIds = await deps.findCustomerIds(normalised);
+  return deps.hasAccessGrantingSubscription(customerIds);
 }
 
 /**
