@@ -112,6 +112,47 @@ export function resolveMemoReferenceItems(
   return resolved;
 }
 
+/** An extracted item (decision/risk) paired with the REAL source item it drew from. */
+export interface AttributedExtraction<T> {
+  readonly item: T;
+  /** id of the first resolved real source item — never null (unresolved are dropped). */
+  readonly sourceItemId: string;
+}
+export interface PartitionedExtractions<T> {
+  readonly attributed: AttributedExtraction<T>[];
+  /** How many extracted items were dropped for lacking real attribution. */
+  readonly dropped: number;
+}
+
+/**
+ * Enforce the trust contract on extracted decisions/risks (the memo's sibling
+ * agents). Keep only items whose model-supplied tokens resolve to >=1 REAL
+ * retrieved item, pairing each survivor with that item's id for `source_item_id`.
+ * Items resolving to zero real items are DROPPED — persisting them would write an
+ * unattributed AI claim into the decision log / risk register, the same PR-1
+ * failure the memo path already guards against. No fallback, no fabrication.
+ * See governance decision log 2026-07-20 (memo source-attribution honesty),
+ * follow-up "audit sibling agents for the same anti-pattern".
+ */
+export function partitionAttributedExtractions<
+  T extends { readonly sourceItemIds: readonly string[] },
+>(
+  items: readonly T[],
+  tokenToItem: ReadonlyMap<string, StoredSourceItem>,
+): PartitionedExtractions<T> {
+  const attributed: AttributedExtraction<T>[] = [];
+  let dropped = 0;
+  for (const item of items) {
+    const [first] = resolveMemoReferenceItems(item.sourceItemIds, tokenToItem);
+    if (!first) {
+      dropped += 1;
+      continue;
+    }
+    attributed.push({ item, sourceItemId: first.id });
+  }
+  return { attributed, dropped };
+}
+
 function toReferences(
   items: readonly StoredSourceItem[],
   confidence: number,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { StoredSourceItem } from "@/modules/knowledge-store/server";
 import {
   buildAttributedMemoPayload,
+  partitionAttributedExtractions,
   resolveMemoReferenceItems,
   type MemoInput,
 } from "./memo-attribution";
@@ -139,5 +140,44 @@ describe("buildAttributedMemoPayload", () => {
     };
     const out = buildAttributedMemoPayload(memo, map);
     expect(out.sections[0]?.references[0]?.confidence).toBe(0.7);
+  });
+});
+
+describe("partitionAttributedExtractions", () => {
+  const items = [item({ id: "a" }), item({ id: "b" })];
+  const map = tokenMap(items);
+
+  it("keeps items with a resolvable token and pairs the first real source id", () => {
+    const out = partitionAttributedExtractions(
+      [
+        { title: "Kept", sourceItemIds: ["item-2"] },
+        { title: "Also kept", sourceItemIds: ["item-99", "item-1"] },
+      ],
+      map,
+    );
+    expect(out.dropped).toBe(0);
+    expect(out.attributed.map((a) => [a.item.title, a.sourceItemId])).toEqual([
+      ["Kept", "b"],
+      ["Also kept", "a"],
+    ]);
+  });
+
+  it("DROPS extracted rows that resolve to zero real items (no unattributed write)", () => {
+    const out = partitionAttributedExtractions(
+      [
+        { title: "Orphan token", sourceItemIds: ["item-99"] },
+        { title: "No tokens", sourceItemIds: [] },
+        { title: "Real", sourceItemIds: ["item-1"] },
+      ],
+      map,
+    );
+    expect(out.attributed.map((a) => a.item.title)).toEqual(["Real"]);
+    expect(out.dropped).toBe(2);
+  });
+
+  it("returns an empty partition for no input", () => {
+    const out = partitionAttributedExtractions([], map);
+    expect(out.attributed).toEqual([]);
+    expect(out.dropped).toBe(0);
   });
 });

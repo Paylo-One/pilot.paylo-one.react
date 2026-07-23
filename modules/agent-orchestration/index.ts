@@ -41,7 +41,11 @@ import {
 } from "@/modules/model-gateway";
 import { appendExternalSignalsToBriefing } from "@/modules/news/briefing";
 import { checkBriefingLimit } from "@/modules/briefing/server";
-import { buildAttributedMemoPayload, clamp } from "./memo-attribution";
+import {
+  buildAttributedMemoPayload,
+  clamp,
+  partitionAttributedExtractions,
+} from "./memo-attribution";
 
 export type AgentKind =
   | "daily_memo"
@@ -369,17 +373,6 @@ function buildContext(items: readonly StoredSourceItem[]): {
     };
   });
   return { context, tokenToItem };
-}
-
-function firstItemId(
-  tokens: readonly string[],
-  tokenToItem: Map<string, StoredSourceItem>,
-): string | null {
-  for (const t of tokens) {
-    const item = tokenToItem.get(t.trim());
-    if (item) return item.id;
-  }
-  return null;
 }
 
 const ActionsSchema = z.object({
@@ -718,14 +711,20 @@ async function runDecisionExtraction(
   const parsed = DecisionsSchema.safeParse(result.value.output);
   if (!parsed.success) return ok({ agentRunId, kind: "decision_extraction" });
 
-  const rows = parsed.data.decisions.map((d) => ({
+  // Trust contract: a decision the model cannot attribute to a REAL retrieved
+  // item is dropped, not written unattributed into the decision log (2026-07-20).
+  const { attributed, dropped } = partitionAttributedExtractions(
+    parsed.data.decisions,
+    tokenToItem,
+  );
+  const rows = attributed.map(({ item: d, sourceItemId }) => ({
     tenant_id: ctx.tenantId,
     title: clamp(d.title, 200),
     rationale: clamp(d.rationale, 2000),
     context: clamp(d.context, 2000),
     status: VALID_DECISION_STATUS.has(d.status) ? d.status : "made",
     decided_at: new Date().toISOString(),
-    source_item_id: firstItemId(d.sourceItemIds, tokenToItem),
+    source_item_id: sourceItemId,
     prompt_version_id: result.value.promptVersionDbId,
   }));
   if (rows.length > 0) await secret.from("decisions").insert(rows);
@@ -733,7 +732,7 @@ async function runDecisionExtraction(
   await auditService.record(ctx, {
     action: "pipeline.decision_extraction.run",
     target: ctx.tenantId,
-    metadata: { extracted: rows.length },
+    metadata: { extracted: rows.length, droppedUnattributed: dropped },
   });
   return ok({ agentRunId, kind: "decision_extraction" });
 }
@@ -763,7 +762,13 @@ async function runRiskDetection(
   const parsed = RisksSchema.safeParse(result.value.output);
   if (!parsed.success) return ok({ agentRunId, kind: "risk_detection" });
 
-  const rows = parsed.data.risks.map((r) => ({
+  // Trust contract: a risk the model cannot attribute to a REAL retrieved item
+  // is dropped, not written unattributed into the risk register (2026-07-20).
+  const { attributed, dropped } = partitionAttributedExtractions(
+    parsed.data.risks,
+    tokenToItem,
+  );
+  const rows = attributed.map(({ item: r, sourceItemId }) => ({
     tenant_id: ctx.tenantId,
     title: clamp(r.title, 200),
     description: clamp(r.description, 2000),
@@ -771,7 +776,7 @@ async function runRiskDetection(
     severity: VALID_SEVERITY.has(r.severity) ? r.severity : "medium",
     likelihood: VALID_LIKELIHOOD.has(r.likelihood) ? r.likelihood : "possible",
     status: "active",
-    source_item_id: firstItemId(r.sourceItemIds, tokenToItem),
+    source_item_id: sourceItemId,
     prompt_version_id: result.value.promptVersionDbId,
   }));
   if (rows.length > 0) await secret.from("risks").insert(rows);
@@ -779,7 +784,7 @@ async function runRiskDetection(
   await auditService.record(ctx, {
     action: "pipeline.risk_detection.run",
     target: ctx.tenantId,
-    metadata: { extracted: rows.length },
+    metadata: { extracted: rows.length, droppedUnattributed: dropped },
   });
   return ok({ agentRunId, kind: "risk_detection" });
 }
