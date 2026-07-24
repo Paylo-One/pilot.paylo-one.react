@@ -43,6 +43,7 @@ import { appendExternalSignalsToBriefing } from "@/modules/news/briefing";
 import { checkBriefingLimit } from "@/modules/briefing/server";
 import {
   buildAttributedMemoPayload,
+  buildAttributedSuggestedActions,
   clamp,
   partitionAttributedExtractions,
 } from "./memo-attribution";
@@ -639,7 +640,7 @@ async function runActionExtraction(
   const secret = createSupabaseSecretClient();
   const items = await listRecentSourceItems(ctx.tenantId, BATCH_ITEM_LIMIT);
   if (items.length === 0) return ok({ agentRunId, kind: "action_extraction" });
-  const { context } = buildContext(items);
+  const { context, tokenToItem } = buildContext(items);
 
   let result;
   try {
@@ -661,26 +662,41 @@ async function runActionExtraction(
   const parsed = ActionsSchema.safeParse(result.value.output);
   if (!parsed.success) return ok({ agentRunId, kind: "action_extraction" });
 
-  const rows = parsed.data.actions.map((a) => {
-    const dueAt =
-      a.dueAt && !Number.isNaN(Date.parse(a.dueAt))
-        ? new Date(a.dueAt).toISOString()
-        : null;
-    return {
-      tenant_id: ctx.tenantId,
-      status: "inbox",
-      created_from: "suggestion",
+  // Resolve each extracted action to REAL source references and DROP any that
+  // cannot be attributed — an unattributed suggestion in the Actions inbox is
+  // the same PR-1 trust failure the memo/decision/risk paths already guard
+  // against (governance decision log 2026-07-20).
+  const { actions, droppedUnattributed } = buildAttributedSuggestedActions(
+    parsed.data.actions.map((a) => ({
       title: clamp(a.title, 200),
       rationale: clamp(a.rationale, 1000),
-      due_at: dueAt,
-    };
-  });
-  if (rows.length > 0) await secret.from("suggested_actions").insert(rows);
+      dueAt:
+        a.dueAt && !Number.isNaN(Date.parse(a.dueAt))
+          ? new Date(a.dueAt).toISOString()
+          : null,
+      sourceItemIds: a.sourceItemIds,
+    })),
+    tokenToItem,
+  );
+
+  // Persist each surviving action with its references atomically so a failure
+  // never leaves an action shorn of the citations that justify it.
+  if (actions.length > 0) {
+    const { error } = await secret.rpc("persist_suggested_actions", {
+      p_tenant_id: ctx.tenantId,
+      p_actions: actions,
+    });
+    if (error) {
+      return err(new AppError("internal", error.message ?? "action_persist_failed"));
+    }
+  }
 
   await auditService.record(ctx, {
     action: "pipeline.action_extraction.run",
     target: ctx.tenantId,
-    metadata: { extracted: rows.length },
+    // Attribution coverage: how many extracted actions were withheld for
+    // lacking a real source reference (trust-contract observability).
+    metadata: { extracted: actions.length, droppedUnattributed },
   });
   return ok({ agentRunId, kind: "action_extraction" });
 }

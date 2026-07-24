@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { StoredSourceItem } from "@/modules/knowledge-store/server";
 import {
   buildAttributedMemoPayload,
+  buildAttributedSuggestedActions,
   partitionAttributedExtractions,
   resolveMemoReferenceItems,
   type MemoInput,
+  type SuggestedActionInput,
 } from "./memo-attribution";
 
 function item(overrides: Partial<StoredSourceItem> & { id: string }): StoredSourceItem {
@@ -179,5 +181,54 @@ describe("partitionAttributedExtractions", () => {
     const out = partitionAttributedExtractions([], map);
     expect(out.attributed).toEqual([]);
     expect(out.dropped).toBe(0);
+  });
+});
+
+describe("buildAttributedSuggestedActions", () => {
+  const items = [
+    item({ id: "a", system: "gmail", title: "Renewal owner asked" }),
+    item({ id: "b", system: "slack", title: "Vendor deadline" }),
+  ];
+  const map = tokenMap(items);
+
+  it("keeps attributed actions with their real references and DROPS unattributed ones", () => {
+    const inputs: SuggestedActionInput[] = [
+      { title: "Reply to renewal", rationale: "r", dueAt: null, sourceItemIds: ["item-1"] },
+      { title: "Orphan token", rationale: "r", dueAt: null, sourceItemIds: ["item-99"] },
+      { title: "No tokens", rationale: "r", dueAt: null, sourceItemIds: [] },
+    ];
+    const out = buildAttributedSuggestedActions(inputs, map);
+    expect(out.actions.map((a) => a.title)).toEqual(["Reply to renewal"]);
+    expect(out.droppedUnattributed).toBe(2);
+    expect(out.actions[0]).toMatchObject({ status: "inbox", created_from: "suggestion" });
+    expect(out.actions[0]?.references).toEqual([
+      {
+        source_item_id: "a",
+        source_system: "gmail",
+        item_timestamp: "2026-07-20T08:00:00.000Z",
+        confidence: 0.7,
+        excerpt_or_pointer: "Renewal owner asked",
+      },
+    ]);
+  });
+
+  it("de-duplicates references and preserves a supplied due date", () => {
+    const inputs: SuggestedActionInput[] = [
+      {
+        title: "Chase vendor",
+        rationale: "r",
+        dueAt: "2026-07-25T09:00:00.000Z",
+        sourceItemIds: ["item-2", "item-2", "item-1"],
+      },
+    ];
+    const out = buildAttributedSuggestedActions(inputs, map);
+    expect(out.actions[0]?.due_at).toBe("2026-07-25T09:00:00.000Z");
+    expect(out.actions[0]?.references.map((r) => r.source_item_id)).toEqual(["b", "a"]);
+  });
+
+  it("returns no actions for empty input", () => {
+    const out = buildAttributedSuggestedActions([], map);
+    expect(out.actions).toEqual([]);
+    expect(out.droppedUnattributed).toBe(0);
   });
 });
