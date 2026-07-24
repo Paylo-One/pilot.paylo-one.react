@@ -112,6 +112,113 @@ export function resolveMemoReferenceItems(
   return resolved;
 }
 
+/** An extracted item (decision/risk) paired with the REAL source item it drew from. */
+export interface AttributedExtraction<T> {
+  readonly item: T;
+  /** id of the first resolved real source item — never null (unresolved are dropped). */
+  readonly sourceItemId: string;
+}
+export interface PartitionedExtractions<T> {
+  readonly attributed: AttributedExtraction<T>[];
+  /** How many extracted items were dropped for lacking real attribution. */
+  readonly dropped: number;
+}
+
+/**
+ * Enforce the trust contract on extracted decisions/risks (the memo's sibling
+ * agents). Keep only items whose model-supplied tokens resolve to >=1 REAL
+ * retrieved item, pairing each survivor with that item's id for `source_item_id`.
+ * Items resolving to zero real items are DROPPED — persisting them would write an
+ * unattributed AI claim into the decision log / risk register, the same PR-1
+ * failure the memo path already guards against. No fallback, no fabrication.
+ * See governance decision log 2026-07-20 (memo source-attribution honesty),
+ * follow-up "audit sibling agents for the same anti-pattern".
+ */
+export function partitionAttributedExtractions<
+  T extends { readonly sourceItemIds: readonly string[] },
+>(
+  items: readonly T[],
+  tokenToItem: ReadonlyMap<string, StoredSourceItem>,
+): PartitionedExtractions<T> {
+  const attributed: AttributedExtraction<T>[] = [];
+  let dropped = 0;
+  for (const item of items) {
+    const [first] = resolveMemoReferenceItems(item.sourceItemIds, tokenToItem);
+    if (!first) {
+      dropped += 1;
+      continue;
+    }
+    attributed.push({ item, sourceItemId: first.id });
+  }
+  return { attributed, dropped };
+}
+
+/** Structural input for an AI-extracted suggested action awaiting attribution. */
+export interface SuggestedActionInput {
+  readonly title: string;
+  readonly rationale: string;
+  readonly dueAt: string | null;
+  readonly sourceItemIds: readonly string[];
+}
+
+/**
+ * A suggested action resolved to real references, shaped for the
+ * `persist_suggested_actions` RPC (which fans `references` out into
+ * `source_references` rows keyed by the inserted action).
+ */
+export interface AttributedSuggestedActionPayload {
+  readonly status: string;
+  readonly created_from: string;
+  readonly title: string;
+  readonly rationale: string;
+  readonly due_at: string | null;
+  readonly references: MemoReferencePayload[];
+}
+
+export interface AttributedSuggestedActions {
+  readonly actions: AttributedSuggestedActionPayload[];
+  /** How many extracted actions were dropped for lacking real attribution. */
+  readonly droppedUnattributed: number;
+}
+
+/**
+ * Enforce the trust contract on AI-extracted suggested actions (the action
+ * extraction agent — the memo's third sibling alongside decisions and risks).
+ * Keep an action only if its model-supplied tokens resolve to >=1 REAL retrieved
+ * item, attaching those references so the Actions surface can cite where the
+ * suggestion came from. Actions resolving to zero real items are DROPPED rather
+ * than shown unattributed — the same PR-1 guard the memo and decision/risk paths
+ * already apply. No fallback, no fabricated provenance. Closes the last leg of
+ * governance decision log 2026-07-20 (memo source-attribution honesty),
+ * follow-up "audit sibling agents for the same anti-pattern".
+ */
+export function buildAttributedSuggestedActions(
+  inputs: readonly SuggestedActionInput[],
+  tokenToItem: ReadonlyMap<string, StoredSourceItem>,
+): AttributedSuggestedActions {
+  const actions: AttributedSuggestedActionPayload[] = [];
+  let droppedUnattributed = 0;
+  for (const input of inputs) {
+    const references = toReferences(
+      resolveMemoReferenceItems(input.sourceItemIds, tokenToItem),
+      DEFAULT_CONFIDENCE,
+    );
+    if (references.length === 0) {
+      droppedUnattributed += 1;
+      continue;
+    }
+    actions.push({
+      status: "inbox",
+      created_from: "suggestion",
+      title: input.title,
+      rationale: input.rationale,
+      due_at: input.dueAt,
+      references,
+    });
+  }
+  return { actions, droppedUnattributed };
+}
+
 function toReferences(
   items: readonly StoredSourceItem[],
   confidence: number,

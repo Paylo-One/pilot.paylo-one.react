@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { StoredSourceItem } from "@/modules/knowledge-store/server";
 import {
   buildAttributedMemoPayload,
+  buildAttributedSuggestedActions,
+  partitionAttributedExtractions,
   resolveMemoReferenceItems,
   type MemoInput,
+  type SuggestedActionInput,
 } from "./memo-attribution";
 
 function item(overrides: Partial<StoredSourceItem> & { id: string }): StoredSourceItem {
@@ -139,5 +142,93 @@ describe("buildAttributedMemoPayload", () => {
     };
     const out = buildAttributedMemoPayload(memo, map);
     expect(out.sections[0]?.references[0]?.confidence).toBe(0.7);
+  });
+});
+
+describe("partitionAttributedExtractions", () => {
+  const items = [item({ id: "a" }), item({ id: "b" })];
+  const map = tokenMap(items);
+
+  it("keeps items with a resolvable token and pairs the first real source id", () => {
+    const out = partitionAttributedExtractions(
+      [
+        { title: "Kept", sourceItemIds: ["item-2"] },
+        { title: "Also kept", sourceItemIds: ["item-99", "item-1"] },
+      ],
+      map,
+    );
+    expect(out.dropped).toBe(0);
+    expect(out.attributed.map((a) => [a.item.title, a.sourceItemId])).toEqual([
+      ["Kept", "b"],
+      ["Also kept", "a"],
+    ]);
+  });
+
+  it("DROPS extracted rows that resolve to zero real items (no unattributed write)", () => {
+    const out = partitionAttributedExtractions(
+      [
+        { title: "Orphan token", sourceItemIds: ["item-99"] },
+        { title: "No tokens", sourceItemIds: [] },
+        { title: "Real", sourceItemIds: ["item-1"] },
+      ],
+      map,
+    );
+    expect(out.attributed.map((a) => a.item.title)).toEqual(["Real"]);
+    expect(out.dropped).toBe(2);
+  });
+
+  it("returns an empty partition for no input", () => {
+    const out = partitionAttributedExtractions([], map);
+    expect(out.attributed).toEqual([]);
+    expect(out.dropped).toBe(0);
+  });
+});
+
+describe("buildAttributedSuggestedActions", () => {
+  const items = [
+    item({ id: "a", system: "gmail", title: "Renewal owner asked" }),
+    item({ id: "b", system: "slack", title: "Vendor deadline" }),
+  ];
+  const map = tokenMap(items);
+
+  it("keeps attributed actions with their real references and DROPS unattributed ones", () => {
+    const inputs: SuggestedActionInput[] = [
+      { title: "Reply to renewal", rationale: "r", dueAt: null, sourceItemIds: ["item-1"] },
+      { title: "Orphan token", rationale: "r", dueAt: null, sourceItemIds: ["item-99"] },
+      { title: "No tokens", rationale: "r", dueAt: null, sourceItemIds: [] },
+    ];
+    const out = buildAttributedSuggestedActions(inputs, map);
+    expect(out.actions.map((a) => a.title)).toEqual(["Reply to renewal"]);
+    expect(out.droppedUnattributed).toBe(2);
+    expect(out.actions[0]).toMatchObject({ status: "inbox", created_from: "suggestion" });
+    expect(out.actions[0]?.references).toEqual([
+      {
+        source_item_id: "a",
+        source_system: "gmail",
+        item_timestamp: "2026-07-20T08:00:00.000Z",
+        confidence: 0.7,
+        excerpt_or_pointer: "Renewal owner asked",
+      },
+    ]);
+  });
+
+  it("de-duplicates references and preserves a supplied due date", () => {
+    const inputs: SuggestedActionInput[] = [
+      {
+        title: "Chase vendor",
+        rationale: "r",
+        dueAt: "2026-07-25T09:00:00.000Z",
+        sourceItemIds: ["item-2", "item-2", "item-1"],
+      },
+    ];
+    const out = buildAttributedSuggestedActions(inputs, map);
+    expect(out.actions[0]?.due_at).toBe("2026-07-25T09:00:00.000Z");
+    expect(out.actions[0]?.references.map((r) => r.source_item_id)).toEqual(["b", "a"]);
+  });
+
+  it("returns no actions for empty input", () => {
+    const out = buildAttributedSuggestedActions([], map);
+    expect(out.actions).toEqual([]);
+    expect(out.droppedUnattributed).toBe(0);
   });
 });
