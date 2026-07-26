@@ -34,6 +34,7 @@ import {
 } from "./correlation";
 import { getTagDefinition } from "./people-tags";
 import { upsertEntityLink } from "./relationships";
+import type { ActionStatus } from "@/modules/action-extraction/server";
 
 // --- Row shapes + mapping ---------------------------------------------------
 
@@ -722,9 +723,15 @@ export async function applyTagBehaviour(
     case "suggest_action": {
       const core = await readPersonCore(personId);
       const name = core?.displayName ?? "this person";
+      // `status` must be one of the current action state machine's values
+      // (migration 20260614120000 rebuilt the CHECK and migrated the legacy
+      // 'suggested' → 'inbox'; 'suggested' is no longer accepted). Typed as
+      // ActionStatus so an invalid literal fails the build rather than every
+      // insert failing the DB CHECK at runtime, as 'suggested' silently did.
+      const status: ActionStatus = "inbox";
       const { error } = await supabase.from("suggested_actions").insert({
         tenant_id: ctx.tenantId,
-        status: "suggested",
+        status,
         title: `Follow up with ${name}`,
         rationale: `Flagged as a follow-up on the ${name} record.`,
         created_from: "people",
