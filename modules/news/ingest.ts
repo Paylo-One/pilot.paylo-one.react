@@ -149,6 +149,23 @@ function storyFingerprint(title: string): string {
   return hash([...titleTokens(title)].toSorted().join(" "));
 }
 
+/**
+ * After an `ON CONFLICT DO NOTHING` upsert (`ignoreDuplicates: true`), only the
+ * newly-inserted rows are returned. Deduped items that collided with a
+ * pre-existing `news_item` row *outside* the in-memory dedupe window (fetched
+ * >14 days ago, or beyond the 2000-row cap) therefore come back with no id, so
+ * without a follow-up lookup they are silently skipped for classification and
+ * candidacy — a still-newsworthy story re-fetched later never becomes a
+ * briefing candidate. This returns the distinct url_hashes that still need an
+ * id resolved.
+ */
+export function missingUrlHashes(
+  dedupedHashes: readonly string[],
+  insertedHashes: ReadonlySet<string>,
+): string[] {
+  return [...new Set(dedupedHashes.filter((urlHash) => !insertedHashes.has(urlHash)))];
+}
+
 function samePublishedWindow(a: string | null, b: string | null): boolean {
   if (!a || !b) return false;
   const delta = Math.abs(Date.parse(a) - Date.parse(b));
@@ -601,7 +618,35 @@ export async function runNewsIngestion(
         row.id as string,
       ]),
     );
+    // Newly-inserted rows only. Keep this as the honest "stored this run" count
+    // before folding in pre-existing collisions resolved below.
     result.stored = idByHash.size;
+
+    // Resolve ids for deduped items that collided with a pre-existing news_item
+    // outside the in-memory dedupe window — the ignoreDuplicates upsert returns
+    // no row for those. Without this they are silently dropped from
+    // classification/candidacy (a still-newsworthy re-fetched story would never
+    // resurface as a briefing candidate). Their entities already exist from the
+    // prior run, so they are tracked separately and skipped below to avoid
+    // duplicating news_item_entity rows (that table has no unique constraint).
+    const preexistingIds = new Set<string>();
+    const missing = missingUrlHashes(
+      deduped.map((entry) => entry.urlHash),
+      new Set(idByHash.keys()),
+    );
+    if (missing.length > 0) {
+      const { data: existingItems, error: lookupError } = await secret
+        .from("news_item")
+        .select("id, url_hash")
+        .eq("tenant_id", tenantId)
+        .in("url_hash", missing);
+      if (lookupError) throw new Error(lookupError.message);
+      for (const row of existingItems ?? []) {
+        const id = row.id as string;
+        idByHash.set(row.url_hash as string, id);
+        preexistingIds.add(id);
+      }
+    }
 
     const classifications: Record<string, unknown>[] = [];
     const entities: Record<string, unknown>[] = [];
@@ -610,6 +655,10 @@ export async function runNewsIngestion(
     for (const entry of deduped) {
       const newsItemId = idByHash.get(entry.urlHash);
       if (!newsItemId) continue;
+      // Pre-existing items already carry their entity rows from the prior run;
+      // re-classification (idempotent upsert) and candidacy (unique-keyed
+      // upsert) are safe to repeat, but entity inserts are not.
+      const isPreexisting = preexistingIds.has(newsItemId);
       const classification = classifyNewsItem(entry.item, prefs);
       const ranked = rankNewsItem(
         entry.item,
@@ -634,47 +683,49 @@ export async function runNewsIngestion(
         method: "heuristic",
       });
 
-      for (const company of classification.matchedCompanies) {
-        entities.push({
-          tenant_id: tenantId,
-          news_item_id: newsItemId,
-          entity_type: "company",
-          value: company,
-          matched_monitor: true,
-          confidence: 0.8,
-        });
-      }
-      for (const person of classification.matchedPeople) {
-        entities.push({
-          tenant_id: tenantId,
-          news_item_id: newsItemId,
-          entity_type: "person",
-          value: person,
-          matched_monitor: true,
-          confidence: 0.8,
-        });
-      }
-      for (const topic of classification.topicTags.slice(0, 5)) {
-        entities.push({
-          tenant_id: tenantId,
-          news_item_id: newsItemId,
-          entity_type: "topic",
-          value: topic,
-          matched_monitor: false,
-          confidence: 0.5,
-        });
-      }
-      for (const place of [classification.region, classification.country].filter(
-        (value): value is string => Boolean(value),
-      )) {
-        entities.push({
-          tenant_id: tenantId,
-          news_item_id: newsItemId,
-          entity_type: "place",
-          value: place,
-          matched_monitor: true,
-          confidence: 0.7,
-        });
+      if (!isPreexisting) {
+        for (const company of classification.matchedCompanies) {
+          entities.push({
+            tenant_id: tenantId,
+            news_item_id: newsItemId,
+            entity_type: "company",
+            value: company,
+            matched_monitor: true,
+            confidence: 0.8,
+          });
+        }
+        for (const person of classification.matchedPeople) {
+          entities.push({
+            tenant_id: tenantId,
+            news_item_id: newsItemId,
+            entity_type: "person",
+            value: person,
+            matched_monitor: true,
+            confidence: 0.8,
+          });
+        }
+        for (const topic of classification.topicTags.slice(0, 5)) {
+          entities.push({
+            tenant_id: tenantId,
+            news_item_id: newsItemId,
+            entity_type: "topic",
+            value: topic,
+            matched_monitor: false,
+            confidence: 0.5,
+          });
+        }
+        for (const place of [classification.region, classification.country].filter(
+          (value): value is string => Boolean(value),
+        )) {
+          entities.push({
+            tenant_id: tenantId,
+            news_item_id: newsItemId,
+            entity_type: "place",
+            value: place,
+            matched_monitor: true,
+            confidence: 0.7,
+          });
+        }
       }
 
       if (ranked.score >= prefs.minRelevanceScore) {
