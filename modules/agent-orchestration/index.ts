@@ -743,7 +743,19 @@ async function runDecisionExtraction(
     source_item_id: sourceItemId,
     prompt_version_id: result.value.promptVersionDbId,
   }));
-  if (rows.length > 0) await secret.from("decisions").insert(rows);
+  // Check the write before auditing: a fire-and-forget insert would record
+  // `extracted: rows.length` as grounded/kept even if the rows never landed,
+  // inflating the grounding-coverage summary (attribution-coverage.ts) and
+  // losing decisions silently. Mirror the hardened action path (persist error →
+  // return before the audit record) so a false "kept" count is never recorded.
+  if (rows.length > 0) {
+    const { error } = await secret.from("decisions").insert(rows);
+    if (error) {
+      return err(
+        new AppError("internal", error.message ?? "decision_persist_failed"),
+      );
+    }
+  }
 
   await auditService.record(ctx, {
     action: "pipeline.decision_extraction.run",
@@ -795,7 +807,17 @@ async function runRiskDetection(
     source_item_id: sourceItemId,
     prompt_version_id: result.value.promptVersionDbId,
   }));
-  if (rows.length > 0) await secret.from("risks").insert(rows);
+  // Same trust-contract integrity guard as the decision path: audit the
+  // survivor count only after the write succeeds, so a silent insert failure
+  // can neither inflate the grounding-coverage summary nor lose risks unnoticed.
+  if (rows.length > 0) {
+    const { error } = await secret.from("risks").insert(rows);
+    if (error) {
+      return err(
+        new AppError("internal", error.message ?? "risk_persist_failed"),
+      );
+    }
+  }
 
   await auditService.record(ctx, {
     action: "pipeline.risk_detection.run",
