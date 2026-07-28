@@ -1,0 +1,27 @@
+{
+  // Dependency-vulnerability gate for CI (replaces bare `npm audit`).
+  //
+  // Enforce the release-readiness "zero known vulnerabilities" bar on high and
+  // critical advisories across all dependencies. Moderate/low noise does not
+  // block PRs.
+  "high": true,
+
+  // Documented, justified exceptions. Keep this list as small as possible and
+  // remove entries the moment a non-breaking upstream fix exists.
+  "allowlist": [
+    // GHSA-mh99-v99m-4gvg — brace-expansion DoS (unbounded expansion -> OOM).
+    // Every high advisory that currently trips CI traces back to this single
+    // leaf. There is NO non-breaking fix:
+    //   * The only patched release, brace-expansion@5.0.8, changes the module's
+    //     export shape and breaks the older minimatch API that ESLint's
+    //     @eslint/config-array calls (`TypeError: expand is not a function`).
+    //   * On the runtime side it is pulled in mandatorily by inngest (already on
+    //     its latest release) via @opentelemetry/auto-instrumentations-node's
+    //     GCP resource detector — a metadata probe that only executes on GCP
+    //     infrastructure, not our Vercel runtime, so real exposure is ~nil.
+    // Revert criteria: drop this entry once inngest/@opentelemetry or the ESLint
+    // toolchain ship a version that resolves a patched brace-expansion without
+    // the API break (verify with `npm audit --audit-level=high` reporting 0).
+    "GHSA-mh99-v99m-4gvg"
+  ]
+}
