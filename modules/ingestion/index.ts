@@ -27,5 +27,13 @@ export interface ProviderRawItem {
 export interface IngestionResult {
   readonly sourceConnectionId: string;
   readonly system: SourceSystem;
+  /** Items successfully persisted. */
   readonly itemCount: number;
+  /**
+   * Items that were skipped or failed to persist without aborting the batch.
+   * Provider ingestion is best-effort per item (it never throws on a single
+   * bad item), so a non-zero value here means some items in the batch did not
+   * land; callers can surface it for observability.
+   */
+  readonly failedCount: number;
 }
