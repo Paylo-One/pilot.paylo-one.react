@@ -125,7 +125,7 @@ export default async function SettingsPage() {
   const supabase = await createSupabaseServerClient();
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("display_name, timezone, briefing_time")
+    .select("display_name, timezone, briefing_time, daily_briefing_email")
     .eq("user_id", ctx.userId)
     .maybeSingle();
 
@@ -142,6 +142,7 @@ export default async function SettingsPage() {
     displayName: profile?.display_name ?? "",
     timezone: profile?.timezone ?? "UTC",
     briefingTime: (profile?.briefing_time as string | null)?.slice(0, 5) ?? "",
+    dailyBriefingEmail: (profile?.daily_briefing_email as boolean | null) ?? true,
   };
 
   // Invitations: a slim summary here; the full experience lives at /invitations.

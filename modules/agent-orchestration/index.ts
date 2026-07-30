@@ -40,6 +40,8 @@ import {
   type RetrievalContextItem,
 } from "@/modules/model-gateway";
 import { appendExternalSignalsToBriefing } from "@/modules/news/briefing";
+import { dedupeAndPersistSuggestedActions } from "@/modules/action-extraction/dedupe";
+import { recordNotification } from "@/modules/notification/server";
 import { checkBriefingLimit } from "@/modules/briefing/server";
 import {
   buildAttributedMemoPayload,
@@ -679,24 +681,64 @@ async function runActionExtraction(
     tokenToItem,
   );
 
-  // Persist each surviving action with its references atomically so a failure
-  // never leaves an action shorn of the citations that justify it.
+  // Semantic dedupe against open actions, then persist. Confident duplicates
+  // enrich the existing action's references instead of re-entering the inbox;
+  // uncertain matches are inserted flagged for merge review, never merged
+  // silently. Each write stays atomic (action + references in one RPC call).
+  let dedupeSummary = {
+    dedupeApplied: false,
+    inserted: 0,
+    enriched: 0,
+    flaggedForReview: 0,
+    decisions: [] as readonly unknown[],
+  };
   if (actions.length > 0) {
-    const { error } = await secret.rpc("persist_suggested_actions", {
-      p_tenant_id: ctx.tenantId,
-      p_actions: actions,
-    });
-    if (error) {
-      return err(new AppError("internal", error.message ?? "action_persist_failed"));
+    try {
+      dedupeSummary = await dedupeAndPersistSuggestedActions(ctx, actions);
+    } catch (cause) {
+      return err(
+        new AppError(
+          "internal",
+          cause instanceof Error ? cause.message : "action_persist_failed",
+        ),
+      );
+    }
+  }
+
+  // One quiet review cue per extraction run that actually added something.
+  if (dedupeSummary.inserted > 0 && ctx.userId) {
+    try {
+      await recordNotification({
+        tenantId: ctx.tenantId,
+        userId: ctx.userId,
+        kind: "actions_to_review",
+        title:
+          dedupeSummary.inserted === 1
+            ? "1 suggested action needs your review."
+            : `${dedupeSummary.inserted} suggested actions need your review.`,
+        href: "/actions",
+        dedupeKey: agentRunId,
+      });
+    } catch {
+      // A nudge failure never blocks the pipeline.
     }
   }
 
   await auditService.record(ctx, {
     action: "pipeline.action_extraction.run",
     target: ctx.tenantId,
-    // Attribution coverage: how many extracted actions were withheld for
-    // lacking a real source reference (trust-contract observability).
-    metadata: { extracted: actions.length, droppedUnattributed },
+    // Attribution coverage (how many extractions were withheld for lacking a
+    // real source reference) plus every dedupe decision, so a merged or
+    // review-flagged candidate is always on record.
+    metadata: {
+      extracted: actions.length,
+      droppedUnattributed,
+      dedupeApplied: dedupeSummary.dedupeApplied,
+      inserted: dedupeSummary.inserted,
+      enrichedExisting: dedupeSummary.enriched,
+      flaggedForReview: dedupeSummary.flaggedForReview,
+      dedupeDecisions: dedupeSummary.decisions,
+    },
   });
   return ok({ agentRunId, kind: "action_extraction" });
 }

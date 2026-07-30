@@ -1,17 +1,15 @@
 /**
- * modules/notification — high-signal, low-noise nudges (primarily the
- * briefing-ready cue). Speaks only when not speaking would be irresponsible.
- * Governance: services/notification.md.
+ * modules/notification — high-signal, low-noise nudges. Speaks only when not
+ * speaking would be irresponsible. Governance: services/notification.md.
  *
- * NOT THE FOCUS THIS PASS. This is a coherent typed stub: the interface is the
- * real intended shape, but there is no transactional email provider wired yet.
- * `notifyBriefingReady` simply records the intent to the server log and returns
- * success so callers (e.g. Briefing) can integrate against a stable contract.
- * Real delivery (in-app cue + provider email, preferences, rate limits) lands
- * in a later pass.
+ * In-app delivery is real (see ./server.ts: `notifications` table, deduped per
+ * underlying event). Email delivery is real for the daily briefing (see
+ * ./briefing-email.ts, SendGrid). `notifyBriefingReady` records one in-app cue
+ * per briefing for the operator.
  */
 
-import { ok, type Result, type TenantContext } from "@/modules/shared";
+import { ok, err, AppError, type Result, type TenantContext } from "@/modules/shared";
+import { recordNotification } from "./server";
 
 export interface NotificationService {
   notifyBriefingReady(ctx: TenantContext, briefingId: string): Promise<Result<void>>;
@@ -19,10 +17,25 @@ export interface NotificationService {
 
 export const notificationService: NotificationService = {
   async notifyBriefingReady(ctx, briefingId) {
-    // No-op placeholder: log the intent, deliver nothing. Calm by default.
-    console.info(
-      `[notification] briefing-ready (stub) tenant=${ctx.tenantId} briefing=${briefingId}`,
-    );
-    return ok(undefined);
+    if (!ctx.userId) return ok(undefined);
+    try {
+      await recordNotification({
+        tenantId: ctx.tenantId,
+        userId: ctx.userId,
+        kind: "briefing_ready",
+        title: "Your briefing is ready.",
+        body: null,
+        href: "/briefing",
+        dedupeKey: briefingId,
+      });
+      return ok(undefined);
+    } catch (cause) {
+      return err(
+        new AppError(
+          "internal",
+          cause instanceof Error ? cause.message : "notification_failed",
+        ),
+      );
+    }
   },
 };

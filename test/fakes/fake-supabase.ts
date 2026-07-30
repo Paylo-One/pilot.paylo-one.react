@@ -18,6 +18,7 @@ interface PendingAction {
   type: "select" | "insert" | "update" | "upsert";
   payload?: Row | Row[];
   onConflict?: string;
+  ignoreDuplicates?: boolean;
 }
 
 class FakeQueryBuilder implements PromiseLike<{ data: unknown; error: unknown }> {
@@ -45,8 +46,16 @@ class FakeQueryBuilder implements PromiseLike<{ data: unknown; error: unknown }>
     return this;
   }
 
-  upsert(payload: Row | Row[], options?: { onConflict?: string }) {
-    this.action = { type: "upsert", payload, onConflict: options?.onConflict };
+  upsert(
+    payload: Row | Row[],
+    options?: { onConflict?: string; ignoreDuplicates?: boolean },
+  ) {
+    this.action = {
+      type: "upsert",
+      payload,
+      onConflict: options?.onConflict,
+      ignoreDuplicates: options?.ignoreDuplicates,
+    };
     return this;
   }
 
@@ -153,14 +162,23 @@ class FakeQueryBuilder implements PromiseLike<{ data: unknown; error: unknown }>
           ? this.action.payload
           : [this.action.payload as Row];
         const conflictKeys = (this.action.onConflict ?? "id").split(",").map((key) => key.trim());
+        const written: Row[] = [];
         for (const upsert of upserts) {
           const existing = rows.find((row) =>
             conflictKeys.every((key) => row[key] === upsert[key]),
           );
-          if (existing) Object.assign(existing, upsert);
-          else rows.push({ ...upsert });
+          if (existing) {
+            // PostgREST: ignoreDuplicates (ON CONFLICT DO NOTHING) skips the
+            // row and omits it from the returned data.
+            if (this.action.ignoreDuplicates) continue;
+            Object.assign(existing, upsert);
+            written.push({ ...existing });
+          } else {
+            rows.push({ ...upsert });
+            written.push({ ...upsert });
+          }
         }
-        return { data: upserts, error: null };
+        return { data: written, error: null };
       }
     }
   }

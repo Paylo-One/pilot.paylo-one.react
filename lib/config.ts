@@ -150,6 +150,29 @@ export function paddleWebhookSecret(): string {
   return secret;
 }
 
+// --- SendGrid (transactional notification email) ------------------------------
+//
+// Used only by the daily briefing delivery job. When the API key is absent the
+// job records the skip and sends nothing, so local/dev environments degrade
+// gracefully instead of failing the scheduler.
+
+/** True when SendGrid delivery is configured for this environment. */
+export function sendgridConfigured(): boolean {
+  return Boolean(process.env.SENDGRID_API_KEY?.trim());
+}
+
+/** SendGrid API key. Server-only; never expose. */
+export function sendgridApiKey(): string {
+  const key = process.env.SENDGRID_API_KEY?.trim();
+  if (!key) throw new Error("SENDGRID_API_KEY is not set");
+  return key;
+}
+
+/** Verified sender address for notification email (non-secret, has a default). */
+export function sendgridFromEmail(): string {
+  return process.env.SENDGRID_FROM_EMAIL?.trim() || "pilot@paylo.one";
+}
+
 /** Dev server port (used to build absolute cross-host URLs locally). */
 export function devPort(): string {
   return process.env.PORT?.trim() || "3000";

@@ -18,6 +18,8 @@ import {
   intelligenceProcessFunction,
   operatingReviewDispatchFunction,
   operatingReviewFunction,
+  dailyBriefingEmailDispatchFunction,
+  dailyBriefingEmailFunction,
 } from "@/lib/inngest";
 
 // Pin the URL Inngest registers to the reserved, tenant-neutral `app.` host
@@ -39,5 +41,7 @@ export const { GET, POST, PUT } = serve({
     intelligenceProcessFunction,
     operatingReviewDispatchFunction,
     operatingReviewFunction,
+    dailyBriefingEmailDispatchFunction,
+    dailyBriefingEmailFunction,
   ],
 });

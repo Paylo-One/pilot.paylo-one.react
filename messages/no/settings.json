@@ -47,7 +47,9 @@
     "briefingTime": "Briefing-tidspunkt",
     "saved": "Profilen er lagret.",
     "save": "Lagre profil",
-    "saving": "Lagrer…"
+    "saving": "Lagrer…",
+    "briefingEmail": "Daglig briefing på e-post",
+    "briefingEmailHint": "Én oppsummering av handlingene dine hver morgen, sendt på briefingtidspunktet ditt."
   },
   "invitations": {
     "label": "Invitasjoner",

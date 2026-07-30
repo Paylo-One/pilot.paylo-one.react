@@ -15,6 +15,7 @@ export interface ProfileFormValues {
   displayName: string;
   timezone: string;
   briefingTime: string;
+  dailyBriefingEmail: boolean;
 }
 
 export function SettingsProfileForm({ values }: { values: ProfileFormValues }) {
@@ -71,6 +72,23 @@ export function SettingsProfileForm({ values }: { values: ProfileFormValues }) {
           defaultValue={values.briefingTime}
           className="input"
         />
+      </div>
+
+      <div className="field">
+        <label
+          htmlFor="daily_briefing_email"
+          className="field__label"
+          style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}
+        >
+          <input
+            id="daily_briefing_email"
+            name="daily_briefing_email"
+            type="checkbox"
+            defaultChecked={values.dailyBriefingEmail}
+          />
+          {t("briefingEmail")}
+        </label>
+        <span className="field__hint">{t("briefingEmailHint")}</span>
       </div>
 
       {state.error ? (
