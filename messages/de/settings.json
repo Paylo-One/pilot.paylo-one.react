@@ -47,7 +47,9 @@
     "briefingTime": "Briefing-Zeit",
     "saved": "Profil gespeichert.",
     "save": "Profil speichern",
-    "saving": "Wird gespeichert…"
+    "saving": "Wird gespeichert…",
+    "briefingEmail": "Tägliches Briefing per E-Mail",
+    "briefingEmailHint": "Jeden Morgen eine Übersicht Ihrer Aufgaben, gesendet zu Ihrer Briefingzeit."
   },
   "invitations": {
     "label": "Einladungen",

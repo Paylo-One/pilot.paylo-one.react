@@ -47,7 +47,9 @@
     "briefingTime": "Briefingtijd",
     "saved": "Profiel opgeslagen.",
     "save": "Profiel opslaan",
-    "saving": "Opslaan…"
+    "saving": "Opslaan…",
+    "briefingEmail": "Dagelijkse briefing per e-mail",
+    "briefingEmailHint": "Elke ochtend één overzicht van je acties, verstuurd op je briefingtijd."
   },
   "invitations": {
     "label": "Uitnodigingen",

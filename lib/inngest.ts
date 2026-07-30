@@ -26,6 +26,12 @@ import {
 } from "@/modules/source-connection/discord";
 import { syncActiveWhatsAppMonitors } from "@/modules/source-connection/whatsapp-sync";
 import { runNewsIngestion } from "@/modules/news/ingest";
+import {
+  dailyBriefingDedupeKey,
+  isBriefingDue,
+  runDailyBriefingDelivery,
+} from "@/modules/notification/briefing-email";
+import { notificationService } from "@/modules/notification";
 import { listEnabledNewsTenantIds } from "@/modules/news/server";
 import { calculateNextSyncAt } from "@/lib/sync-schedule";
 
@@ -71,6 +77,12 @@ export type IntelligenceProcessPayload = {
 
 export type OperatingReviewPayload = {
   tenantId: string;
+};
+
+export type DailyBriefingEmailPayload = {
+  tenantId: string;
+  /** `tenant:user:localDay` — the idempotency key for one briefing per local day. */
+  dedupeKey: string;
 };
 
 // 3. Define the event types using eventType and staticSchema
@@ -120,6 +132,10 @@ export const intelligenceProcessEvent = eventType("intelligence/process", {
 
 export const operatingReviewEvent = eventType("operating/review", {
   schema: staticSchema<OperatingReviewPayload>(),
+});
+
+export const dailyBriefingEmailEvent = eventType("notification/daily-briefing", {
+  schema: staticSchema<DailyBriefingEmailPayload>(),
 });
 
 /**
@@ -543,6 +559,16 @@ export const briefingGenerateFunction = inngest.createFunction(
       return briefingId;
     });
 
+    // One quiet in-app cue per briefing (deduped by briefingId).
+    if (briefingId) {
+      await step.run("notify-briefing-ready", async () => {
+        const { ctx } = await resolveTenantJobContext(supabase, tenantId);
+        if (!ctx.userId) return { notified: false };
+        const result = await notificationService.notifyBriefingReady(ctx, briefingId);
+        return { notified: result.ok };
+      });
+    }
+
     // Record which cycle produced which memo (provenance + idempotency backstop).
     if (runId && briefingId) {
       await step.run("link-run-to-briefing", async () => {
@@ -735,6 +761,113 @@ export const operatingReviewFunction = inngest.createFunction(
     });
 
     return { success: true, tenantId };
+  },
+);
+
+/**
+ * Every 15 minutes, queue the daily briefing email for tenants whose owner's
+ * local briefing time has passed and whose briefing has not yet been handled
+ * today. The pre-dispatch check against notification_deliveries keeps the
+ * event volume down; the event idempotency key and the delivery-log claim in
+ * runDailyBriefingDelivery are the real duplicate-send guards.
+ */
+export const dailyBriefingEmailDispatchFunction = inngest.createFunction(
+  {
+    id: "daily-briefing-email-dispatch",
+    name: "Dispatch Daily Briefing Emails",
+    concurrency: { limit: 1 },
+    triggers: [{ cron: "*/15 * * * *" }],
+  },
+  async ({ step }) => {
+    const supabase = createSupabaseSecretClient();
+
+    const due = await step.run("resolve-due-briefings", async () => {
+      const { data: tenants, error } = await supabase
+        .from("tenants")
+        .select("id")
+        .eq("status", "active");
+      if (error) throw new Error(`Failed to list tenants: ${error.message}`);
+
+      const now = new Date();
+      const dispatches: { tenantId: string; dedupeKey: string }[] = [];
+      for (const tenant of tenants ?? []) {
+        const tenantId = tenant.id as string;
+        const { ctx, timezone, briefingTime } = await resolveTenantJobContext(
+          supabase,
+          tenantId,
+        );
+        if (!ctx.userId) continue;
+        if (!isBriefingDue(now, timezone, briefingTime)) continue;
+
+        const dedupeKey = dailyBriefingDedupeKey(
+          tenantId,
+          ctx.userId,
+          timezone,
+          now,
+        );
+        const { data: existing } = await supabase
+          .from("notification_deliveries")
+          .select("id")
+          .eq("tenant_id", tenantId)
+          .eq("user_id", ctx.userId)
+          .eq("kind", "daily_briefing")
+          .eq("dedupe_key", dedupeKey)
+          .maybeSingle();
+        if (existing) continue;
+
+        dispatches.push({ tenantId, dedupeKey });
+      }
+      return dispatches;
+    });
+
+    if (due.length === 0) return { dispatched: 0 };
+
+    await step.sendEvent(
+      "fan-out-daily-briefings",
+      due.map((d) => ({
+        name: "notification/daily-briefing" as const,
+        data: d,
+      })),
+    );
+
+    console.log(`[briefing-email/dispatch] queued ${due.length} briefing(s)`);
+    return { dispatched: due.length };
+  },
+);
+
+/**
+ * Durable per-tenant worker for one daily briefing email. Idempotent twice
+ * over: the event dedupe key covers one local calendar day, and the worker
+ * claims a unique notification_deliveries row before contacting SendGrid.
+ */
+export const dailyBriefingEmailFunction = inngest.createFunction(
+  {
+    id: "daily-briefing-email",
+    name: "Send Daily Briefing Email",
+    retries: 2,
+    idempotency: "event.data.dedupeKey",
+    triggers: [dailyBriefingEmailEvent],
+  },
+  async ({ event, step }) => {
+    const { tenantId } = event.data;
+    if (!tenantId) throw new Error("Missing tenantId in daily briefing event");
+    const supabase = createSupabaseSecretClient();
+
+    const result = await step.run("deliver-daily-briefing", async () => {
+      const { ctx, timezone } = await resolveTenantJobContext(supabase, tenantId);
+      if (!ctx.userId) return { outcome: "skipped_disabled" as const };
+      return runDailyBriefingDelivery({
+        tenantId,
+        tenantSlug: ctx.tenantSlug,
+        userId: ctx.userId,
+        timezone,
+      });
+    });
+
+    console.log(
+      `[briefing-email] tenant=${tenantId} outcome=${result.outcome}${"detail" in result && result.detail ? ` detail=${result.detail}` : ""}`,
+    );
+    return { success: result.outcome !== "failed", ...result };
   },
 );
 

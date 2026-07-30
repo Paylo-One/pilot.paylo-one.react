@@ -47,7 +47,9 @@
     "briefingTime": "Hora del informe",
     "saved": "Perfil guardado.",
     "save": "Guardar perfil",
-    "saving": "Guardando…"
+    "saving": "Guardando…",
+    "briefingEmail": "Briefing diario por correo",
+    "briefingEmailHint": "Un resumen de tus acciones cada mañana, enviado a la hora de tu briefing."
   },
   "invitations": {
     "label": "Invitaciones",

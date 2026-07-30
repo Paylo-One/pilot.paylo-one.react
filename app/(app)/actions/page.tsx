@@ -1,10 +1,10 @@
 /**
- * Actions — the execution-memory surface.
+ * Actions — the execution-memory surface, presented as a Kanban board.
  *
- * The current persistence layer supports source-backed action suggestions and
- * their review decisions. This screen presents that working capability inside
- * the broader Actions operating model, while manual capture, reminders, and the
- * full commitment lifecycle remain clearly marked as planned.
+ * Five workflow columns over the action statuses (review, planned, in
+ * progress, waiting, done), drag-and-drop plus an accessible move menu, quick
+ * capture without leaving the page, and a duplicate review strip fed by the
+ * generation-time semantic dedupe flags.
  */
 
 import { requireTenantContext } from "@/modules/identity-tenant/server";

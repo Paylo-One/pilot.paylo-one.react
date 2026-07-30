@@ -12,7 +12,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type ActionStatus = "inbox" | "planned" | "in_progress" | "waiting" | "follow_up" | "completed" | "cancelled";
 export type ActionPriority = "critical" | "high" | "normal" | "low";
-export type ActionCreatedFrom = "manual" | "suggestion" | "diary" | "briefing" | "meeting" | "email";
+export type ActionCreatedFrom = "manual" | "suggestion" | "diary" | "briefing" | "meeting" | "email" | "people";
 
 export interface ActionSourceReference {
   readonly id: string;
@@ -42,6 +42,9 @@ export interface SuggestedActionView {
   readonly snoozeMetadata: any;
   readonly completionMetadata: any;
   readonly documents: any[];
+  readonly duplicateGroupId: string | null;
+  readonly duplicateConfidence: number | null;
+  readonly duplicateReason: string | null;
   readonly references: ActionSourceReference[];
 }
 
@@ -64,6 +67,9 @@ interface ActionRow {
   snooze_metadata: any;
   completion_metadata: any;
   documents: any[];
+  duplicate_group_id: string | null;
+  duplicate_confidence: number | null;
+  duplicate_reason: string | null;
 }
 
 interface SourceReferenceRow {
@@ -100,7 +106,10 @@ export async function listSuggestedActions(tenantId: string): Promise<SuggestedA
       topics,
       snooze_metadata,
       completion_metadata,
-      documents
+      documents,
+      duplicate_group_id,
+      duplicate_confidence,
+      duplicate_reason
     `)
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false });
@@ -161,6 +170,9 @@ export async function listSuggestedActions(tenantId: string): Promise<SuggestedA
     snoozeMetadata: a.snooze_metadata,
     completionMetadata: a.completion_metadata,
     documents: a.documents ?? [],
+    duplicateGroupId: a.duplicate_group_id,
+    duplicateConfidence: a.duplicate_confidence != null ? Number(a.duplicate_confidence) : null,
+    duplicateReason: a.duplicate_reason,
     references: referencesByAction.get(a.id) ?? [],
   }));
 }

@@ -52,6 +52,8 @@ export async function saveProfileAction(
   const briefingTime = normaliseBriefingTime(
     String(formData.get("briefing_time") ?? ""),
   );
+  // Unchecked checkboxes are absent from FormData; presence means enabled.
+  const dailyBriefingEmail = formData.get("daily_briefing_email") != null;
 
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.from("user_profiles").upsert(
@@ -60,6 +62,7 @@ export async function saveProfileAction(
       display_name: displayName,
       timezone,
       briefing_time: briefingTime,
+      daily_briefing_email: dailyBriefingEmail,
     },
     { onConflict: "user_id" },
   );

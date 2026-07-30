@@ -118,6 +118,21 @@ hours; the internal `POST /api/news/ingest` endpoint can enqueue the same jobs
 with `Authorization: Bearer $NEWS_INGESTION_TOKEN`. Full implementation and API
 contracts are in [`docs/news-briefing.md`](docs/news-briefing.md).
 
+### Daily briefing email + notifications (SendGrid)
+
+The Actions board is backed by in-app notifications (bell in the topbar) and a
+daily briefing email. Every 15 minutes Inngest (`daily-briefing-email-dispatch`)
+checks which tenant owners have passed their local briefing time
+(`user_profiles.timezone` + `briefing_time`) and sends at most one email per
+user per local calendar day. Idempotency is enforced twice: the Inngest event
+key and a unique claim row in `notification_deliveries`. Empty days send
+nothing. Users can opt out in **Settings → Profile** or via the unsubscribe
+link in every email (`/api/notifications/unsubscribe`, RFC 8058 one-click).
+
+Configuration (see `.env.example`): `SENDGRID_API_KEY` (required for delivery;
+without it the job logs the skip and sends nothing) and `SENDGRID_FROM_EMAIL`
+(optional, defaults to `pilot@paylo.one`; must be a verified SendGrid sender).
+
 ### Paddle fulfilment (webhooks + customer portal)
 
 Paddle fulfils the public self-service tiers (Starter/Pro/Advanced) sold on the

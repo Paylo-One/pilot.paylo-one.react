@@ -33,6 +33,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { OnboardingWizard } from "@/components/onboarding-wizard";
 import { resolveActiveLocale } from "@/i18n/request";
 import { formatDate } from "@/lib/i18n/format";
+import { NotificationBell } from "@/components/notification-bell";
+import { listNotifications } from "@/modules/notification/server";
 
 /** Message key for the time-of-day greeting. */
 function greetingKey(hour: number): "morning" | "afternoon" | "evening" {
@@ -60,11 +62,17 @@ export default async function AppLayout({
   const billingAccess = await getBillingAccess(ctx.tenantId);
 
   const supabase = await createSupabaseServerClient();
-  const { data: profile } = await supabase
-    .from("user_profiles")
-    .select("display_name, timezone, briefing_time, onboarding_completed")
-    .eq("user_id", ctx.userId)
-    .maybeSingle();
+  const [{ data: profile }, notificationsSnapshot] = await Promise.all([
+    supabase
+      .from("user_profiles")
+      .select("display_name, timezone, briefing_time, onboarding_completed")
+      .eq("user_id", ctx.userId)
+      .maybeSingle(),
+    listNotifications(ctx).catch(() => ({
+      notifications: [],
+      unreadCount: 0,
+    })),
+  ]);
 
   const locale = await resolveActiveLocale();
   const t = await getTranslations("shell");
@@ -152,6 +160,10 @@ export default async function AppLayout({
               <span className="status-pill__dot status-pill__dot--accent" />
               {t("status.briefingReady")}
             </span>
+            <NotificationBell
+              initialNotifications={notificationsSnapshot.notifications}
+              initialUnreadCount={notificationsSnapshot.unreadCount}
+            />
           </div>
         </header>
         {billingAccess?.billingStatus === "trialing" ? (

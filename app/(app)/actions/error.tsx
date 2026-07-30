@@ -25,34 +25,22 @@ export default function ActionsError({
   }, [error]);
 
   return (
-    <main className="workspace__content actions-page">
-      <div className="briefing">
-        <header className="briefing__masthead">
-          <div>
-            <p className="eyebrow">Actions</p>
-            <h1 className="briefing__title">We couldn&apos;t load your actions</h1>
-            <p className="briefing__lead">
-              Something interrupted us while assembling your actions. Your data is
-              safe and nothing was changed. Try again in a moment.
-            </p>
-          </div>
-        </header>
-
-        <div className="briefing-onboard">
-          <h2 className="briefing-onboard__title">Let&apos;s try that again</h2>
-          <p className="briefing-onboard__body">
-            If this keeps happening, your sources may still be syncing. You can
-            check their status while we recover.
-          </p>
-          <div className="briefing-onboard__cta">
-            <button type="button" className="btn btn--primary" onClick={reset}>
-              Retry
-            </button>
-            <Link href="/sources" className="btn btn--secondary">
-              Check sources
-            </Link>
-          </div>
-        </div>
+    <main className="workspace__content">
+      <div className="page-head">
+        <p className="eyebrow">Actions</p>
+        <h1 className="page-head__title">We couldn&rsquo;t load your actions</h1>
+        <p className="page-head__lead">
+          Something interrupted us while loading the board. Your data is safe
+          and nothing was changed. Try again in a moment.
+        </p>
+      </div>
+      <div style={{ display: "flex", gap: "var(--space-sm)" }}>
+        <button type="button" className="btn btn--primary" onClick={reset}>
+          Retry
+        </button>
+        <Link href="/briefing" className="btn btn--secondary">
+          Back to briefing
+        </Link>
       </div>
     </main>
   );

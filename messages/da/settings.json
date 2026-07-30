@@ -47,7 +47,9 @@
     "briefingTime": "Briefing-tidspunkt",
     "saved": "Profil gemt.",
     "save": "Gem profil",
-    "saving": "Gemmer…"
+    "saving": "Gemmer…",
+    "briefingEmail": "Daglig briefing på e-mail",
+    "briefingEmailHint": "Én oversigt over dine handlinger hver morgen, sendt på dit briefingtidspunkt."
   },
   "invitations": {
     "label": "Invitationer",

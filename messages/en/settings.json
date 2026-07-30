@@ -47,7 +47,9 @@
     "briefingTime": "Briefing time",
     "saved": "Profile saved.",
     "save": "Save profile",
-    "saving": "Saving…"
+    "saving": "Saving…",
+    "briefingEmail": "Daily briefing email",
+    "briefingEmailHint": "One summary of your actions each morning, sent at your briefing time."
   },
   "invitations": {
     "label": "Invitations",
