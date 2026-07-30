@@ -4,27 +4,35 @@
  * WhatsApp, GitHub, diary…), so fragmented signals become an understanding of who
  * matters, why, and how they connect.
  *
- * Server Component: gated by tenant context (RLS shell). Loads people (with
- * correlated signals), companies, and the correlation inbox (identity matches,
- * proposed links, possible duplicates).
+ * Server Component: gated by tenant context (RLS shell). Loads the directory
+ * (active + archived, with correlated signals), the correlation inbox, a small
+ * curated set of relationship suggestions (the full backlog stays behind
+ * "View more"), and the confirmed relationship network for the Connections tab.
+ * Viewers browse read-only; permanent deletion is privileged.
  * Governance: docs/product/people-and-companies.md.
  */
 
 import { requireTenantContext } from "@/modules/identity-tenant/server";
+import { isPrivilegedRole } from "@/modules/shared/tenant-context";
 import { listPeople, listLinkSuggestions } from "@/modules/people/people-server";
-import { listSuggestedLinks } from "@/modules/people/relationships";
+import { getCuratedSuggestions, getPeopleNetwork } from "@/modules/people/relationships";
 import { detectDuplicatePeople } from "@/modules/people/correlation";
 import { listCompanies } from "@/modules/companies/companies-server";
 import { PeopleSurface } from "@/components/people/people-surface";
 
 export default async function PeoplePage() {
-  await requireTenantContext();
-  const [people, companies, identitySuggestions, suggestedLinks] = await Promise.all([
-    listPeople(),
-    listCompanies(),
+  const ctx = await requireTenantContext();
+  const [allPeople, allCompanies, identitySuggestions, suggestions, network] = await Promise.all([
+    listPeople({ includeArchived: true }),
+    listCompanies({ includeArchived: true }),
     listLinkSuggestions(),
-    listSuggestedLinks(),
+    getCuratedSuggestions(),
+    getPeopleNetwork(),
   ]);
+  const people = allPeople.filter((p) => !p.archivedAt);
+  const archivedPeople = allPeople.filter((p) => p.archivedAt);
+  const companies = allCompanies.filter((c) => !c.archivedAt);
+  const archivedCompanies = allCompanies.filter((c) => c.archivedAt);
   const duplicates = detectDuplicatePeople(people);
 
   return (
@@ -42,10 +50,15 @@ export default async function PeoplePage() {
 
       <PeopleSurface
         people={people}
+        archivedPeople={archivedPeople}
         companies={companies}
+        archivedCompanies={archivedCompanies}
         identitySuggestions={identitySuggestions}
-        suggestedLinks={suggestedLinks}
         duplicates={duplicates}
+        suggestions={suggestions}
+        network={network}
+        canManage={ctx.role !== "viewer"}
+        canDelete={isPrivilegedRole(ctx.role)}
       />
 
       <p className="scaffold-note" style={{ marginTop: "var(--space-xl)" }}>

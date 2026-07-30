@@ -124,6 +124,8 @@ export interface Person {
   readonly relationships: PersonRelationship[];
   readonly signals: PersonSignal[];
   readonly linkedActions: PersonLinkedAction[];
+  /** Set when the record is archived (soft-deleted); null while active. */
+  readonly archivedAt: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }

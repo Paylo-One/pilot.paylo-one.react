@@ -35,11 +35,12 @@ interface CompanyRow {
   importance_level: string;
   status: string;
   notes: string | null;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 }
 const COMPANY_COLS =
-  "id, name, relationship_type, importance_level, status, notes, created_at, updated_at";
+  "id, name, relationship_type, importance_level, status, notes, archived_at, created_at, updated_at";
 
 function mapCompany(
   row: CompanyRow,
@@ -59,20 +60,28 @@ function mapCompany(
     domains,
     tags,
     relatedPeopleCount,
+    archivedAt: row.archived_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
+export interface ListCompaniesOptions {
+  /** Include archived (soft-deleted) records. Default: active only. */
+  readonly includeArchived?: boolean;
+}
+
 // --- Reads ------------------------------------------------------------------
 
 /** The tenant's companies with aliases, domains, tags, and linked-people counts. */
-export async function listCompanies(): Promise<Company[]> {
+export async function listCompanies(options: ListCompaniesOptions = {}): Promise<Company[]> {
   const supabase = await createSupabaseServerClient();
-  const { data: companyData, error } = await supabase
+  let companyQuery = supabase
     .from("companies")
     .select(COMPANY_COLS)
     .order("name", { ascending: true });
+  if (!options.includeArchived) companyQuery = companyQuery.is("archived_at", null);
+  const { data: companyData, error } = await companyQuery;
   if (error) throw new Error(error.message);
   const rows = (companyData ?? []) as CompanyRow[];
   if (rows.length === 0) return [];
@@ -134,7 +143,8 @@ function domainOf(author: string | null): string | null {
 
 /** Full company detail: people, relationships, and recent domain-matched activity. */
 export async function getCompanyDetail(companyId: string): Promise<CompanyDetail | null> {
-  const companies = await listCompanies();
+  // Include archived so an archived company's page still opens (for restore).
+  const companies = await listCompanies({ includeArchived: true });
   const company = companies.find((c) => c.id === companyId);
   if (!company) return null;
 
@@ -266,6 +276,23 @@ export async function updateCompany(companyId: string, patch: UpdateCompanyPatch
   const { data, error } = await supabase
     .from("companies")
     .update(update)
+    .eq("id", companyId)
+    .select("id");
+  if (error) throw new Error(error.message);
+  return (data?.length ?? 0) > 0;
+}
+
+/**
+ * Archive or restore a company (soft delete). Archived companies leave the
+ * directory and the connections graph but keep domains, aliases, tags, and
+ * edges so a restore brings everything back. Returns false when the company is
+ * not visible to the caller (RLS) or does not exist.
+ */
+export async function setCompanyArchived(companyId: string, archived: boolean): Promise<boolean> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("companies")
+    .update({ archived_at: archived ? new Date().toISOString() : null })
     .eq("id", companyId)
     .select("id");
   if (error) throw new Error(error.message);

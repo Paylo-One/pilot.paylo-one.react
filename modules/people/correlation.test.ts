@@ -21,6 +21,7 @@ function person(overrides: Partial<Person> & Pick<Person, "id" | "displayName">)
     relationships: [],
     signals: [],
     linkedActions: [],
+    archivedAt: null,
     createdAt: "2026-06-01T00:00:00.000Z",
     updatedAt: "2026-06-01T00:00:00.000Z",
     ...overrides,

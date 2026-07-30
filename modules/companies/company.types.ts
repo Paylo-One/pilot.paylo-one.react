@@ -58,6 +58,8 @@ export interface Company {
   readonly tags: string[];
   /** How many people are linked to this company. */
   readonly relatedPeopleCount: number;
+  /** Set when the record is archived (soft-deleted); null while active. */
+  readonly archivedAt: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }

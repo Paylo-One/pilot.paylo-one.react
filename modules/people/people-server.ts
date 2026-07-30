@@ -49,6 +49,7 @@ interface PersonRow {
   status: string;
   is_self: boolean;
   notes: string | null;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -68,7 +69,7 @@ interface TagRow {
 }
 
 const PEOPLE_COLS =
-  "id, display_name, role_title, organisation, company_id, relationship_type, importance_level, status, is_self, notes, created_at, updated_at";
+  "id, display_name, role_title, organisation, company_id, relationship_type, importance_level, status, is_self, notes, archived_at, created_at, updated_at";
 const IDENTITY_COLS =
   "id, person_id, source_type, identity_type, identity_value, provider_user_id, confidence, verified_by_user";
 const TAG_COLS = "person_id, tag";
@@ -112,21 +113,29 @@ function assemble(
     relationships: [],
     signals: [],
     linkedActions: [],
+    archivedAt: row.archived_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
+export interface ListPeopleOptions {
+  /** Include archived (soft-deleted) records. Default: active only. */
+  readonly includeArchived?: boolean;
+}
+
 // --- Reads ------------------------------------------------------------------
 
 /** Build the tenant's people with identities + tags (signals empty). */
-async function loadBasePeople(): Promise<Person[]> {
+async function loadBasePeople(options: ListPeopleOptions = {}): Promise<Person[]> {
   const supabase = await createSupabaseServerClient();
 
-  const { data: peopleData, error: peopleErr } = await supabase
+  let peopleQuery = supabase
     .from("people")
     .select(PEOPLE_COLS)
     .order("display_name", { ascending: true });
+  if (!options.includeArchived) peopleQuery = peopleQuery.is("archived_at", null);
+  const { data: peopleData, error: peopleErr } = await peopleQuery;
   if (peopleErr) throw new Error(peopleErr.message);
   const peopleRows = (peopleData ?? []) as PersonRow[];
   if (peopleRows.length === 0) return [];
@@ -173,8 +182,8 @@ async function loadBasePeople(): Promise<Person[]> {
 }
 
 /** Tenant-owned people records without running source-item correlation. */
-export async function listPeopleDirectory(): Promise<Person[]> {
-  return loadBasePeople();
+export async function listPeopleDirectory(options: ListPeopleOptions = {}): Promise<Person[]> {
+  return loadBasePeople(options);
 }
 
 // --- Correlation reads ------------------------------------------------------
@@ -214,9 +223,9 @@ async function listRecentItemsForCorrelation(limit = 200): Promise<CorrelationIt
  * confidently attributed to each person (deterministic, verified-exact match).
  * Uncertain matches become suggestions (see `listLinkSuggestions`), not signals.
  */
-export async function listPeople(): Promise<Person[]> {
+export async function listPeople(options: ListPeopleOptions = {}): Promise<Person[]> {
   const [people, items] = await Promise.all([
-    loadBasePeople(),
+    loadBasePeople(options),
     listRecentItemsForCorrelation(),
   ]);
   const { signalsByPerson } = correlateSourceItems(items, people);
@@ -519,6 +528,23 @@ export async function updatePerson(
   const { data, error } = await supabase
     .from("people")
     .update(update)
+    .eq("id", personId)
+    .select("id");
+  if (error) throw new Error(error.message);
+  return (data?.length ?? 0) > 0;
+}
+
+/**
+ * Archive or restore a person (soft delete). Archived people leave the
+ * directory, suggestions, and the connections graph, but keep their identities,
+ * tags, and edges so a restore brings everything back. Returns false when the
+ * person is not visible to the caller (RLS) or does not exist.
+ */
+export async function setPersonArchived(personId: string, archived: boolean): Promise<boolean> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("people")
+    .update({ archived_at: archived ? new Date().toISOString() : null })
     .eq("id", personId)
     .select("id");
   if (error) throw new Error(error.message);

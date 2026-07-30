@@ -4,95 +4,21 @@
  * components/people/correlation-inbox.tsx
  *
  * Guided refinement, not data admin. One calm queue of things worth a glance:
- * possible "same person?" matches, semantic/relationship links Pilot proposed
- * from your activity, and records that may be duplicates. Every item explains
- * *why* it was surfaced, and you confirm, reject, or set it aside. Pilot
- * proposes; you decide.
- * Nothing is ever merged or linked for you.
+ * possible "same person?" matches and records that may be duplicates. Every
+ * item explains *why* it was surfaced, and you confirm, reject, or set it
+ * aside. Pilot proposes; you decide. Nothing is ever merged or linked for you.
+ *
+ * Semantic relationship suggestions no longer live here — they have their own
+ * curated Suggestions tab.
  */
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  ENTITY_TYPE_LABELS,
-  type PersonLinkSuggestion,
-  type ResolvedRelationship,
-} from "@/modules/people/people.types";
+import { type PersonLinkSuggestion } from "@/modules/people/people.types";
 import type { DuplicateSuggestion } from "@/modules/people/correlation";
 import { PersonLinkSuggestionCard } from "@/components/people/person-link-suggestion";
-import {
-  runCorrelationAction,
-  confirmLinkAction,
-  rejectLinkAction,
-} from "@/app/(app)/people/actions";
-
-function SuggestedLinkCard({ link }: { link: ResolvedRelationship }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [done, setDone] = useState<"confirmed" | "rejected" | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  function act(kind: "confirmed" | "rejected") {
-    setError(null);
-    startTransition(async () => {
-      const res =
-        kind === "confirmed"
-          ? await confirmLinkAction({ linkId: link.id })
-          : await rejectLinkAction({ linkId: link.id });
-      if (res.ok) {
-        setDone(kind);
-        router.refresh();
-      } else {
-        setError(res.error ?? "Failed.");
-      }
-    });
-  }
-
-  return (
-    <article className="link-suggestion">
-      <div className="link-suggestion__main">
-        <p className="memo-item__title">
-          {link.relationshipLabel} {link.otherLabel}{" "}
-          <span className="mono">· {ENTITY_TYPE_LABELS[link.otherType]}</span>
-        </p>
-        {link.evidenceSummary ? (
-          <p className="action-card__rationale" style={{ marginTop: "var(--space-xs)" }}>
-            {link.evidenceSummary}
-          </p>
-        ) : null}
-        <p className="repo-row__meta mono">{Math.round(link.confidence * 100)}% confidence</p>
-        {error ? <p className="form-message form-message--error">{error}</p> : null}
-      </div>
-      <div className="link-suggestion__controls">
-        {done ? (
-          <span className={`status status--${done === "rejected" ? "neutral" : "ok"}`}>
-            {done === "confirmed" ? "Linked" : "Dismissed"}
-          </span>
-        ) : (
-          <>
-            <button
-              type="button"
-              className="btn btn--accent-outline btn--sm"
-              disabled={pending}
-              onClick={() => act("confirmed")}
-            >
-              Confirm
-            </button>
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm"
-              disabled={pending}
-              onClick={() => act("rejected")}
-            >
-              Not right
-            </button>
-          </>
-        )}
-      </div>
-    </article>
-  );
-}
+import { runCorrelationAction } from "@/app/(app)/people/actions";
 
 function DuplicateCard({ dup }: { dup: DuplicateSuggestion }) {
   return (
@@ -124,17 +50,17 @@ function DuplicateCard({ dup }: { dup: DuplicateSuggestion }) {
 
 export function CorrelationInbox({
   identitySuggestions,
-  suggestedLinks,
   duplicates,
+  canManage,
 }: {
   identitySuggestions: readonly PersonLinkSuggestion[];
-  suggestedLinks: readonly ResolvedRelationship[];
   duplicates: readonly DuplicateSuggestion[];
+  canManage: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(true);
-  const total = identitySuggestions.length + suggestedLinks.length + duplicates.length;
+  const total = identitySuggestions.length + duplicates.length;
 
   return (
     <section className="inbox card">
@@ -148,19 +74,21 @@ export function CorrelationInbox({
           <p className="eyebrow">Needs review</p>
           {total > 0 ? <span className="badge">{total}</span> : null}
         </button>
-        <button
-          type="button"
-          className="btn btn--secondary btn--sm"
-          disabled={pending}
-          onClick={() =>
-            startTransition(async () => {
-              const res = await runCorrelationAction();
-              if (res.ok) router.refresh();
-            })
-          }
-        >
-          {pending ? "Reviewing your activity…" : "Run correlation"}
-        </button>
+        {canManage ? (
+          <button
+            type="button"
+            className="btn btn--secondary btn--sm"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                const res = await runCorrelationAction();
+                if (res.ok) router.refresh();
+              })
+            }
+          >
+            {pending ? "Reviewing your activity…" : "Run correlation"}
+          </button>
+        ) : null}
       </div>
 
       {total === 0 ? (
@@ -177,17 +105,6 @@ export function CorrelationInbox({
               <div className="stack gap-sm">
                 {identitySuggestions.map((s) => (
                   <PersonLinkSuggestionCard key={s.id} suggestion={s} />
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {suggestedLinks.length > 0 ? (
-            <div className="inbox__group">
-              <p className="inbox__group-title">Possible semantic connections</p>
-              <div className="stack gap-sm">
-                {suggestedLinks.map((l) => (
-                  <SuggestedLinkCard key={l.id} link={l} />
                 ))}
               </div>
             </div>

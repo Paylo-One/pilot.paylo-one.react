@@ -50,6 +50,7 @@ export const MOCK_PEOPLE: readonly Person[] = [
     linkedActions: [
       { id: "act_j1", title: "Approve dual-provider payments architecture", status: "suggested" },
     ],
+    archivedAt: null,
     createdAt: "2026-05-01T09:00:00.000Z",
     updatedAt: "2026-06-09T06:00:00.000Z",
   },
@@ -79,6 +80,7 @@ export const MOCK_PEOPLE: readonly Person[] = [
       { id: "sig_r1", system: "teams", title: "Thread: payout latency concerns", occurredAt: "2026-06-08T14:10:00.000Z", confidence: 0.72 },
     ],
     linkedActions: [],
+    archivedAt: null,
     createdAt: "2026-05-01T09:00:00.000Z",
     updatedAt: "2026-06-08T14:10:00.000Z",
   },
@@ -107,6 +109,7 @@ export const MOCK_PEOPLE: readonly Person[] = [
     linkedActions: [
       { id: "act_p1", title: "Close out SOC 2 evidence request", status: "deferred" },
     ],
+    archivedAt: null,
     createdAt: "2026-05-01T09:00:00.000Z",
     updatedAt: "2026-06-07T11:00:00.000Z",
   },

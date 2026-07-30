@@ -8,11 +8,13 @@
 
 import { revalidatePath } from "next/cache";
 import { requireTenantContext } from "@/modules/identity-tenant/server";
+import { isPrivilegedRole, type TenantContext } from "@/modules/shared/tenant-context";
 import { auditService } from "@/modules/audit";
 import {
   createPerson,
   updatePerson,
   deletePerson,
+  setPersonArchived,
   addIdentity,
   setIdentityVerified,
   removeIdentity,
@@ -31,17 +33,31 @@ import {
 import {
   confirmEntityLink,
   rejectEntityLink,
+  deleteEntityLink,
+  updateEntityLink,
   upsertEntityLink,
+  listSuggestedConnections,
+  type SuggestedConnection,
+  type SuggestedConnectionsQuery,
 } from "@/modules/people/relationships";
 import { generateCompanyLinkSuggestions } from "@/modules/companies/companies-server";
 import type { EntityType, IdentityType, SourceMappingSourceType } from "@/modules/people/people.types";
 
 type Result = { ok: boolean; error: string | null };
 
+const VIEWER_READ_ONLY = "Viewers can browse but not make changes. Ask a workspace admin for a member role.";
+const ADMIN_ONLY = "Only workspace owners and admins can permanently delete records. You can archive instead.";
+
+/** Members and up can manage records; viewers are read-only. */
+function canManage(ctx: TenantContext): boolean {
+  return ctx.role !== "viewer";
+}
+
 export async function createPersonAction(
   input: CreatePersonInput,
 ): Promise<{ ok: boolean; id?: string; error: string | null }> {
   const ctx = await requireTenantContext();
+  if (!canManage(ctx)) return { ok: false, error: VIEWER_READ_ONLY };
   if (!input?.displayName?.trim()) return { ok: false, error: "A name is required." };
   try {
     const id = await createPerson(ctx.tenantId, input);
@@ -58,6 +74,7 @@ export async function updatePersonAction(input: {
   patch: UpdatePersonPatch;
 }): Promise<Result> {
   const ctx = await requireTenantContext();
+  if (!canManage(ctx)) return { ok: false, error: VIEWER_READ_ONLY };
   if (!input?.personId) return { ok: false, error: "Missing person." };
   try {
     const changed = await updatePerson(input.personId, input.patch);
@@ -75,8 +92,37 @@ export async function updatePersonAction(input: {
   }
 }
 
+/**
+ * Archive or restore a person. Archiving is the default "remove" in the UI —
+ * reversible, keeps identities/tags/edges, and takes the record out of the
+ * directory, suggestions, and the connections graph.
+ */
+export async function setPersonArchivedAction(input: {
+  personId: string;
+  archived: boolean;
+}): Promise<Result> {
+  const ctx = await requireTenantContext();
+  if (!canManage(ctx)) return { ok: false, error: VIEWER_READ_ONLY };
+  if (!input?.personId) return { ok: false, error: "Missing person." };
+  try {
+    const changed = await setPersonArchived(input.personId, input.archived);
+    if (!changed) return { ok: false, error: "Person not found." };
+    await auditService.record(ctx, {
+      action: input.archived ? "person.archived" : "person.unarchived",
+      target: input.personId,
+    });
+    revalidatePath("/people");
+    revalidatePath(`/people/${input.personId}`);
+    return { ok: true, error: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Archive failed." };
+  }
+}
+
+/** Permanently delete a person (privileged roles only; archiving is the default). */
 export async function deletePersonAction(input: { personId: string }): Promise<Result> {
   const ctx = await requireTenantContext();
+  if (!isPrivilegedRole(ctx.role)) return { ok: false, error: ADMIN_ONLY };
   if (!input?.personId) return { ok: false, error: "Missing person." };
   try {
     await deletePerson(input.personId);
@@ -95,6 +141,7 @@ export async function addIdentityAction(input: {
   identityValue: string;
 }): Promise<Result> {
   const ctx = await requireTenantContext();
+  if (!canManage(ctx)) return { ok: false, error: VIEWER_READ_ONLY };
   if (!input?.personId || !input.identityValue?.trim()) {
     return { ok: false, error: "Missing identity value." };
   }
@@ -118,6 +165,7 @@ export async function addIdentityAction(input: {
 
 export async function verifyIdentityAction(input: { identityId: string }): Promise<Result> {
   const ctx = await requireTenantContext();
+  if (!canManage(ctx)) return { ok: false, error: VIEWER_READ_ONLY };
   if (!input?.identityId) return { ok: false, error: "Missing identity." };
   try {
     await setIdentityVerified(input.identityId);
@@ -131,6 +179,7 @@ export async function verifyIdentityAction(input: { identityId: string }): Promi
 
 export async function removeIdentityAction(input: { identityId: string }): Promise<Result> {
   const ctx = await requireTenantContext();
+  if (!canManage(ctx)) return { ok: false, error: VIEWER_READ_ONLY };
   if (!input?.identityId) return { ok: false, error: "Missing identity." };
   try {
     await removeIdentity(input.identityId);
@@ -146,6 +195,7 @@ export async function addTagAction(
   input: { personId: string; tag: string },
 ): Promise<{ ok: boolean; effects?: string[]; error: string | null }> {
   const ctx = await requireTenantContext();
+  if (!canManage(ctx)) return { ok: false, error: VIEWER_READ_ONLY };
   if (!input?.personId || !input.tag?.trim()) return { ok: false, error: "Missing tag." };
   try {
     const tag = input.tag.trim();
@@ -175,6 +225,7 @@ export async function setPersonCompanyAction(input: {
   companyId: string | null;
 }): Promise<Result> {
   const ctx = await requireTenantContext();
+  if (!canManage(ctx)) return { ok: false, error: VIEWER_READ_ONLY };
   if (!input?.personId) return { ok: false, error: "Missing person." };
   try {
     await setPersonCompany(ctx.tenantId, input.personId, input.companyId);
@@ -197,6 +248,7 @@ export async function setPersonSelfAction(input: {
   isSelf: boolean;
 }): Promise<Result> {
   const ctx = await requireTenantContext();
+  if (!canManage(ctx)) return { ok: false, error: VIEWER_READ_ONLY };
   if (!input?.personId) return { ok: false, error: "Missing person." };
   try {
     await setPersonSelf(ctx.tenantId, input.personId, input.isSelf);
@@ -216,6 +268,7 @@ export async function setPersonSelfAction(input: {
 /** Confirm a system-suggested relationship edge. */
 export async function confirmLinkAction(input: { linkId: string }): Promise<Result> {
   const ctx = await requireTenantContext();
+  if (!canManage(ctx)) return { ok: false, error: VIEWER_READ_ONLY };
   if (!input?.linkId) return { ok: false, error: "Missing link." };
   try {
     await confirmEntityLink(input.linkId);
@@ -230,6 +283,7 @@ export async function confirmLinkAction(input: { linkId: string }): Promise<Resu
 /** Reject a suggested relationship edge. */
 export async function rejectLinkAction(input: { linkId: string }): Promise<Result> {
   const ctx = await requireTenantContext();
+  if (!canManage(ctx)) return { ok: false, error: VIEWER_READ_ONLY };
   if (!input?.linkId) return { ok: false, error: "Missing link." };
   try {
     await rejectEntityLink(input.linkId);
@@ -250,8 +304,12 @@ export async function createLinkAction(input: {
   relationshipType: string;
 }): Promise<Result> {
   const ctx = await requireTenantContext();
+  if (!canManage(ctx)) return { ok: false, error: VIEWER_READ_ONLY };
   if (!input?.sourceId || !input?.targetId || !input?.relationshipType) {
     return { ok: false, error: "Missing link details." };
+  }
+  if (input.sourceType === input.targetType && input.sourceId === input.targetId) {
+    return { ok: false, error: "A record cannot be linked to itself." };
   }
   try {
     await upsertEntityLink(ctx.tenantId, {
@@ -277,8 +335,75 @@ export async function createLinkAction(input: {
   }
 }
 
-export async function removeTagAction(input: { personId: string; tag: string }): Promise<Result> {
+/** Edit an existing relationship edge's kind (marks it user-confirmed). */
+export async function updateLinkAction(input: {
+  linkId: string;
+  relationshipType: string;
+}): Promise<Result> {
+  const ctx = await requireTenantContext();
+  if (!canManage(ctx)) return { ok: false, error: VIEWER_READ_ONLY };
+  if (!input?.linkId || !input.relationshipType?.trim()) {
+    return { ok: false, error: "Missing link details." };
+  }
+  try {
+    const changed = await updateEntityLink(input.linkId, {
+      relationshipType: input.relationshipType.trim(),
+    });
+    if (!changed) return { ok: false, error: "Link not found." };
+    await auditService.record(ctx, {
+      action: "relationship.updated",
+      target: input.linkId,
+      metadata: { relationshipType: input.relationshipType },
+    });
+    revalidatePath("/people");
+    return { ok: true, error: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Update link failed." };
+  }
+}
+
+/** Remove a relationship edge outright. */
+export async function deleteLinkAction(input: { linkId: string }): Promise<Result> {
+  const ctx = await requireTenantContext();
+  if (!canManage(ctx)) return { ok: false, error: VIEWER_READ_ONLY };
+  if (!input?.linkId) return { ok: false, error: "Missing link." };
+  try {
+    await deleteEntityLink(input.linkId);
+    await auditService.record(ctx, { action: "relationship.removed", target: input.linkId });
+    revalidatePath("/people");
+    return { ok: true, error: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Remove link failed." };
+  }
+}
+
+/**
+ * Search/browse suggested connections for the Suggestions tab's "View more"
+ * explorer. Read-only, so viewers may call it too.
+ */
+export async function searchSuggestedConnectionsAction(
+  query: SuggestedConnectionsQuery,
+): Promise<{ ok: boolean; items: SuggestedConnection[]; total: number; error: string | null }> {
   await requireTenantContext();
+  try {
+    const page = await listSuggestedConnections({
+      ...query,
+      limit: Math.min(query.limit ?? 20, 50),
+    });
+    return { ok: true, items: page.items, total: page.total, error: null };
+  } catch (err) {
+    return {
+      ok: false,
+      items: [],
+      total: 0,
+      error: err instanceof Error ? err.message : "Search failed.",
+    };
+  }
+}
+
+export async function removeTagAction(input: { personId: string; tag: string }): Promise<Result> {
+  const ctx = await requireTenantContext();
+  if (!canManage(ctx)) return { ok: false, error: VIEWER_READ_ONLY };
   if (!input?.personId || !input.tag) return { ok: false, error: "Missing tag." };
   try {
     await removeTag(input.personId, input.tag);
@@ -304,6 +429,7 @@ export async function runCorrelationAction(): Promise<{
   error: string | null;
 }> {
   const ctx = await requireTenantContext();
+  if (!canManage(ctx)) return { ok: false, error: VIEWER_READ_ONLY };
   try {
     const [added, companyLinks] = await Promise.all([
       generateLinkSuggestions(ctx.tenantId),
@@ -323,6 +449,7 @@ export async function runCorrelationAction(): Promise<{
 /** Confirm a "same person?" suggestion → verified identity + feedback. */
 export async function confirmSuggestionAction(input: { suggestionId: string }): Promise<Result> {
   const ctx = await requireTenantContext();
+  if (!canManage(ctx)) return { ok: false, error: VIEWER_READ_ONLY };
   if (!input?.suggestionId) return { ok: false, error: "Missing suggestion." };
   try {
     const ok = await confirmSuggestion(ctx.tenantId, input.suggestionId);
@@ -337,6 +464,7 @@ export async function confirmSuggestionAction(input: { suggestionId: string }): 
 /** Reject a suggestion (not a match) → feedback. */
 export async function rejectSuggestionAction(input: { suggestionId: string }): Promise<Result> {
   const ctx = await requireTenantContext();
+  if (!canManage(ctx)) return { ok: false, error: VIEWER_READ_ONLY };
   if (!input?.suggestionId) return { ok: false, error: "Missing suggestion." };
   try {
     await rejectSuggestion(ctx.tenantId, input.suggestionId);
@@ -351,6 +479,7 @@ export async function rejectSuggestionAction(input: { suggestionId: string }): P
 /** Create a new person from a suggestion → verified identity + feedback. */
 export async function newPersonFromSuggestionAction(input: { suggestionId: string }): Promise<Result> {
   const ctx = await requireTenantContext();
+  if (!canManage(ctx)) return { ok: false, error: VIEWER_READ_ONLY };
   if (!input?.suggestionId) return { ok: false, error: "Missing suggestion." };
   try {
     const id = await newPersonFromSuggestion(ctx.tenantId, input.suggestionId);
