@@ -120,10 +120,52 @@ export async function ingestObsidianNotes(
   return { itemCount };
 }
 
+/** A provider item is worth persisting only if it carries non-empty body text. */
+export function hasIngestableBody(item: ProviderRawItem): boolean {
+  return Boolean(item.body && item.body.trim().length > 0);
+}
+
 /**
- * Ingest a batch of provider items for a tenant (used by OAuth callbacks that
- * run without a user session). Tenant-scoped via the knowledge-store secret
- * path. Returns a summary; never throws on an individual bad item.
+ * Persist one provider item as a canonical source_item. Extracted so the
+ * per-item work is a single awaited unit that {@link ingestProviderItems} can
+ * guard — a throw here (malformed payload, transient DB error) must not abort
+ * the rest of the batch.
+ */
+async function persistProviderItem(
+  tenantId: string,
+  sourceConnectionId: string,
+  system: SourceSystem,
+  item: ProviderRawItem,
+): Promise<void> {
+  const normalised = normaliseContent({
+    system,
+    title: item.title,
+    body: item.body,
+    kind: item.kind,
+  });
+  await insertSourceItem(tenantId, {
+    sourceConnectionId,
+    system,
+    externalId: item.externalId ?? null,
+    kind: normalised.kind,
+    title: normalised.title,
+    body: normalised.body,
+    author: item.author ?? null,
+    occurredAt: item.occurredAt ?? null,
+    raw: item.raw ?? null,
+  });
+}
+
+/**
+ * Ingest a batch of provider items for a tenant (used by OAuth callbacks and
+ * scheduled syncs that run without a user session). Tenant-scoped via the
+ * knowledge-store secret path.
+ *
+ * Best-effort per item: a single malformed item or a transient failure
+ * persisting one row is logged and counted (`failedCount`) but does NOT abort
+ * the batch, so one bad message can't sink an entire provider sync (and the
+ * callers' post-sync bookkeeping — e.g. `last_sync_at` cursors). Empty-body
+ * items are silently skipped and not counted as failures.
  */
 export async function ingestProviderItems(
   tenantId: string,
@@ -132,26 +174,21 @@ export async function ingestProviderItems(
   items: readonly ProviderRawItem[],
 ): Promise<IngestionResult> {
   let itemCount = 0;
+  let failedCount = 0;
   for (const item of items) {
-    if (!item.body || item.body.trim().length === 0) continue;
-    const normalised = normaliseContent({
-      system,
-      title: item.title,
-      body: item.body,
-      kind: item.kind,
-    });
-    await insertSourceItem(tenantId, {
-      sourceConnectionId,
-      system,
-      externalId: item.externalId ?? null,
-      kind: normalised.kind,
-      title: normalised.title,
-      body: normalised.body,
-      author: item.author ?? null,
-      occurredAt: item.occurredAt ?? null,
-      raw: item.raw ?? null,
-    });
-    itemCount += 1;
+    if (!hasIngestableBody(item)) continue;
+    try {
+      await persistProviderItem(tenantId, sourceConnectionId, system, item);
+      itemCount += 1;
+    } catch (error) {
+      failedCount += 1;
+      console.error("[ingestion] failed to persist provider item", {
+        system,
+        sourceConnectionId,
+        externalId: item.externalId ?? null,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
-  return { sourceConnectionId, system, itemCount };
+  return { sourceConnectionId, system, itemCount, failedCount };
 }
