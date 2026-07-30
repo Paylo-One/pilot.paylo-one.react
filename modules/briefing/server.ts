@@ -148,7 +148,7 @@ interface SourceReferenceRow {
 export async function getLatestBriefing(ctx: TenantContext): Promise<LatestBriefing | null> {
   const supabase = await createSupabaseServerClient();
 
-  const { data: briefingData } = await supabase
+  const { data: briefingData, error: briefingError } = await supabase
     .from("briefings")
     .select("id, status, summary, generated_at")
     .eq("tenant_id", ctx.tenantId)
@@ -156,14 +156,24 @@ export async function getLatestBriefing(ctx: TenantContext): Promise<LatestBrief
     .limit(1)
     .maybeSingle();
 
+  // Fail loud on a read error rather than returning null, which the surface
+  // renders as "no memo yet" — a lie when a memo exists but failed to load.
+  if (briefingError) {
+    throw new Error(`Failed to load latest briefing: ${briefingError.message}`);
+  }
+
   const briefing = briefingData as BriefingRow | null;
   if (!briefing) return null;
 
-  const { data: sectionData } = await supabase
+  const { data: sectionData, error: sectionError } = await supabase
     .from("briefing_sections")
     .select("id, kind, position, title, body")
     .eq("briefing_id", briefing.id)
     .order("position", { ascending: true });
+
+  if (sectionError) {
+    throw new Error(`Failed to load briefing sections: ${sectionError.message}`);
+  }
 
   const sections = ((sectionData ?? []) as SectionRow[]).filter(
     (section) => section.kind !== "external_signals",
@@ -172,21 +182,37 @@ export async function getLatestBriefing(ctx: TenantContext): Promise<LatestBrief
 
   const referencesBySection = new Map<string, BriefingSourceReference[]>();
   if (sectionIds.length > 0) {
-    const { data: refData } = await supabase
+    const { data: refData, error: refError } = await supabase
       .from("source_references")
       .select("id, briefing_section_id, source_system, item_timestamp, confidence, excerpt_or_pointer, person_id")
       .in("briefing_section_id", sectionIds);
 
+    // Trust contract: every shown memo insight must carry its real source
+    // references. If we cannot load them, fail loud rather than render sections
+    // stripped of their provenance (which would present them as if unattributed).
+    if (refError) {
+      throw new Error(`Failed to load briefing source references: ${refError.message}`);
+    }
+
     const refRows = (refData ?? []) as SourceReferenceRow[];
 
-    // Resolve person names for person-linked references (People Context).
+    // Resolve person names for person-linked references (People Context). This
+    // is cosmetic enrichment — a failure here degrades a resolved name to null
+    // (already handled below) rather than dropping a real reference, so it must
+    // not fail the whole memo the way a missing reference would.
     const personIds = [...new Set(refRows.map((r) => r.person_id).filter(Boolean))] as string[];
     const personNames = new Map<string, string>();
     if (personIds.length > 0) {
-      const { data: peopleData } = await supabase
+      const { data: peopleData, error: peopleError } = await supabase
         .from("people")
         .select("id, display_name")
         .in("id", personIds);
+      if (peopleError) {
+        console.warn(
+          "[briefing] person-name resolution failed; references keep null names",
+          { briefingId: briefing.id, error: peopleError.message },
+        );
+      }
       for (const p of (peopleData ?? []) as { id: string; display_name: string }[]) {
         personNames.set(p.id, p.display_name);
       }

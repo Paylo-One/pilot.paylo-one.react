@@ -86,15 +86,15 @@ interface SourceReferenceRow {
 export async function listSuggestedActions(tenantId: string): Promise<SuggestedActionView[]> {
   const supabase = await createSupabaseServerClient();
 
-  const { data: actionData } = await supabase
+  const { data: actionData, error: actionError } = await supabase
     .from("suggested_actions")
     .select(`
-      id, 
-      status, 
-      title, 
-      rationale, 
-      due_at, 
-      person_id, 
+      id,
+      status,
+      title,
+      rationale,
+      due_at,
+      person_id,
       created_at,
       description,
       follow_up_at,
@@ -114,16 +114,28 @@ export async function listSuggestedActions(tenantId: string): Promise<SuggestedA
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false });
 
+  // Fail loud rather than silently render an empty inbox on a read error.
+  if (actionError) {
+    throw new Error(`Failed to load suggested actions: ${actionError.message}`);
+  }
+
   const actions = (actionData ?? []) as ActionRow[];
   if (actions.length === 0) return [];
 
   const actionIds = actions.map((a) => a.id);
   const referencesByAction = new Map<string, ActionSourceReference[]>();
 
-  const { data: refData } = await supabase
+  const { data: refData, error: refError } = await supabase
     .from("source_references")
     .select("id, suggested_action_id, source_system, item_timestamp, confidence, excerpt_or_pointer, diary_entry_id")
     .in("suggested_action_id", actionIds);
+
+  // Trust contract: every shown action must carry its real source references.
+  // If we cannot load them, fail loud rather than render actions stripped of
+  // their provenance (which would present them as if unattributed).
+  if (refError) {
+    throw new Error(`Failed to load action source references: ${refError.message}`);
+  }
 
   for (const row of (refData ?? []) as SourceReferenceRow[]) {
     if (!row.suggested_action_id) continue;

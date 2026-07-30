@@ -1,8 +1,13 @@
 "use client";
 
 /**
- * Error boundary for the Actions surface. Calm, honest, actionable: what
- * happened, that nothing was changed, and the recovery path.
+ * app/(app)/actions/error.tsx
+ *
+ * Error boundary for the Actions surface. Reading suggested actions can now fail
+ * loud (rather than silently render an empty inbox, or actions stripped of their
+ * source references) — so the operator sees a calm, recoverable state instead of
+ * a blank screen or a raw stack trace. Copy stays in the product's voice and
+ * offers a single clear way forward, mirroring the Briefing surface.
  */
 
 import { useEffect } from "react";
