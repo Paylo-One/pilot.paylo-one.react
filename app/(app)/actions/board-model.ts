@@ -60,13 +60,15 @@ export const BOARD_COLUMNS: readonly BoardColumn[] = [
   {
     id: "done",
     title: "Done",
-    hint: "Completed and dismissed, most recent first.",
+    hint: "Completed and dismissed from the last week.",
     statuses: ["completed", "cancelled"],
     dropStatus: "completed",
   },
 ] as const;
 
-export const DONE_COLUMN_LIMIT = 15;
+/** Done shows the last week by default; older items page in on request. */
+export const DONE_RECENT_DAYS = 7;
+export const DONE_PAGE_SIZE = 20;
 
 export function columnForStatus(status: ActionStatus): BoardColumnId {
   const column = BOARD_COLUMNS.find((col) => col.statuses.includes(status));
@@ -120,6 +122,29 @@ function compareDoneCards(a: SuggestedActionView, b: SuggestedActionView): numbe
   return aStamp < bStamp ? 1 : -1;
 }
 
+/** When an item was finished, for the Done column's recency window. */
+export function finishedAt(action: SuggestedActionView): string {
+  return action.completedAt ?? action.createdAt;
+}
+
+/**
+ * Split a sorted Done list into the default view (finished within the last
+ * week) and the older tail behind the "Show older" control.
+ */
+export function partitionDoneCards(
+  done: readonly SuggestedActionView[],
+  now: Date = new Date(),
+): { recent: SuggestedActionView[]; older: SuggestedActionView[] } {
+  const cutoff = new Date(now.getTime() - DONE_RECENT_DAYS * 24 * 60 * 60 * 1000);
+  const cutoffIso = cutoff.toISOString();
+  const recent: SuggestedActionView[] = [];
+  const older: SuggestedActionView[] = [];
+  for (const action of done) {
+    (finishedAt(action) >= cutoffIso ? recent : older).push(action);
+  }
+  return { recent, older };
+}
+
 export type BoardGroups = Record<BoardColumnId, SuggestedActionView[]>;
 
 export function groupActionsIntoColumns(
@@ -141,7 +166,6 @@ export function groupActionsIntoColumns(
   groups.in_progress.sort((a, b) => compareBoardCards(a, b, now));
   groups.waiting.sort((a, b) => compareBoardCards(a, b, now));
   groups.done.sort(compareDoneCards);
-  groups.done = groups.done.slice(0, DONE_COLUMN_LIMIT);
   return groups;
 }
 

@@ -401,6 +401,49 @@ export async function decideAction(
   return { ok: true };
 }
 
+/**
+ * Clear the review queue: every inbox suggestion is dismissed in one step.
+ * Dismissed (not completed) keeps the record honest — nothing the operator
+ * never approved is recorded as done work — while the items still land in the
+ * board's Done column, labelled Dismissed.
+ */
+export async function clearReviewQueue(): Promise<ActionResponse> {
+  try {
+    const ctx = await requireTenantContext();
+    const supabase = await createSupabaseServerClient();
+    const now = new Date().toISOString();
+
+    const { data, error } = await supabase
+      .from("suggested_actions")
+      .update({
+        status: "cancelled",
+        completed_at: now,
+        cleanup_metadata: {
+          cleanup_type: "review_queue_cleared",
+          cleared_at: now,
+        },
+      })
+      .eq("tenant_id", ctx.tenantId)
+      .eq("status", "inbox")
+      .select("id");
+
+    if (error) return { ok: false, error: error.message };
+    const clearedIds = (data ?? []).map((row) => row.id);
+
+    await auditService.record(ctx, {
+      action: "action.review_queue.cleared",
+      target: ctx.tenantId,
+      metadata: { cleared: clearedIds.length, actionIds: clearedIds },
+    });
+
+    revalidatePath("/actions");
+    revalidatePath("/briefing");
+    return { ok: true, data: { cleared: clearedIds.length } };
+  } catch (err: any) {
+    return { ok: false, error: err.message || "An unexpected error occurred." };
+  }
+}
+
 export async function mergeDuplicateActions(input: {
   primaryActionId: string;
   duplicateActionIds: string[];

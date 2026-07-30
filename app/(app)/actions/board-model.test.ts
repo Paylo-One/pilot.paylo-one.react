@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { SuggestedActionView, ActionStatus } from "@/modules/action-extraction/server";
 import {
   BOARD_COLUMNS,
-  DONE_COLUMN_LIMIT,
+  DONE_RECENT_DAYS,
   buildDuplicateGroups,
   columnForStatus,
   compareBoardCards,
   groupActionsIntoColumns,
   isOverdue,
+  partitionDoneCards,
   statusForDrop,
 } from "./board-model";
 
@@ -90,8 +91,8 @@ describe("groupActionsIntoColumns", () => {
     expect(groups.done.map((a) => a.id).sort()).toEqual(["f", "g"]);
   });
 
-  it("caps the done column at the recency limit, newest first", () => {
-    const finished = Array.from({ length: DONE_COLUMN_LIMIT + 5 }, (_, index) =>
+  it("keeps every finished item in done, newest first", () => {
+    const finished = Array.from({ length: 30 }, (_, index) =>
       action({
         id: `done-${index}`,
         status: "completed",
@@ -99,8 +100,8 @@ describe("groupActionsIntoColumns", () => {
       }),
     );
     const groups = groupActionsIntoColumns(finished);
-    expect(groups.done).toHaveLength(DONE_COLUMN_LIMIT);
-    expect(groups.done[0]?.id).toBe(`done-${DONE_COLUMN_LIMIT + 4}`);
+    expect(groups.done).toHaveLength(30);
+    expect(groups.done[0]?.id).toBe("done-29");
   });
 
   it("orders urgent work first within a column", () => {
@@ -116,6 +117,57 @@ describe("groupActionsIntoColumns", () => {
       "dated",
       "plain",
     ]);
+  });
+});
+
+describe("partitionDoneCards", () => {
+  const now = new Date("2026-07-30T12:00:00Z");
+
+  it("splits done items at the one-week boundary", () => {
+    const fresh = action({
+      id: "fresh",
+      status: "completed",
+      completedAt: "2026-07-28T10:00:00Z",
+    });
+    const boundary = action({
+      id: "boundary",
+      status: "completed",
+      completedAt: new Date(
+        now.getTime() - (DONE_RECENT_DAYS * 24 - 1) * 60 * 60 * 1000,
+      ).toISOString(),
+    });
+    const old = action({
+      id: "old",
+      status: "completed",
+      completedAt: "2026-07-01T10:00:00Z",
+    });
+    const { recent, older } = partitionDoneCards([fresh, boundary, old], now);
+    expect(recent.map((item) => item.id).sort()).toEqual(["boundary", "fresh"]);
+    expect(older.map((item) => item.id)).toEqual(["old"]);
+  });
+
+  it("falls back to createdAt when completedAt is missing", () => {
+    const cancelledOld = action({
+      id: "cancelled-old",
+      status: "cancelled",
+      completedAt: null,
+      createdAt: "2026-06-01T10:00:00Z",
+    });
+    const { recent, older } = partitionDoneCards([cancelledOld], now);
+    expect(recent).toHaveLength(0);
+    expect(older.map((item) => item.id)).toEqual(["cancelled-old"]);
+  });
+
+  it("preserves the incoming order within each partition", () => {
+    const items = [
+      action({ id: "a", status: "completed", completedAt: "2026-07-29T10:00:00Z" }),
+      action({ id: "b", status: "completed", completedAt: "2026-07-28T10:00:00Z" }),
+      action({ id: "c", status: "completed", completedAt: "2026-07-10T10:00:00Z" }),
+      action({ id: "d", status: "completed", completedAt: "2026-07-05T10:00:00Z" }),
+    ];
+    const { recent, older } = partitionDoneCards(items, now);
+    expect(recent.map((item) => item.id)).toEqual(["a", "b"]);
+    expect(older.map((item) => item.id)).toEqual(["c", "d"]);
   });
 });
 

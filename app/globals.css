@@ -6172,6 +6172,46 @@ a.relationship-list__link:hover .relationship-list__other {
   line-height: var(--leading-snug);
 }
 
+.board-col__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 0 var(--space-sm);
+}
+
+.board-col__tools-note {
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+}
+
+.board-col__clear,
+.board-col__more {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: var(--text-small);
+  color: var(--colour-text-secondary);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.board-col__clear:hover,
+.board-col__more:hover {
+  color: var(--colour-text-primary);
+}
+
+.board-col__clear:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.board-col__more {
+  align-self: center;
+  padding: var(--space-sm);
+}
+
 .board-card {
   position: relative;
   background: var(--colour-surface-elevated);

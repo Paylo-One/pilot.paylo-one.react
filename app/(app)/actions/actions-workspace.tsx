@@ -27,13 +27,16 @@ import {
   snoozeAction,
   decideAction,
   mergeDuplicateActions,
+  clearReviewQueue,
 } from "./actions";
 import type { PersonLinkOption } from "@/components/refinement/person-link-control";
 import {
   BOARD_COLUMNS,
+  DONE_PAGE_SIZE,
   buildDuplicateGroups,
   groupActionsIntoColumns,
   isOverdue,
+  partitionDoneCards,
   statusForDrop,
   type BoardColumnId,
   type DuplicateGroup,
@@ -397,6 +400,8 @@ export function ActionsWorkspace({
   const [dismissedGroups, setDismissedGroups] = useState<string[]>([]);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<BoardColumnId | null>(null);
+  const [confirmClearQueue, setConfirmClearQueue] = useState(false);
+  const [olderDoneVisible, setOlderDoneVisible] = useState(0);
   const [overrides, setOverrides] = useState<Map<string, ActionStatus>>(new Map());
   const [isPending, startTransition] = useTransition();
 
@@ -442,6 +447,7 @@ export function ActionsWorkspace({
   }, [effectiveActions, people, q]);
 
   const groups = useMemo(() => groupActionsIntoColumns(visibleActions), [visibleActions]);
+  const doneSplit = useMemo(() => partitionDoneCards(groups.done), [groups.done]);
   const duplicateGroups = useMemo(
     () =>
       buildDuplicateGroups(effectiveActions).filter(
@@ -508,6 +514,28 @@ export function ActionsWorkspace({
 
   function snooze(actionId: string) {
     runMutation(() => snoozeAction(actionId, addDays(2), "Snoozed from the board."));
+  }
+
+  function clearQueue() {
+    setConfirmClearQueue(false);
+    const inboxIds = effectiveActions
+      .filter((action) => action.status === "inbox")
+      .map((action) => action.id);
+    if (inboxIds.length === 0) return;
+    setOverrides((current) => {
+      const next = new Map(current);
+      for (const id of inboxIds) next.set(id, "cancelled");
+      return next;
+    });
+    runMutation(
+      () => clearReviewQueue(),
+      () =>
+        setOverrides((current) => {
+          const next = new Map(current);
+          for (const id of inboxIds) next.delete(id);
+          return next;
+        }),
+    );
   }
 
   function submitQuickAction(event: React.FormEvent) {
@@ -707,7 +735,18 @@ export function ActionsWorkspace({
       ) : (
         <div className="board" role="list" aria-label="Action board">
           {BOARD_COLUMNS.map((column) => {
-            const items = groups[column.id];
+            const olderShown =
+              column.id === "done"
+                ? doneSplit.older.slice(0, olderDoneVisible)
+                : [];
+            const olderRemaining =
+              column.id === "done"
+                ? doneSplit.older.length - olderShown.length
+                : 0;
+            const items =
+              column.id === "done"
+                ? [...doneSplit.recent, ...olderShown]
+                : groups[column.id];
             return (
               <section
                 key={column.id}
@@ -737,6 +776,41 @@ export function ActionsWorkspace({
                   <h2 className="board-col__title">{column.title}</h2>
                   <span className="board-col__count">{items.length}</span>
                 </header>
+                {column.id === "to_approve" && items.length > 0 ? (
+                  <div className="board-col__tools">
+                    {confirmClearQueue ? (
+                      <>
+                        <span className="board-col__tools-note">
+                          Dismiss all {items.length}?
+                        </span>
+                        <button
+                          type="button"
+                          className="btn btn--danger btn--sm"
+                          disabled={isPending}
+                          onClick={clearQueue}
+                        >
+                          Dismiss all
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--sm"
+                          onClick={() => setConfirmClearQueue(false)}
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="board-col__clear"
+                        disabled={isPending}
+                        onClick={() => setConfirmClearQueue(true)}
+                      >
+                        Clear review queue
+                      </button>
+                    )}
+                  </div>
+                ) : null}
                 <div className="board-col__list">
                   {items.length === 0 ? (
                     <p className="board-col__empty">{column.hint}</p>
@@ -768,6 +842,17 @@ export function ActionsWorkspace({
                       />
                     ))
                   )}
+                  {column.id === "done" && olderRemaining > 0 ? (
+                    <button
+                      type="button"
+                      className="board-col__more"
+                      onClick={() =>
+                        setOlderDoneVisible((count) => count + DONE_PAGE_SIZE)
+                      }
+                    >
+                      Show older ({olderRemaining})
+                    </button>
+                  ) : null}
                 </div>
               </section>
             );
