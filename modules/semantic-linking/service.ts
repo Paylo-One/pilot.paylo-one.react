@@ -119,6 +119,42 @@ export function scoreSemanticCandidate(input: SemanticCandidateInput): number {
   return Math.max(0, Math.min(0.99, Math.round(score * 1000) / 1000));
 }
 
+/**
+ * A calm, operator-facing name for an entity whose real label could not be
+ * resolved on this run (e.g. a neighbour that was embedded on a prior run but
+ * now falls outside the current load window). Never expose a raw entity id in
+ * operator-visible evidence copy — an id-prefix like "company 3f2a1b9c" leaks
+ * internal detail and reads as broken (release-readiness copy bar).
+ */
+export function humanEntityLabel(entityType: string): string {
+  switch (entityType) {
+    case "person":
+      return "a related person";
+    case "company":
+      return "a related company";
+    case "action":
+      return "a related action";
+    case "diary_entry":
+      return "a related diary entry";
+    case "source_item":
+      return "a related source item";
+    default:
+      return "a related item";
+  }
+}
+
+/** Pure builder for the operator-facing evidence line on a semantic link. */
+export function buildSemanticEvidence(
+  sourceLabel: string,
+  targetLabel: string,
+  similarity: number,
+): string {
+  return (
+    `${sourceLabel} and ${targetLabel} are semantically close ` +
+    `(${Math.round(similarity * 100)}% vector similarity).`
+  );
+}
+
 export function relationshipTypeFor(
   sourceType: SemanticEntityType,
   targetType: SemanticEntityType,
@@ -435,9 +471,7 @@ async function upsertSuggestedSemanticLink(
     return false;
   }
 
-  const evidence =
-    `${source.label} and ${target.label} are semantically close ` +
-    `(${Math.round(similarity * 100)}% vector similarity).`;
+  const evidence = buildSemanticEvidence(source.label, target.label, similarity);
   const visibility = linkVisibilityFor(source, target);
 
   if (existingRow) {
@@ -476,15 +510,24 @@ async function upsertSuggestedSemanticLink(
 async function generateSemanticLinks(
   tenantId: string,
   embeddingModel: string,
-  inputs: readonly KnowledgeEmbeddingInput[],
+  sources: readonly KnowledgeEmbeddingInput[],
   embeddings: readonly (readonly number[])[],
+  allInputs: readonly KnowledgeEmbeddingInput[],
 ): Promise<number> {
   const secret = createSupabaseSecretClient();
-  const byKey = new Map(inputs.map((input) => [entityKey(input.entityType, input.entityId), input]));
+  // Label/visibility map keyed over EVERY loaded entity — not just the ones
+  // re-embedded this run. Neighbours returned by the match RPC come from all
+  // tenant embeddings, so a map built only from `sources` (changed rows) would
+  // leave an unchanged neighbour without a real label and fabricate an id-prefix
+  // one ("company 3f2a1b9c") straight into the persisted, operator-visible
+  // evidence line.
+  const byKey = new Map(
+    allInputs.map((input) => [entityKey(input.entityType, input.entityId), input]),
+  );
   let suggested = 0;
 
-  for (let index = 0; index < inputs.length; index += 1) {
-    const source = inputs[index];
+  for (let index = 0; index < sources.length; index += 1) {
+    const source = sources[index];
     const embedding = embeddings[index];
     if (!source || !embedding) continue;
 
@@ -504,7 +547,9 @@ async function generateSemanticLinks(
         ({
           entityType: row.entity_type as SemanticEntityType,
           entityId: row.entity_id,
-          label: `${row.entity_type} ${row.entity_id.slice(0, 8)}`,
+          // Neighbour is outside the current load window — fall back to a calm,
+          // honest descriptor rather than leaking a raw id into evidence copy.
+          label: humanEntityLabel(row.entity_type),
           text: "",
           visibility: row.visibility as EmbeddingVisibility,
           ownerUserId: row.owner_user_id,
@@ -563,6 +608,7 @@ export const semanticLinkingService: SemanticLinkingService = {
       embeddingModel,
       changed,
       embedResult.value.embeddings,
+      inputs,
     );
 
     return {
