@@ -354,7 +354,12 @@ export async function confirmSuggestion(tenantId: string, suggestionId: string):
   if (!s || !s.candidate_person_id) return false;
   const { sourceType, identityType } = identityForSystem(s.source_system ?? "email");
 
-  await supabase.from("person_identities").upsert(
+  // Land the verified identity FIRST — it is the point of confirming. If this
+  // fails we must not resolve the suggestion, or the operator's decision is lost
+  // silently (the item would never attribute as a signal, yet the queue would
+  // show it handled). Every write is checked; the status flip is the authoritative
+  // "resolved" signal and therefore runs last.
+  const { error: identityError } = await supabase.from("person_identities").upsert(
     {
       tenant_id: tenantId,
       person_id: s.candidate_person_id,
@@ -366,14 +371,22 @@ export async function confirmSuggestion(tenantId: string, suggestionId: string):
     },
     { onConflict: "tenant_id,source_type,identity_value", ignoreDuplicates: false },
   );
-  await supabase.from("person_link_suggestions").update({ status: "confirmed" }).eq("id", suggestionId);
-  await supabase.from("correlation_feedback").insert({
+  if (identityError) throw new Error(identityError.message);
+
+  const { error: feedbackError } = await supabase.from("correlation_feedback").insert({
     tenant_id: tenantId,
     source_item_id: s.source_item_id,
     proposed_person_id: s.candidate_person_id,
     corrected_person_id: s.candidate_person_id,
     verdict: "correct",
   });
+  if (feedbackError) throw new Error(feedbackError.message);
+
+  const { error: statusError } = await supabase
+    .from("person_link_suggestions")
+    .update({ status: "confirmed" })
+    .eq("id", suggestionId);
+  if (statusError) throw new Error(statusError.message);
   return true;
 }
 
@@ -382,14 +395,21 @@ export async function rejectSuggestion(tenantId: string, suggestionId: string): 
   const supabase = await createSupabaseServerClient();
   const s = await readSuggestion(supabase, suggestionId);
   if (!s) return false;
-  await supabase.from("person_link_suggestions").update({ status: "rejected" }).eq("id", suggestionId);
-  await supabase.from("correlation_feedback").insert({
+
+  const { error: feedbackError } = await supabase.from("correlation_feedback").insert({
     tenant_id: tenantId,
     source_item_id: s.source_item_id,
     proposed_person_id: s.candidate_person_id,
     corrected_person_id: null,
     verdict: "wrong",
   });
+  if (feedbackError) throw new Error(feedbackError.message);
+
+  const { error: statusError } = await supabase
+    .from("person_link_suggestions")
+    .update({ status: "rejected" })
+    .eq("id", suggestionId);
+  if (statusError) throw new Error(statusError.message);
   return true;
 }
 
@@ -405,7 +425,10 @@ export async function newPersonFromSuggestion(tenantId: string, suggestionId: st
   const { sourceType, identityType } = identityForSystem(s.source_system ?? "email");
 
   const personId = await createPerson(tenantId, { displayName: s.observed_identity });
-  await supabase.from("person_identities").insert({
+  // Attach the verified identity before resolving the suggestion; a silent
+  // failure here would create a person with no identity yet mark the suggestion
+  // handled. Status flip runs last as the authoritative "resolved" signal.
+  const { error: identityError } = await supabase.from("person_identities").insert({
     tenant_id: tenantId,
     person_id: personId,
     source_type: sourceType,
@@ -414,14 +437,22 @@ export async function newPersonFromSuggestion(tenantId: string, suggestionId: st
     confidence: 1,
     verified_by_user: true,
   });
-  await supabase.from("person_link_suggestions").update({ status: "new_person" }).eq("id", suggestionId);
-  await supabase.from("correlation_feedback").insert({
+  if (identityError) throw new Error(identityError.message);
+
+  const { error: feedbackError } = await supabase.from("correlation_feedback").insert({
     tenant_id: tenantId,
     source_item_id: s.source_item_id,
     proposed_person_id: s.candidate_person_id,
     corrected_person_id: personId,
     verdict: "new_person",
   });
+  if (feedbackError) throw new Error(feedbackError.message);
+
+  const { error: statusError } = await supabase
+    .from("person_link_suggestions")
+    .update({ status: "new_person" })
+    .eq("id", suggestionId);
+  if (statusError) throw new Error(statusError.message);
   return personId;
 }
 
