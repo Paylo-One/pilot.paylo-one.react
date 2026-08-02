@@ -59,3 +59,15 @@ export const SOURCE_SYSTEM_LABELS: Record<SourceSystem, string> = {
 export function defaultDisplayName(system: SourceSystem): string {
   return SOURCE_SYSTEM_LABELS[system] ?? system;
 }
+
+/**
+ * Human-facing label for a persisted `source_system` value that reaches an
+ * operator-visible surface as a plain `string` (e.g. a Daily Memo citation's
+ * `source_items.system`, read back untyped). Maps the internal enum token to
+ * its friendly label, falling back to the raw value for any unmapped system so
+ * an unknown source degrades to its token rather than crashing — but a known
+ * one never leaks a raw enum (`email`, `ms365_mail`, `file_upload`) into copy.
+ */
+export function sourceSystemLabel(system: string): string {
+  return SOURCE_SYSTEM_LABELS[system as SourceSystem] ?? system;
+}
