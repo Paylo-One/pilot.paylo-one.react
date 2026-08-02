@@ -25,7 +25,7 @@ import {
   type SuggestedActionView,
 } from "@/modules/action-extraction/server";
 import { diaryService, type DiaryEntry } from "@/modules/diary";
-import { SOURCE_SYSTEM_LABELS } from "@/modules/source-connection";
+import { sourceSystemLabel } from "@/modules/source-connection";
 import {
   IMPORTANCE_LABELS,
   IMPORTANCE_TONE,
@@ -412,7 +412,7 @@ function PeopleSection({ people }: { people: PersonInFocus[] }) {
                 {p.signals.map((s) => (
                   <span key={s.id} className="source-ref" title={s.title}>
                     <span className="source-ref__system">
-                      {SOURCE_SYSTEM_LABELS[s.system] ?? s.system}
+                      {sourceSystemLabel(s.system)}
                     </span>
                     <span aria-hidden="true">·</span>
                     <span>{s.title.length > 40 ? `${s.title.slice(0, 39)}…` : s.title}</span>
@@ -467,7 +467,7 @@ function RealReferences({ section }: { section: BriefingSectionView }) {
       <div className="source-ref-row">
         {section.references.map((ref) => (
           <span key={ref.id} className="source-ref" title={ref.excerptOrPointer ?? undefined}>
-            <span className="source-ref__system">{ref.sourceSystem}</span>
+            <span className="source-ref__system">{sourceSystemLabel(ref.sourceSystem)}</span>
             {typeof ref.confidence === "number" ? (
               <span className="source-ref__confidence">{Math.round(ref.confidence * 100)}%</span>
             ) : null}
