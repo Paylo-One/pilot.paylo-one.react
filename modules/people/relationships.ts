@@ -24,6 +24,7 @@ import {
   type LinkStatus,
   type LinkVisibility,
   type ResolvedRelationship,
+  humanEntityLabel,
   relationshipKindLabel,
 } from "./people.types";
 
@@ -178,41 +179,106 @@ export async function deleteEntityLink(linkId: string): Promise<void> {
 // --- Label resolution -------------------------------------------------------
 
 /**
- * Resolve display labels for person + company endpoints (the entities this pass's
- * graph centres on). Other endpoint types fall back to a typed short label; full
- * label resolution for topics/actions/decisions is a documented follow-up.
+ * Resolve display labels for the endpoint types a relationship read can touch —
+ * people, companies, and the action / source item / diary entry endpoints that
+ * semantic linking connects people to. People and companies are resolved
+ * including archived records (the person/company detail views load archived
+ * records so they can be restored, and a real name still reads better than a
+ * generic descriptor). Endpoints with no resolvable title (or a type this pass
+ * does not title — topics, decisions, briefings) are simply absent from the map;
+ * callers fall back to `humanEntityLabel`, never a raw id.
  */
 async function resolveLabels(
   links: readonly EntityLink[],
 ): Promise<Map<string, string>> {
-  const labels = new Map<string, string>();
-  const personIds = new Set<string>();
-  const companyIds = new Set<string>();
+  const idsByType = new Map<EntityType, Set<string>>();
   for (const l of links) {
-    if (l.sourceType === "person") personIds.add(l.sourceId);
-    if (l.targetType === "person") personIds.add(l.targetId);
-    if (l.sourceType === "company") companyIds.add(l.sourceId);
-    if (l.targetType === "company") companyIds.add(l.targetId);
+    for (const [t, id] of [
+      [l.sourceType, l.sourceId],
+      [l.targetType, l.targetId],
+    ] as const) {
+      const set = idsByType.get(t) ?? new Set<string>();
+      set.add(id);
+      idsByType.set(t, set);
+    }
   }
+
+  const labels = new Map<string, string>();
   const supabase = await createSupabaseServerClient();
-  if (personIds.size > 0) {
-    const { data } = await supabase
-      .from("people")
-      .select("id, display_name")
-      .in("id", [...personIds]);
-    for (const p of (data ?? []) as { id: string; display_name: string }[]) {
-      labels.set(`person:${p.id}`, p.display_name);
-    }
+  // Supabase query builders are PromiseLike, not full Promises.
+  const lookups: PromiseLike<void>[] = [];
+
+  const personIds = idsByType.get("person");
+  if (personIds?.size) {
+    lookups.push(
+      supabase
+        .from("people")
+        .select("id, display_name")
+        .in("id", [...personIds])
+        .then(({ data }) => {
+          for (const p of (data ?? []) as { id: string; display_name: string }[]) {
+            labels.set(`person:${p.id}`, p.display_name);
+          }
+        }),
+    );
   }
-  if (companyIds.size > 0) {
-    const { data } = await supabase
-      .from("companies")
-      .select("id, name")
-      .in("id", [...companyIds]);
-    for (const c of (data ?? []) as { id: string; name: string }[]) {
-      labels.set(`company:${c.id}`, c.name);
-    }
+  const companyIds = idsByType.get("company");
+  if (companyIds?.size) {
+    lookups.push(
+      supabase
+        .from("companies")
+        .select("id, name")
+        .in("id", [...companyIds])
+        .then(({ data }) => {
+          for (const c of (data ?? []) as { id: string; name: string }[]) {
+            labels.set(`company:${c.id}`, c.name);
+          }
+        }),
+    );
   }
+  const itemIds = idsByType.get("source_item");
+  if (itemIds?.size) {
+    lookups.push(
+      supabase
+        .from("source_items")
+        .select("id, title, system")
+        .in("id", [...itemIds])
+        .then(({ data }) => {
+          for (const it of (data ?? []) as { id: string; title: string | null; system: string }[]) {
+            labels.set(`source_item:${it.id}`, it.title?.trim() || `${it.system} message`);
+          }
+        }),
+    );
+  }
+  const actionIds = idsByType.get("action");
+  if (actionIds?.size) {
+    lookups.push(
+      supabase
+        .from("suggested_actions")
+        .select("id, title")
+        .in("id", [...actionIds])
+        .then(({ data }) => {
+          for (const a of (data ?? []) as { id: string; title: string }[]) {
+            labels.set(`action:${a.id}`, a.title);
+          }
+        }),
+    );
+  }
+  const diaryIds = idsByType.get("diary_entry");
+  if (diaryIds?.size) {
+    lookups.push(
+      supabase
+        .from("diary_entries")
+        .select("id, created_at")
+        .in("id", [...diaryIds])
+        .then(({ data }) => {
+          for (const d of (data ?? []) as { id: string; created_at: string }[]) {
+            labels.set(`diary_entry:${d.id}`, `Diary entry (${d.created_at.slice(0, 10)})`);
+          }
+        }),
+    );
+  }
+  await Promise.all(lookups);
   return labels;
 }
 
@@ -262,7 +328,7 @@ function resolveOther(
   const otherType = outgoing ? link.targetType : link.sourceType;
   const otherId = outgoing ? link.targetId : link.sourceId;
   const otherLabel =
-    labels.get(`${otherType}:${otherId}`) ?? `${otherType} ${otherId.slice(0, 8)}`;
+    labels.get(`${otherType}:${otherId}`) ?? humanEntityLabel(otherType);
   return {
     id: link.id,
     otherType,
@@ -499,10 +565,10 @@ export async function listSuggestedConnections(
       id: l.id,
       sourceType: l.sourceType,
       sourceId: l.sourceId,
-      sourceLabel: sourceLabel ?? `${l.sourceType} ${l.sourceId.slice(0, 8)}`,
+      sourceLabel: sourceLabel ?? humanEntityLabel(l.sourceType),
       targetType: l.targetType,
       targetId: l.targetId,
-      targetLabel: targetLabel ?? `${l.targetType} ${l.targetId.slice(0, 8)}`,
+      targetLabel: targetLabel ?? humanEntityLabel(l.targetType),
       relationshipType: l.relationshipType,
       relationshipLabel: relationshipKindLabel(l.relationshipType),
       confidence: l.confidence,

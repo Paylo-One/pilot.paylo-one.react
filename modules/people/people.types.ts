@@ -326,3 +326,15 @@ export const ENTITY_TYPE_LABELS: Record<EntityType, string> = {
 export function relationshipKindLabel(kind: string): string {
   return (RELATIONSHIP_KIND_LABELS as Record<string, string>)[kind] ?? kind;
 }
+
+/**
+ * A calm, operator-facing name for a relationship endpoint whose real label
+ * could not be resolved (archived, deleted, or an endpoint type this pass does
+ * not title). Never expose a raw entity id in operator-visible copy — an
+ * id-prefix like "action 3f2a1b9c" leaks internal detail and reads as broken
+ * (release-readiness copy bar). Mirrors the semantic-linking evidence fallback.
+ */
+export function humanEntityLabel(type: EntityType): string {
+  const noun = (ENTITY_TYPE_LABELS[type] ?? "item").toLowerCase();
+  return `a related ${noun}`;
+}
