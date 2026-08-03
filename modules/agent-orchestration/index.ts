@@ -588,6 +588,7 @@ async function runSignalClassification(
   const todo = items.filter((i) => !done.has(i.id)).slice(0, CLASSIFY_LIMIT);
 
   let classified = 0;
+  let failedWrites = 0;
   for (const item of todo) {
     const { context } = buildContext([item]);
     let result;
@@ -606,7 +607,12 @@ async function runSignalClassification(
     if (!parsed.success) continue;
     const c = parsed.data;
     const category = VALID_CATEGORY.has(c.category) ? c.category : "noise";
-    await secret.from("signals").upsert(
+    // Count only what actually lands: a fire-and-forget upsert would report the
+    // item as `classified` even when the write failed, silently losing the
+    // classification and inflating the audited count. One bad item never aborts
+    // the batch ("never throws on one bad item") — it is tallied under
+    // `failedWrites` so a persistent failure is observable, not invisible.
+    const { error } = await secret.from("signals").upsert(
       {
         tenant_id: ctx.tenantId,
         source_item_id: item.id,
@@ -623,13 +629,17 @@ async function runSignalClassification(
       },
       { onConflict: "source_item_id" },
     );
+    if (error) {
+      failedWrites += 1;
+      continue;
+    }
     classified += 1;
   }
 
   await auditService.record(ctx, {
     action: "pipeline.classification.run",
     target: ctx.tenantId,
-    metadata: { classified, considered: todo.length },
+    metadata: { classified, considered: todo.length, failedWrites },
   });
   return ok({ agentRunId, kind: "signal_classification" });
 }
@@ -893,10 +903,18 @@ async function runTopicSynthesis(
     .map((t) => clamp(t.label, 80))
     .filter(Boolean)
     .map((name) => ({ tenant_id: ctx.tenantId, name }));
+  // Check the write before auditing `topics: rows.length`: a fire-and-forget
+  // upsert would record synthesised topics that never landed, so return loud on
+  // a persist failure rather than logging a count the DB does not back.
   if (rows.length > 0) {
-    await secret
+    const { error } = await secret
       .from("topics")
       .upsert(rows, { onConflict: "tenant_id,name", ignoreDuplicates: true });
+    if (error) {
+      return err(
+        new AppError("internal", error.message ?? "topic_persist_failed"),
+      );
+    }
   }
 
   await auditService.record(ctx, {
@@ -928,24 +946,32 @@ async function runSignalRanking(
   if (!parsed.success) return ok({ agentRunId, kind: "signal_ranking" });
 
   let ranked = 0;
+  let failedWrites = 0;
   for (const r of parsed.data.ranked) {
     const item = tokenToItem.get(r.itemId.trim());
     if (!item) continue;
     const tier = VALID_TIER.has(r.tier) ? r.tier : "background";
     // Only updates rows that already have a signal (classification ran first).
-    const { data } = await secret
+    // A swallowed error here previously looked identical to "no matching signal
+    // yet" (both leave `ranked` unincremented); surface it under `failedWrites`
+    // so a persistent update failure is observable rather than silent.
+    const { data, error } = await secret
       .from("signals")
       .update({ priority_score: r.priorityScore, priority_tier: tier })
       .eq("tenant_id", ctx.tenantId)
       .eq("source_item_id", item.id)
       .select("id");
+    if (error) {
+      failedWrites += 1;
+      continue;
+    }
     if (data && data.length > 0) ranked += 1;
   }
 
   await auditService.record(ctx, {
     action: "pipeline.ranking.run",
     target: ctx.tenantId,
-    metadata: { ranked },
+    metadata: { ranked, failedWrites },
   });
   return ok({ agentRunId, kind: "signal_ranking" });
 }
@@ -986,7 +1012,16 @@ async function runSignalTriage(
       prompt_version_id: result.value.promptVersionDbId,
     };
   });
-  if (rows.length > 0) await secret.from("signal_groups").insert(rows);
+  // Audit `groups: rows.length` only once the insert lands — a fire-and-forget
+  // write would report themed groups the operator's triage view never received.
+  if (rows.length > 0) {
+    const { error } = await secret.from("signal_groups").insert(rows);
+    if (error) {
+      return err(
+        new AppError("internal", error.message ?? "signal_triage_persist_failed"),
+      );
+    }
+  }
 
   await auditService.record(ctx, {
     action: "pipeline.triage.run",
@@ -1031,6 +1066,7 @@ async function runPeopleMemory(
   }
 
   let noted = 0;
+  let failedWrites = 0;
   for (const person of parsed.data.people) {
     const personId = byName.get(person.name.trim().toLowerCase());
     if (!personId) continue;
@@ -1040,18 +1076,26 @@ async function runPeopleMemory(
       person.context ? `Context: ${person.context}` : "",
     ].filter(Boolean);
     if (lines.length === 0) continue;
-    await secret.from("person_notes").insert({
+    // Count only notes that actually persist: a fire-and-forget insert would
+    // report the person as `noted` even when the write failed, silently losing
+    // the relationship memory. One failed insert never aborts the batch; it is
+    // tallied under `failedWrites` so a persistent failure stays observable.
+    const { error } = await secret.from("person_notes").insert({
       tenant_id: ctx.tenantId,
       person_id: personId,
       body: clamp(lines.join("\n"), 1500),
     });
+    if (error) {
+      failedWrites += 1;
+      continue;
+    }
     noted += 1;
   }
 
   await auditService.record(ctx, {
     action: "pipeline.people_memory.run",
     target: ctx.tenantId,
-    metadata: { noted, people: parsed.data.people.length },
+    metadata: { noted, people: parsed.data.people.length, failedWrites },
   });
   return ok({ agentRunId, kind: "people_memory" });
 }
@@ -1100,22 +1144,35 @@ async function runDiaryReflection(
   if (!parsed.success) return ok({ agentRunId, kind: "diary_reflection" });
   const d = parsed.data;
 
-  await secret.from("diary_weekly_summaries").upsert(
-    {
-      tenant_id: ctx.tenantId,
-      author_user_id: authorUserId,
-      week_start_date: weekStartDate(),
-      key_reflections: d.reflection ? [d.reflection] : [],
-      important_decisions: d.decisions,
-      notable_risks: d.risks,
-      recurring_themes: d.recurringThemes,
-      next_week_attention: d.nextWeekAttention,
-      follow_ups_created: [],
-      entry_count: entries.length,
-      generated_at: new Date().toISOString(),
-    },
-    { onConflict: "tenant_id,author_user_id,week_start_date" },
-  );
+  // Fail loud if the private weekly reflection does not persist: a swallowed
+  // error would drop the operator's reflection while the audit still logged a
+  // completed run over `entries.length` entries.
+  const { error: reflectionError } = await secret
+    .from("diary_weekly_summaries")
+    .upsert(
+      {
+        tenant_id: ctx.tenantId,
+        author_user_id: authorUserId,
+        week_start_date: weekStartDate(),
+        key_reflections: d.reflection ? [d.reflection] : [],
+        important_decisions: d.decisions,
+        notable_risks: d.risks,
+        recurring_themes: d.recurringThemes,
+        next_week_attention: d.nextWeekAttention,
+        follow_ups_created: [],
+        entry_count: entries.length,
+        generated_at: new Date().toISOString(),
+      },
+      { onConflict: "tenant_id,author_user_id,week_start_date" },
+    );
+  if (reflectionError) {
+    return err(
+      new AppError(
+        "internal",
+        reflectionError.message ?? "diary_reflection_persist_failed",
+      ),
+    );
+  }
 
   await auditService.record(ctx, {
     action: "pipeline.diary_reflection.run",
@@ -1199,7 +1256,9 @@ async function runWeeklyOperatingReview(
     return ok({ agentRunId, kind: "weekly_operating_review" });
   const rv = parsed.data;
 
-  await secret.from("operating_reviews").upsert(
+  // Fail loud on a persist failure so the run is not audited as complete while
+  // the operating review the summary describes never reached the tenant.
+  const { error: reviewError } = await secret.from("operating_reviews").upsert(
     {
       tenant_id: ctx.tenantId,
       week_start_date: weekStartDate(),
@@ -1214,6 +1273,14 @@ async function runWeeklyOperatingReview(
     },
     { onConflict: "tenant_id,week_start_date" },
   );
+  if (reviewError) {
+    return err(
+      new AppError(
+        "internal",
+        reviewError.message ?? "operating_review_persist_failed",
+      ),
+    );
+  }
 
   await auditService.record(ctx, {
     action: "pipeline.weekly_operating_review.run",
