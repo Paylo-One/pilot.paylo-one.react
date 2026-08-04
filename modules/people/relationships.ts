@@ -298,10 +298,16 @@ async function filterReadableLinks(links: readonly EntityLink[]): Promise<Entity
     return visible.filter((link) => link.sourceType !== "diary_entry" && link.targetType !== "diary_entry");
   }
 
-  const { data } = await supabase
+  // Fail loud, like the enclosing entity_links reads (listRelationshipsFor /
+  // listSuggestedLinks): a transient error here would otherwise leave `data`
+  // null, silently dropping the operator's own diary-linked relationships as if
+  // they had never authored those entries — an incomplete graph with no signal.
+  // Surface it so the People/Companies view degrades to its calm error boundary.
+  const { data, error } = await supabase
     .from("diary_entries")
     .select("id, author_user_id")
     .in("id", [...diaryIds]);
+  if (error) throw new Error(error.message);
   const readableDiaryIds = new Set(
     ((data ?? []) as { id: string; author_user_id: string }[])
       .filter((entry) => entry.author_user_id === userId)
