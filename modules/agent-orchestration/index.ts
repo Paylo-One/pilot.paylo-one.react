@@ -1056,10 +1056,18 @@ async function runPeopleMemory(
   if (!parsed.success) return ok({ agentRunId, kind: "people_memory" });
 
   // Match names against existing people (case-insensitive), tenant-scoped.
-  const { data: peopleRows } = await secret
+  // Fail loud if this read errors: a swallowed error yields an empty name map,
+  // so every extracted person silently fails to match, `noted` stays 0, and the
+  // run is audited as a clean pass over `people.length` — losing the whole run's
+  // relationship memory with no signal. This is the read-side complement of the
+  // write-side people-memory hardening (decision-log 2026-08-03, follow-up #2).
+  const { data: peopleRows, error: peopleErr } = await secret
     .from("people")
     .select("id, display_name")
     .eq("tenant_id", ctx.tenantId);
+  if (peopleErr) {
+    return err(new AppError("internal", peopleErr.message ?? "people_read_failed"));
+  }
   const byName = new Map<string, string>();
   for (const p of peopleRows ?? []) {
     byName.set((p.display_name as string).trim().toLowerCase(), p.id as string);
@@ -1113,13 +1121,21 @@ async function runDiaryReflection(
   if (!authorUserId) return ok({ agentRunId, kind: "diary_reflection" });
   const secret = createSupabaseSecretClient();
 
-  const { data: entries } = await secret
+  // Fail loud if the entries read errors: a swallowed error is indistinguishable
+  // from "this author has no diary entries", so a transient failure silently
+  // skips the private weekly reflection and returns a clean run. The write side
+  // of this function already fails loud (decision-log 2026-08-03); this closes
+  // the read-side complement (follow-up #2).
+  const { data: entries, error: entriesErr } = await secret
     .from("diary_entries")
     .select("id, body, transcript, entry_type, created_at")
     .eq("tenant_id", ctx.tenantId)
     .eq("author_user_id", authorUserId)
     .order("created_at", { ascending: false })
     .limit(BATCH_ITEM_LIMIT);
+  if (entriesErr) {
+    return err(new AppError("internal", entriesErr.message ?? "diary_entries_read_failed"));
+  }
   if (!entries || entries.length === 0) {
     return ok({ agentRunId, kind: "diary_reflection" });
   }
@@ -1219,6 +1235,22 @@ async function runWeeklyOperatingReview(
       .gte("created_at", since)
       .limit(40),
   ]);
+
+  // Fail loud on any feeder read. Swallowing here has two silent failure modes:
+  // if all four reads error, `lines` is empty and the run returns as "nothing to
+  // review"; if a subset error, the operating review is built over a partial
+  // picture (e.g. a dropped `risks` read silently omits open risks) and audited
+  // as complete over `considered: lines.length` — a weekly review the operator
+  // trusts as whole while it misrepresents the week. Read-side complement of the
+  // operating-review write hardening (decision-log 2026-08-03, follow-up #2).
+  if (signalsRes.error)
+    return err(new AppError("internal", signalsRes.error.message ?? "signals_read_failed"));
+  if (decisionsRes.error)
+    return err(new AppError("internal", decisionsRes.error.message ?? "decisions_read_failed"));
+  if (risksRes.error)
+    return err(new AppError("internal", risksRes.error.message ?? "risks_read_failed"));
+  if (actionsRes.error)
+    return err(new AppError("internal", actionsRes.error.message ?? "actions_read_failed"));
 
   const lines: string[] = [];
   for (const s of signalsRes.data ?? [])
