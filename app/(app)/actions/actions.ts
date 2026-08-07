@@ -557,10 +557,14 @@ export async function suggestActionMetadata(
     const supabase = await createSupabaseServerClient();
 
     // 1. Fetch distinct existing topics
-    const { data: actionsData } = await supabase
+    const { data: actionsData, error: actionsError } = await supabase
       .from("suggested_actions")
       .select("topics")
       .eq("tenant_id", ctx.tenantId);
+
+    if (actionsError) {
+      throw new Error(`Could not read action topics: ${actionsError.message}`);
+    }
 
     const existingTopicsSet = new Set<string>();
     if (actionsData) {
@@ -577,10 +581,14 @@ export async function suggestActionMetadata(
     const existingTopics = Array.from(existingTopicsSet);
 
     // 2. Fetch directory people
-    const { data: peopleData } = await supabase
+    const { data: peopleData, error: peopleError } = await supabase
       .from("people")
       .select("id, display_name")
       .eq("tenant_id", ctx.tenantId);
+
+    if (peopleError) {
+      throw new Error(`Could not read people for action suggestions: ${peopleError.message}`);
+    }
     
     const peopleList = (peopleData ?? []).map((p) => ({
       id: p.id,
