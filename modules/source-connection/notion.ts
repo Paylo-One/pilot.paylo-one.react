@@ -34,7 +34,7 @@ function headers(token: string): HeadersInit {
     Authorization: `Bearer ${token}`,
     "Notion-Version": NOTION_VERSION,
     "Content-Type": "application/json",
-    "User-Agent": "paylo-one-management-os",
+    "User-Agent": "pilot-app",
   };
 }
 

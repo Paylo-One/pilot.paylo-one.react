@@ -132,11 +132,11 @@ export const MOCK_WHATSAPP_SESSION: WhatsAppSession = {
 
 /** Mock chats/contacts the operator could choose to monitor. */
 export const MOCK_WHATSAPP_CHATS: readonly WhatsAppChat[] = [
-  { id: "wa_chat_jacques", name: "Jacques Becker", kind: "direct", participantCount: 2, providerId: "27825550102@c.us" },
-  { id: "wa_chat_mara", name: "Mara Lindt", kind: "direct", participantCount: 2, providerId: "27821234567@c.us" },
+  { id: "wa_chat_alex", name: "Alex Verhoeven", kind: "direct", participantCount: 2, providerId: "27825550143@c.us" },
+  { id: "wa_chat_mara", name: "Mara Jensen", kind: "direct", participantCount: 2, providerId: "27825550167@c.us" },
   { id: "wa_chat_platform", name: "Platform team", kind: "group", participantCount: 8, providerId: "group-platform@g.us" },
   { id: "wa_chat_family", name: "Family group", kind: "group", participantCount: 5, providerId: "group-family@g.us" },
-  { id: "wa_chat_vendor", name: "Thunes support", kind: "direct", participantCount: 2, providerId: "1202000000@c.us" },
+  { id: "wa_chat_vendor", name: "Acme Support", kind: "direct", participantCount: 2, providerId: "27825550199@c.us" },
 ];
 
 /**
@@ -145,12 +145,12 @@ export const MOCK_WHATSAPP_CHATS: readonly WhatsAppChat[] = [
  */
 export const MOCK_WHATSAPP_MONITORS: readonly WhatsAppMonitor[] = [
   {
-    id: "wa_mon_jacques",
-    chatId: "wa_chat_jacques",
-    chatName: "Jacques Becker",
+    id: "wa_mon_alex",
+    chatId: "wa_chat_alex",
+    chatName: "Alex Verhoeven",
     chatKind: "direct",
-    personId: "person_jacques",
-    personName: "Jacques Becker",
+    personId: "person_alex",
+    personName: "Alex Verhoeven",
     isActive: true,
     includeInDailyMemo: true,
     storagePolicy: "no_raw",
@@ -182,7 +182,7 @@ export function isWhatsAppChatNamed(name: string, chatId: string): boolean {
 /**
  * Operator-facing label for a chat. Real names pass through; unnamed direct
  * chats on a phone jid render as an international-format number
- * ("+27764858621"); unnamed LID (privacy-id) chats keep their bare id — a "+"
+ * ("+31612345678"); unnamed LID (privacy-id) chats keep their bare id — a "+"
  * would misrepresent a non-dialable identifier; unnamed groups render as
  * "Unnamed group" (the id stays available as secondary text).
  */
