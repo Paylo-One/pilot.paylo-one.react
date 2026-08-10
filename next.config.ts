@@ -9,6 +9,9 @@ const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Standalone output for the self-hosted Docker image (DOCKER_BUILD=1 in the
+  // Dockerfile). Vercel/local dev builds are unaffected.
+  ...(process.env.DOCKER_BUILD ? { output: "standalone" as const } : {}),
   allowedDevOrigins: ["lvh.me", "*.lvh.me"],
   // Pin the workspace root to this directory. Sibling lockfiles (site/, repo
   // root) would otherwise make Next infer the wrong workspace root.
