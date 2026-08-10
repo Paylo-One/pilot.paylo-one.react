@@ -87,7 +87,9 @@ interface. `modules/shared` holds the tenant-context object and common types.
 - **Model Gateway** (`modules/model-gateway` + siblings, `api/model-gateway`):
   the single front door for inference — policy, prompt assembly, routing,
   output validation, usage + audit. Providers/vLLM sit behind adapters that
-  throw `NotImplementedError`.
+  throw `NotImplementedError`. Tenant manifesto prompt context is optional at
+  inference time: a storage failure omits it and is logged, while a confirmed
+  missing record may be seeded. Read failures never trigger seed writes.
 
 ## Run locally
 
