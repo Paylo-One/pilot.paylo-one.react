@@ -1,0 +1,48 @@
+name: Bug report
+description: Something in Pilot is broken
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to report a bug. Reproduction steps beat essays — help us see what you see.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Minimal steps from a fresh state to the problem. Include relevant config (redact secrets!).
+      placeholder: |
+        1. `npx supabase start`
+        2. …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Pilot version / commit
+      placeholder: v0.1.0 or commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - Local development (supabase start)
+        - Self-hosted production
+        - Docker Compose
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / screenshots
+      description: Paste errors here. Redact anything sensitive.
+      render: text

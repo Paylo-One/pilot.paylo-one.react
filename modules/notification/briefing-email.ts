@@ -362,7 +362,7 @@ async function sendViaSendGrid(input: {
     },
     body: JSON.stringify({
       personalizations: [{ to: [{ email: input.to }] }],
-      from: { email: sendgridFromEmail(), name: "Pilot by Paylo.one" },
+      from: { email: sendgridFromEmail(), name: "Pilot" },
       subject: input.email.subject,
       content: [
         { type: "text/plain", value: input.email.text },
