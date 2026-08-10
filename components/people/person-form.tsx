@@ -137,7 +137,7 @@ export function PersonForm({
       <div className="grid grid--2">
         <div>
           <label htmlFor="pf-name" style={labelStyle}>Name</label>
-          <input id="pf-name" name="name" className="input" placeholder="Jacques Becker" required disabled={pending} defaultValue={person?.displayName ?? ""} />
+          <input id="pf-name" name="name" className="input" placeholder="Alex Verhoeven" required disabled={pending} defaultValue={person?.displayName ?? ""} />
         </div>
         <div>
           <label htmlFor="pf-role" style={labelStyle}>Role / title</label>
@@ -145,7 +145,7 @@ export function PersonForm({
         </div>
         <div>
           <label htmlFor="pf-org" style={labelStyle}>Organisation</label>
-          <input id="pf-org" name="org" className="input" placeholder="Paytec Global" disabled={pending} defaultValue={person?.organisation ?? ""} />
+          <input id="pf-org" name="org" className="input" placeholder="Acme Industries" disabled={pending} defaultValue={person?.organisation ?? ""} />
         </div>
         <div>
           <label htmlFor="pf-rel" style={labelStyle}>Relationship</label>
@@ -171,11 +171,11 @@ export function PersonForm({
             </div>
             <div>
               <label htmlFor="pf-emails" style={labelStyle}>Email addresses</label>
-              <input id="pf-emails" name="emails" className="input" placeholder="jacques@company.com" disabled={pending} />
+              <input id="pf-emails" name="emails" className="input" placeholder="alex@example.com" disabled={pending} />
             </div>
             <div>
               <label htmlFor="pf-phones" style={labelStyle}>Phone numbers</label>
-              <input id="pf-phones" name="phones" className="input" placeholder="+27 82 555 0102" disabled={pending} />
+              <input id="pf-phones" name="phones" className="input" placeholder="+27 82 555 0143" disabled={pending} />
             </div>
           </>
         )}

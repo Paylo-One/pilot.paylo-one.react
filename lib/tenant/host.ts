@@ -54,7 +54,7 @@ export function isSelectableSubdomain(label: string): boolean {
  * Resolve a (already-trusted) host against the configured apex. Returns a
  * routing decision; never throws. Strips an optional port.
  *
- * @param host  e.g. "bernard.paylo.one" or "bernard.lvh.me:3000"
+ * @param host  e.g. "alex.paylo.one" or "alex.lvh.me:3000"
  * @param apex  the registrable apex, e.g. "paylo.one" (or "lvh.me" locally)
  */
 export function resolveHost(host: string | null, apex: string): HostResolution {

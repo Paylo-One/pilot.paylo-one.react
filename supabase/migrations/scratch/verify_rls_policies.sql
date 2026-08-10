@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Row-Level Security (RLS) and Policy Audit Verification Script
--- Path: /Users/bernardwiller/Projects/paylo_one/app/supabase/migrations/scratch/verify_rls_policies.sql
+-- Path: supabase/migrations/scratch/verify_rls_policies.sql
 -- Description: Audits all public tables for RLS enablement, tenant isolation via
 --              auth_tenant_ids(), and admin isolation via is_platform_admin().
 -- ============================================================================

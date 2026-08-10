@@ -44,7 +44,7 @@ export type TenantDomainKind = "subdomain" | "custom";
 export interface Tenant {
   /** Stable UUID; the value carried as `tenant_id` on every owned row. */
   readonly id: string;
-  /** Canonical, unique, immutable-ish slug (e.g. "bernard"). */
+  /** Canonical, unique, immutable-ish slug (e.g. "alex"). */
   readonly slug: string;
   readonly name: string;
   readonly status: TenantStatus;
@@ -78,7 +78,7 @@ export interface TenantDomain {
   readonly id: string;
   readonly tenantId: string;
   readonly kind: TenantDomainKind;
-  /** Set when `kind === "subdomain"` (e.g. "bernard"). */
+  /** Set when `kind === "subdomain"` (e.g. "alex"). */
   readonly subdomain: string | null;
   /** Set when `kind === "custom"` (e.g. "ops.acme.com"); MVP leaves null. */
   readonly customDomain: string | null;

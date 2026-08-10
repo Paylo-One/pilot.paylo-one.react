@@ -29,7 +29,7 @@ import type { AuthenticatedSession } from "./types";
 
 /**
  * The host-derived, already-validated tenant slug for the current request
- * (e.g. "bernard" for `bernard.paylo.one`). Parsing/validation of the raw Host
+ * (e.g. "alex" for `alex.paylo.one`). Parsing/validation of the raw Host
  * header happens upstream (lib/tenant/host.ts + proxy.ts); this is the trusted
  * result, never a client-supplied value.
  */
