@@ -28,6 +28,10 @@ import { isSelectableSubdomain } from "@/lib/tenant/host";
 import { seedTenantPrompts } from "@/modules/prompt-versioning/server";
 import { referralService } from "@/modules/referral";
 import { createTrialBillingAccess } from "@/modules/billing/access";
+import {
+  tenantProvisioningPolicy,
+  type SignupMode,
+} from "@/lib/signup-policy";
 import { linkPaddleCustomerByEmail } from "@/modules/billing/paddle-webhooks";
 
 /** Header set by proxy.ts for a valid tenant subdomain (untrusted hint). */
@@ -228,7 +232,7 @@ export async function provisionTenantForUser(input: {
   desiredSubdomain: string;
   tenantName?: string;
   displayName?: string;
-  accessGrantType?: "paid" | "complimentary";
+  signupMode: SignupMode;
 }): Promise<ProvisionResult> {
   const slug = input.desiredSubdomain.toLowerCase().trim();
   if (!isSelectableSubdomain(slug)) {
@@ -260,15 +264,15 @@ export async function provisionTenantForUser(input: {
 
   const tenantName = input.tenantName?.trim() || slug;
 
-  const accessGrantType = input.accessGrantType ?? "paid";
+  const accessPolicy = tenantProvisioningPolicy(input.signupMode);
   const { data: tenant, error: tenantErr } = await secret
     .from("tenants")
     .insert({
       slug,
       name: tenantName,
       status: "active",
-      access_grant_type: accessGrantType,
-      payment_enforcement_exempt: accessGrantType === "complimentary",
+      access_grant_type: accessPolicy.accessGrantType,
+      payment_enforcement_exempt: accessPolicy.paymentEnforcementExempt,
     })
     .select("id, slug")
     .single();
@@ -325,7 +329,7 @@ export async function provisionTenantForUser(input: {
     metadata: { via: "onboarding" },
   });
 
-  if (accessGrantType === "paid") {
+  if (accessPolicy.initialiseHostedBilling) {
     try {
       await createTrialBillingAccess({
         tenantId: tenant.id as string,
@@ -351,7 +355,7 @@ export async function provisionTenantForUser(input: {
   // is intentionally NOT wired — invited tenants are provisioned by admins, not
   // by self-service Paddle checkout. TODO(billing): revisit if invitations ever
   // coexist with Paddle self-service purchases.
-  if (input.email && accessGrantType === "paid") {
+  if (input.email && accessPolicy.initialiseHostedBilling) {
     try {
       await linkPaddleCustomerByEmail(input.email, tenant.id as string);
     } catch {
@@ -361,7 +365,7 @@ export async function provisionTenantForUser(input: {
 
   // Every new owner gets their own referral code. Best-effort: Settings also
   // lazily creates it on first read, so a failure here must not block signup.
-  if (accessGrantType === "paid") {
+  if (accessPolicy.initialiseHostedBilling) {
     try {
       await referralService.getOrCreateForOwner(input.userId, tenant.id as string);
     } catch {

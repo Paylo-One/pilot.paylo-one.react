@@ -15,8 +15,25 @@ export function openSignupEnabled(value = process.env.PILOT_SIGNUP_MODE): boolea
   return signupMode(value) === "open";
 }
 
-export function accessGrantForSignup(
-  value = process.env.PILOT_SIGNUP_MODE,
-): "paid" | "complimentary" {
-  return openSignupEnabled(value) ? "complimentary" : "paid";
+export interface TenantProvisioningPolicy {
+  readonly accessGrantType: "paid" | "complimentary";
+  readonly paymentEnforcementExempt: boolean;
+  readonly initialiseHostedBilling: boolean;
+}
+
+/** The complete persistent-access and billing contract for a signup mode. */
+export function tenantProvisioningPolicy(
+  mode: SignupMode,
+): TenantProvisioningPolicy {
+  return mode === "open"
+    ? {
+        accessGrantType: "complimentary",
+        paymentEnforcementExempt: true,
+        initialiseHostedBilling: false,
+      }
+    : {
+        accessGrantType: "paid",
+        paymentEnforcementExempt: false,
+        initialiseHostedBilling: true,
+      };
 }

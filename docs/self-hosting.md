@@ -121,7 +121,7 @@ Billing variables (`STRIPE_*`, `PADDLE_*`) exist for Paylo One's hosted service;
 All inference goes through the Model Gateway and one OpenAI-compatible configuration point:
 
 - **OpenAI:** set `OPENAI_API_KEY` only.
-- **EU-resident / zero-retention:** point `LLM_BASE_URL` at an EU OpenAI-compatible router and choose EU-hosted models — `.env.example` ships working defaults (Mistral models incl. a transcription model).
+- **EU-resident / zero-retention:** point `LLM_BASE_URL` at an EU OpenAI-compatible router and explicitly choose provider-valid chat, embedding, and transcription model IDs; `.env.example` leaves these deployment choices blank.
 - **Anthropic:** completions are implemented with `ANTHROPIC_API_KEY`; embeddings still require the OpenAI-compatible route.
 - **Azure OpenAI / Google:** runtime types exist, but their dedicated adapters are not implemented yet. Do not configure these stub routes in production.
 - **Your own endpoint** (vLLM, Ollama via a shim, etc.): set `LLM_BASE_URL` + `LLM_MODEL` accordingly. Embeddings and voice-note transcription use `LLM_EMBEDDING_MODEL` / `LLM_TRANSCRIPTION_MODEL`.

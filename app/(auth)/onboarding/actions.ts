@@ -24,10 +24,7 @@ import { REFERRAL_COOKIE, referralService } from "@/modules/referral";
 import { hasPaddleSubscriptionForEmail } from "@/modules/billing/paddle";
 import { supabaseCookieOptions } from "@/lib/supabase/cookies";
 import { isSelectableSubdomain } from "@/lib/tenant/host";
-import {
-  accessGrantForSignup,
-  openSignupEnabled,
-} from "@/lib/signup-policy";
+import { signupMode } from "@/lib/signup-policy";
 
 export interface OnboardingState {
   error: string | null;
@@ -55,7 +52,8 @@ export async function createWorkspace(
   const user = await getSignedInUser();
   if (!user) redirect("/sign-in");
 
-  const isOpenSignup = openSignupEnabled();
+  const configuredSignupMode = signupMode();
+  const isOpenSignup = configuredSignupMode === "open";
 
   const cookieStore = await cookies();
   // Cookie is primary; the hidden form field (seeded from the magic link's
@@ -181,7 +179,7 @@ export async function createWorkspace(
       email: user.email,
       desiredSubdomain: parsed.data.subdomain,
       tenantName: parsed.data.workspaceName,
-      accessGrantType: accessGrantForSignup(),
+      signupMode: configuredSignupMode,
     });
     redirectTo = result.redirectTo;
     tenantId = result.tenantId;
