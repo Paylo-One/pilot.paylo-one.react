@@ -21,12 +21,15 @@ import type { ExternalSignalView } from "@/modules/news";
 import { getBriefingExternalSignals } from "@/modules/news/briefing";
 import type { TenantContext } from "@/modules/shared";
 import { resolveEntitlements, requireWithinLimit } from "@/modules/billing";
+import { calendarDayBoundsInTimeZone } from "@/lib/tz-day";
 
 /**
- * Count the tenant's generated briefings for today (UTC calendar day) and check against `maxBriefingsPerDay`.
+ * Count the tenant's generated briefings for the operator's local calendar day
+ * and check against `maxBriefingsPerDay`.
  * This is an observe-only check: it logs a warning if the limit is exceeded but lets the action proceed.
  */
-export async function checkBriefingLimit(tenantId: string): Promise<boolean> {
+export async function checkBriefingLimit(ctx: TenantContext): Promise<boolean> {
+  const { tenantId } = ctx;
   try {
     const resolved = await resolveEntitlements({ tenantId });
     if (!resolved.ok) {
@@ -38,15 +41,26 @@ export async function checkBriefingLimit(tenantId: string): Promise<boolean> {
     }
 
     const secret = createSupabaseSecretClient();
-    const startOfToday = new Date();
-    startOfToday.setUTCHours(0, 0, 0, 0);
-    const startOfTodayStr = startOfToday.toISOString();
+    const { data: profile, error: profileError } = await secret
+      .from("user_profiles")
+      .select("timezone")
+      .eq("user_id", ctx.userId)
+      .maybeSingle();
+    if (profileError) {
+      console.warn(
+        "[billing][observe] maxBriefingsPerDay: failed to resolve timezone; using UTC",
+        { tenantId, userId: ctx.userId, error: profileError.message },
+      );
+    }
+    const timezone = (profile?.timezone as string | null) || "UTC";
+    const today = calendarDayBoundsInTimeZone(new Date(), timezone);
 
     const { count, error } = await secret
       .from("briefings")
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
-      .gte("generated_at", startOfTodayStr);
+      .gte("generated_at", today.start.toISOString())
+      .lt("generated_at", today.end.toISOString());
 
     if (error) {
       console.warn(
