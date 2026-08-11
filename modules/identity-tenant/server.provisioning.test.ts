@@ -52,7 +52,37 @@ function query(result: unknown = { data: null, error: null }) {
   return builder;
 }
 
-describe("open-registration tenant provisioning", () => {
+function setupProvisioningDatabase() {
+  const membershipRead = query({ data: null, error: null });
+  const membershipWrite = query();
+  const domainRead = query({ data: null, error: null });
+  const domainWrite = query();
+  const tenantWrite = query({
+    data: { id: "tenant-1", slug: "acme" },
+    error: null,
+  });
+  const profileWrite = query();
+  const auditWrite = query();
+  const calls = new Map<string, number>();
+
+  const db = {
+    from: vi.fn((table: string) => {
+      const count = calls.get(table) ?? 0;
+      calls.set(table, count + 1);
+      if (table === "tenant_users") return count === 0 ? membershipRead : membershipWrite;
+      if (table === "tenant_domains") return count === 0 ? domainRead : domainWrite;
+      if (table === "tenants") return tenantWrite;
+      if (table === "user_profiles") return profileWrite;
+      if (table === "audit_events") return auditWrite;
+      throw new Error(`unexpected table: ${table}`);
+    }),
+  };
+  mocks.createSecretClient.mockReturnValue(db);
+
+  return { tenantWrite };
+}
+
+describe("tenant provisioning signup policy", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.seedTenantPrompts.mockResolvedValue(undefined);
@@ -62,31 +92,7 @@ describe("open-registration tenant provisioning", () => {
   });
 
   it("persists complimentary access and performs no hosted billing side effects", async () => {
-    const membershipRead = query({ data: null, error: null });
-    const membershipWrite = query();
-    const domainRead = query({ data: null, error: null });
-    const domainWrite = query();
-    const tenantWrite = query({
-      data: { id: "tenant-1", slug: "acme" },
-      error: null,
-    });
-    const profileWrite = query();
-    const auditWrite = query();
-    const calls = new Map<string, number>();
-
-    const db = {
-      from: vi.fn((table: string) => {
-        const count = calls.get(table) ?? 0;
-        calls.set(table, count + 1);
-        if (table === "tenant_users") return count === 0 ? membershipRead : membershipWrite;
-        if (table === "tenant_domains") return count === 0 ? domainRead : domainWrite;
-        if (table === "tenants") return tenantWrite;
-        if (table === "user_profiles") return profileWrite;
-        if (table === "audit_events") return auditWrite;
-        throw new Error(`unexpected table: ${table}`);
-      }),
-    };
-    mocks.createSecretClient.mockReturnValue(db);
+    const { tenantWrite } = setupProvisioningDatabase();
 
     const result = await provisionTenantForUser({
       userId: "user-1",
@@ -110,5 +116,33 @@ describe("open-registration tenant provisioning", () => {
       slug: "acme",
       redirectTo: "https://acme.example.com",
     });
+  });
+
+  it("retains paid access and hosted billing side effects for gated signup", async () => {
+    const { tenantWrite } = setupProvisioningDatabase();
+
+    await provisionTenantForUser({
+      userId: "user-1",
+      email: "operator@example.com",
+      desiredSubdomain: "acme",
+      signupMode: "gated",
+    });
+
+    expect(tenantWrite.insert).toHaveBeenCalledWith({
+      slug: "acme",
+      name: "acme",
+      status: "active",
+      access_grant_type: "paid",
+      payment_enforcement_exempt: false,
+    });
+    expect(mocks.createTrialBillingAccess).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      userId: "user-1",
+    });
+    expect(mocks.linkPaddleCustomerByEmail).toHaveBeenCalledWith(
+      "operator@example.com",
+      "tenant-1",
+    );
+    expect(mocks.getOrCreateReferral).toHaveBeenCalledWith("user-1", "tenant-1");
   });
 });
