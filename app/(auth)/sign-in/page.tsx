@@ -16,6 +16,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSignedInUser } from "@/modules/identity-tenant/server";
+import { openSignupEnabled } from "@/lib/signup-policy";
 import { SignInForm } from "./sign-in-form";
 
 export const metadata: Metadata = {
@@ -86,14 +87,16 @@ export default async function SignInPage({
 
   const params = await searchParams;
   const notice = noticeFor(params);
+  const isOpenSignup = openSignupEnabled();
 
   return (
     <div className="auth-stack">
       <header className="auth-head">
         <h1 className="auth-head__title">Open your workspace</h1>
         <p className="auth-head__sub">
-          Secure access to your private operating layer. New workspaces are
-          created by invitation only.
+          {isOpenSignup
+            ? "Secure access to your private operating layer. Enter your email to create or open a workspace."
+            : "Secure access to your private operating layer. New workspaces are created by invitation only."}
         </p>
       </header>
 
@@ -117,13 +120,15 @@ export default async function SignInPage({
         </p>
       ) : null}
 
-      <SignInForm />
+      <SignInForm mode={isOpenSignup ? "registration" : "sign-in"} />
 
-      <p className="auth-alt">
-        New here?{" "}
-        <Link href="/request-access">Request access</Link> — Pilot is invite-only
-        while we&rsquo;re in private beta.
-      </p>
+      {isOpenSignup ? null : (
+        <p className="auth-alt">
+          New here?{" "}
+          <Link href="/request-access">Request access</Link> — Pilot is invite-only
+          while we&rsquo;re in private beta.
+        </p>
+      )}
 
       <p className="auth-privacy">
         <svg

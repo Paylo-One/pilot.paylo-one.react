@@ -1,8 +1,12 @@
 {
-  "name": "paylo-one-app",
+  "name": "pilot-app",
   "version": "0.1.0",
   "private": true,
-  "description": "Pilot by Paylo.one — application scaffold (modular monolith, multi-tenant, passkey-ready, governed Model & Tool gateways). Scaffold only: no live integrations, providers, passkeys, or payments.",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "npm@10.9.2",
+  "description": "Pilot — a multi-tenant, self-hostable personal intelligence workspace with cited briefings and explicit integration boundaries.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -12,6 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "vitest run modules/identity-tenant/tenant-isolation.integration.test.ts",
+    "check:oss": "node scripts/check-oss-readiness.mjs",
     "ci:local": "bash scripts/ci-local.sh"
   },
   "dependencies": {

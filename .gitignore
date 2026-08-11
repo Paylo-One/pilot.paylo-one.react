@@ -30,6 +30,7 @@ next-env.d.ts
 # local agent tooling (developer-specific, not part of the product)
 /.agents/
 /.claude/
+/.idea/
 
 # Supabase CLI local state (may contain linked-project identifiers)
 /supabase/.temp/

@@ -24,6 +24,10 @@ import { REFERRAL_COOKIE, referralService } from "@/modules/referral";
 import { hasPaddleSubscriptionForEmail } from "@/modules/billing/paddle";
 import { supabaseCookieOptions } from "@/lib/supabase/cookies";
 import { isSelectableSubdomain } from "@/lib/tenant/host";
+import {
+  accessGrantForSignup,
+  openSignupEnabled,
+} from "@/lib/signup-policy";
 
 export interface OnboardingState {
   error: string | null;
@@ -51,6 +55,8 @@ export async function createWorkspace(
   const user = await getSignedInUser();
   if (!user) redirect("/sign-in");
 
+  const isOpenSignup = openSignupEnabled();
+
   const cookieStore = await cookies();
   // Cookie is primary; the hidden form field (seeded from the magic link's
   // `?ref=`) is the fallback when the cookie was lost over the email round-trip.
@@ -58,7 +64,7 @@ export async function createWorkspace(
     (formData.get("referralCode") as string | null) ?? undefined;
   const candidateReferralCode =
     cookieStore.get(REFERRAL_COOKIE)?.value ?? formReferral;
-  const referralValidation = candidateReferralCode
+  const referralValidation = !isOpenSignup && candidateReferralCode
     ? await referralService.validateCode(candidateReferralCode)
     : null;
   const referralCode =
@@ -67,7 +73,7 @@ export async function createWorkspace(
       : undefined;
 
   let hasPaidCheckout = false;
-  if (!referralCode && user.email) {
+  if (!isOpenSignup && !referralCode && user.email) {
     try {
       hasPaidCheckout = await hasPaddleSubscriptionForEmail(user.email);
     } catch (error) {
@@ -78,7 +84,7 @@ export async function createWorkspace(
     }
   }
 
-  if (!referralCode && !hasPaidCheckout) {
+  if (!isOpenSignup && !referralCode && !hasPaidCheckout) {
     const options = supabaseCookieOptions();
     cookieStore.set(REFERRAL_COOKIE, "", {
       domain: options.domain,
@@ -108,27 +114,30 @@ export async function createWorkspace(
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
 
-  // Legal acceptance is mandatory — the checkbox `required` attribute is only
-  // a convenience; this is the gate.
-  const acceptedTerms = formData.get("acceptTerms") === "on";
-  const acceptedPrivacy = formData.get("acceptPrivacy") === "on";
-  if (!acceptedTerms || !acceptedPrivacy) {
-    return {
-      error:
-        "Please accept the Terms and Conditions and acknowledge the Privacy Policy to continue.",
-    };
-  }
+  // Paylo-hosted signup records acceptance of Paylo's hosted-service terms.
+  // Self-host operators own their legal policy, so open mode does not claim
+  // acceptance of documents published by a different operator.
+  if (!isOpenSignup) {
+    const acceptedTerms = formData.get("acceptTerms") === "on";
+    const acceptedPrivacy = formData.get("acceptPrivacy") === "on";
+    if (!acceptedTerms || !acceptedPrivacy) {
+      return {
+        error:
+          "Please accept the Terms and Conditions and acknowledge the Privacy Policy to continue.",
+      };
+    }
 
-  const requestHeaders = await headers();
-  try {
-    await recordLegalAcceptances({
-      userId: user.userId,
-      documents: ["terms", "privacy"],
-      ipAddress: clientIp(requestHeaders.get("x-forwarded-for")),
-      userAgent: requestHeaders.get("user-agent"),
-    });
-  } catch {
-    return { error: "Could not record your acceptance. Please try again." };
+    const requestHeaders = await headers();
+    try {
+      await recordLegalAcceptances({
+        userId: user.userId,
+        documents: ["terms", "privacy"],
+        ipAddress: clientIp(requestHeaders.get("x-forwarded-for")),
+        userAgent: requestHeaders.get("user-agent"),
+      });
+    } catch {
+      return { error: "Could not record your acceptance. Please try again." };
+    }
   }
 
   const reservation = referralCode
@@ -172,6 +181,7 @@ export async function createWorkspace(
       email: user.email,
       desiredSubdomain: parsed.data.subdomain,
       tenantName: parsed.data.workspaceName,
+      accessGrantType: accessGrantForSignup(),
     });
     redirectTo = result.redirectTo;
     tenantId = result.tenantId;

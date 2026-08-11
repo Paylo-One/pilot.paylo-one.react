@@ -228,6 +228,7 @@ export async function provisionTenantForUser(input: {
   desiredSubdomain: string;
   tenantName?: string;
   displayName?: string;
+  accessGrantType?: "paid" | "complimentary";
 }): Promise<ProvisionResult> {
   const slug = input.desiredSubdomain.toLowerCase().trim();
   if (!isSelectableSubdomain(slug)) {
@@ -259,9 +260,16 @@ export async function provisionTenantForUser(input: {
 
   const tenantName = input.tenantName?.trim() || slug;
 
+  const accessGrantType = input.accessGrantType ?? "paid";
   const { data: tenant, error: tenantErr } = await secret
     .from("tenants")
-    .insert({ slug, name: tenantName, status: "active" })
+    .insert({
+      slug,
+      name: tenantName,
+      status: "active",
+      access_grant_type: accessGrantType,
+      payment_enforcement_exempt: accessGrantType === "complimentary",
+    })
     .select("id, slug")
     .single();
   if (tenantErr || !tenant) {
@@ -317,19 +325,21 @@ export async function provisionTenantForUser(input: {
     metadata: { via: "onboarding" },
   });
 
-  try {
-    await createTrialBillingAccess({
-      tenantId: tenant.id as string,
-      userId: input.userId,
-    });
-  } catch {
-    await secret.from("audit_events").insert({
-      tenant_id: tenant.id,
-      user_id: input.userId,
-      action: "billing.trial_initialisation_failed",
-      target: tenant.id,
-      metadata: { via: "onboarding" },
-    });
+  if (accessGrantType === "paid") {
+    try {
+      await createTrialBillingAccess({
+        tenantId: tenant.id as string,
+        userId: input.userId,
+      });
+    } catch {
+      await secret.from("audit_events").insert({
+        tenant_id: tenant.id,
+        user_id: input.userId,
+        action: "billing.trial_initialisation_failed",
+        target: tenant.id,
+        metadata: { via: "onboarding" },
+      });
+    }
   }
 
   // Anonymous marketing-site Paddle checkouts are identified by email only:
@@ -341,7 +351,7 @@ export async function provisionTenantForUser(input: {
   // is intentionally NOT wired — invited tenants are provisioned by admins, not
   // by self-service Paddle checkout. TODO(billing): revisit if invitations ever
   // coexist with Paddle self-service purchases.
-  if (input.email) {
+  if (input.email && accessGrantType === "paid") {
     try {
       await linkPaddleCustomerByEmail(input.email, tenant.id as string);
     } catch {
@@ -351,10 +361,12 @@ export async function provisionTenantForUser(input: {
 
   // Every new owner gets their own referral code. Best-effort: Settings also
   // lazily creates it on first read, so a failure here must not block signup.
-  try {
-    await referralService.getOrCreateForOwner(input.userId, tenant.id as string);
-  } catch {
-    /* non-fatal: created lazily on first Settings read */
+  if (accessGrantType === "paid") {
+    try {
+      await referralService.getOrCreateForOwner(input.userId, tenant.id as string);
+    } catch {
+      /* non-fatal: created lazily on first Settings read */
+    }
   }
 
   return {

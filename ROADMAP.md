@@ -5,7 +5,7 @@ Pilot is pre-1.0. This roadmap is directional, not contractual — the [Discussi
 ## Now — self-host excellence
 
 - Frictionless self-hosting: one-command setup, verified cold-install on a clean machine
-- First-run onboarding without invitations (self-hosted instances)
+- Clean-machine validation and hardening of open-registration onboarding
 - Docker Compose production path, backup/upgrade runbooks
 - Connector setup guides with screenshots per provider
 

@@ -14,7 +14,7 @@ Thanks for being here. Pilot is a young open-source project stewarded by [Paylo 
 2. **RLS is non-negotiable.** Every tenant table keeps row-level security; write access flows through the server. The CI tenant-isolation suite must stay green — if your migration adds a table, the tests will notice.
 3. **Module boundaries.** Code lives in `modules/*` behind typed interfaces; modules never reach into each other's internals.
 4. **No telemetry.** Do not add analytics, tracking, or phone-home behaviour. PRs that do will be closed.
-5. **Tests + checks.** `npm run lint`, `npm run typecheck`, and `npm test` must pass. Add tests for behaviour changes.
+5. **Tests + checks.** `npm run lint`, `npm run typecheck`, `npm run check:oss`, and `npm test` must pass. Add tests for behaviour changes.
 
 ## Development setup
 

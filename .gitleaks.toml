@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Generated dependencies and build output are untracked and regenerated"
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)\.next/''',
+]

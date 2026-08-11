@@ -10,10 +10,13 @@ type WizardStep = 1 | 2 | 3;
 export function OnboardingForm({
   apexSuffix,
   referralCode,
+  requirePayloLegalAcceptance,
 }: {
   apexSuffix: string;
   /** Threaded into the action so referral capture survives a lost cookie. */
   referralCode?: string;
+  /** Hosted Paylo signup accepts Paylo terms; self-host operators supply their own. */
+  requirePayloLegalAcceptance: boolean;
 }) {
   const [state, formAction, pending] = useActionState(createWorkspace, initial);
   const [step, setStep] = useState<WizardStep>(1);
@@ -160,7 +163,9 @@ export function OnboardingForm({
           Confirm and create
         </h2>
         <p className="onboarding-wizard__intro">
-          Check your workspace details and confirm the legal terms.
+          {requirePayloLegalAcceptance
+            ? "Check your workspace details and confirm the legal terms."
+            : "Check your workspace details before creating it."}
         </p>
 
         <dl className="onboarding-wizard__summary">
@@ -180,28 +185,30 @@ export function OnboardingForm({
           </div>
         </dl>
 
-        <div className="consent">
-          <label className="consent__item">
-            <input type="checkbox" name="acceptTerms" required />
-            <span>
-              I agree to the{" "}
-              <a href="/terms" target="_blank" rel="noopener noreferrer">
-                Terms and Conditions
-              </a>
-              .
-            </span>
-          </label>
-          <label className="consent__item">
-            <input type="checkbox" name="acceptPrivacy" required />
-            <span>
-              I acknowledge the{" "}
-              <a href="/privacy" target="_blank" rel="noopener noreferrer">
-                Privacy Policy
-              </a>
-              .
-            </span>
-          </label>
-        </div>
+        {requirePayloLegalAcceptance ? (
+          <div className="consent">
+            <label className="consent__item">
+              <input type="checkbox" name="acceptTerms" required />
+              <span>
+                I agree to the{" "}
+                <a href="/terms" target="_blank" rel="noopener noreferrer">
+                  Terms and Conditions
+                </a>
+                .
+              </span>
+            </label>
+            <label className="consent__item">
+              <input type="checkbox" name="acceptPrivacy" required />
+              <span>
+                I acknowledge the{" "}
+                <a href="/privacy" target="_blank" rel="noopener noreferrer">
+                  Privacy Policy
+                </a>
+                .
+              </span>
+            </label>
+          </div>
+        ) : null}
 
         <div className="onboarding-wizard__actions">
           <button
