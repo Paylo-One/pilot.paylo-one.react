@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & ideas
+    url: https://github.com/Paylo-One/pilot/discussions
+    about: Open-ended questions, ideas, and show-and-tell belong in Discussions.
+  - name: Security reports
+    url: https://github.com/Paylo-One/pilot/security/advisories/new
+    about: Report vulnerabilities privately — never as public issues. See SECURITY.md.
+  - name: Managed hosting
+    url: https://paylo.one
+    about: Prefer not to run Pilot yourself? Paylo One operates the hosted version.

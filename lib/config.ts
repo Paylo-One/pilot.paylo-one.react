@@ -170,7 +170,7 @@ export function sendgridApiKey(): string {
 
 /** Verified sender address for notification email (non-secret, has a default). */
 export function sendgridFromEmail(): string {
-  return process.env.SENDGRID_FROM_EMAIL?.trim() || "pilot@paylo.one";
+  return process.env.SENDGRID_FROM_EMAIL?.trim() || "";
 }
 
 /** Dev server port (used to build absolute cross-host URLs locally). */

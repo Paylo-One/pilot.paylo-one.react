@@ -1,0 +1,32 @@
+# Self-hosted Pilot application.
+#
+# Pilot needs a Supabase stack (Postgres + Auth + PostgREST). This compose file
+# runs the application; bring your own Supabase:
+#   - Supabase Cloud (free tier works), or
+#   - a self-hosted Supabase stack (https://supabase.com/docs/guides/self-hosting)
+#
+# Usage:
+#   cp .env.example .env      # fill in values (see docs/self-hosting.md)
+#   npx supabase link --project-ref <ref> && npx supabase db push   # provision schema
+#   docker compose up --build
+#
+# NEXT_PUBLIC_* values are build-time args (baked into the client bundle);
+# everything secret stays runtime-only via env_file.
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_APP_APEX: ${NEXT_PUBLIC_APP_APEX}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+    env_file: .env
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

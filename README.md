@@ -1,68 +1,52 @@
-# Pilot by Paylo.one — Application
+# Pilot
 
-The application for **Pilot by Paylo.one**, a calm intelligence layer for
-leaders. It runs **operationally against a local
-Supabase stack**: real magic-link auth (passkey-ready), multi-tenant workspaces
-with subdomain routing and Postgres RLS isolation, source ingestion (file/paste
-upload + direct connectors), optional tenant-scoped **News Briefing** via RSS
-and GDELT, a real **Daily Memo** generated via OpenAI
-through the governed Model Gateway, an Actions queue, and a private Diary.
+**The open-source personal AI assistant that briefs you every morning.**
 
-Passkey auth is **real end-to-end** via native Supabase WebAuthn
-(`auth.registerPasskey` / `signInWithPasskey` / `auth.passkey.*`): registration
-+ device management in Settings → Security, passkey-first sign-in with the
-magic link as fallback. Supabase owns the credentials and mints the session;
-RP ID = the registrable apex, so one passkey spans every subdomain. Still
-intentionally out for this pass: **recovery codes, payments, vLLM/GPU,
-Cloudflare/DNS, and production deploy.** A few non-focus paths remain typed
-stubs that throw `NotImplementedError` (greppable).
+Pilot reads the sources you connect — email, calendar, chat, files, news — and turns them into a calm, cited daily briefing: what matters, what's waiting on you, and what you can ignore. It runs on your own infrastructure, with your own model keys, and your data never has to leave your control.
 
-Architecture and decisions are governed by `../governance/` — start with
-`governance/docs/architecture/technical-design.md`. This app is the
-implementation of that design; the governance docs remain the source of truth.
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+[![CI](https://github.com/Paylo-One/pilot/actions/workflows/ci.yml/badge.svg)](https://github.com/Paylo-One/pilot/actions/workflows/ci.yml)
 
-## Tech Stack
+> **Self-host it, or let us run it:** Pilot is open source (AGPL-3.0). If you'd rather skip the infrastructure, [Pilot by Paylo One](https://paylo.one) is the managed, hosted version of this same codebase.
 
-- **Next.js (App Router) + TypeScript + React** (versions pinned to the
-  marketing site).
-- **Supabase** (Postgres + Auth + Storage), wired locally via `@supabase/ssr`
-  (publishable/secret keys, RLS on every tenant table). **OpenAI** via the Model
-  Gateway. Inngest / Vercel / Cloudflare remain target platform (not wired).
-- **Modular monolith**: one deployable app; code organised into `modules/*`
-  with explicit boundaries that mirror the service catalogue.
+---
 
-## Structure
+## The problem
+
+If you lead things, your real inputs are scattered across a dozen tools — inbox, calendar, WhatsApp, Teams, Slack, GitHub, documents, news. Every "AI assistant" wants to either lock that context inside a vendor's cloud, or hand you a framework and wish you luck building the product yourself.
+
+## Why Pilot
+
+- **A briefing, not a chatbot.** Pilot's core loop is the Daily Memo — a synthesised, prioritised morning brief with an actions queue, not another prompt box.
+- **Provenance-first.** Claims in your briefing link back to the source items they came from. You can check what the AI told you — the point is trust, not vibes.
+- **Self-hosted and private.** Postgres + your own API keys. No telemetry, no phone-home, no usage reporting. Your data stays on infrastructure you control.
+- **Bring your own models.** One OpenAI-compatible switch routes inference to OpenAI, Anthropic, Azure, Google, an EU-resident router, or your own endpoint.
+- **Real product, not a scaffold.** Multi-tenant workspaces, passkey auth, row-level security on every table, i18n, and a CI-enforced tenant-isolation test suite.
+
+## Major capabilities
+
+- **Daily Memo** — a generated morning briefing from your connected sources, with per-item source references
+- **Actions queue** — extracted follow-ups and commitments, with in-app notifications and an optional daily email
+- **Diary** — a private, voice-note-capable journal that feeds your context
+- **People & companies** — an automatically built picture of who you deal with, correlated across sources
+- **News Briefing** — optional tenant-scoped news monitoring (RSS + GDELT) folded into your brief
+- **Source connectors** — file/paste upload, GitHub, Google (Gmail + Calendar), Microsoft 365 (Mail + Teams), Slack, Discord — read-only, OAuth, your own apps
+- **Passkey-first auth** — native WebAuthn via Supabase, magic link as fallback
+- **Model Gateway** — policy, routing, usage + audit in front of every inference call
+- **Tool Gateway (MCP)** — governed tool access with risk classification and human approval
+- **Multi-tenant** — subdomain workspaces with Postgres RLS isolation (proven in CI)
+
+## Architecture at a glance
+
+A **modular monolith**: one deployable Next.js app, organised into `modules/*` with typed interfaces and enforced boundaries.
 
 ```
-app/
-  (marketing)/            # apex (paylo.one) invite/landing for the app
-  (auth)/                 # sign-in / invite acceptance (passkey-ready)
-  (app)/                  # tenant app, served on <slug>.paylo.one
-    briefing/ actions/ diary/ sources/ settings/
-  api/
-    health/               # operational probe
-    inngest/              # single workflow endpoint (stub)
-    webhooks/[source]/    # inbound webhooks (stub)
-    model-gateway/        # internal model-access API
-    tool-gateway/         # internal MCP tool-access API
-  globals.css layout.tsx
-lib/
-  config.ts               # env-backed config (secrets only in env)
-  supabase/               # browser / server / secret-key client factories (stubs)
-  tenant/                 # host parsing + shared reserved-subdomain blocklist
-modules/                  # the modular monolith — one folder per service
-  shared/                 # TenantContext, Result, errors, domain primitives
-  identity-tenant/        # tenant model, membership, provisioning, subdomains
-  authentication/         # passkey-ready auth (auth area of Identity & Tenant)
-  tool-gateway/           # MCP tool access: policy, risk, approval, audit
-  mcp-registry/           # MCP servers + tools registry (capability + risk class)
-  model-gateway/          # provider abstraction, routing, policy, validation
-  model-catalogue/ model-entitlement/ model-usage-cost/ prompt-versioning/
-  briefing/ action-extraction/ diary/ source-connection/ ingestion/ news/
-  normalisation/ knowledge-store/ search-retrieval/ agent-orchestration/
-  notification/ audit/ billing/
-proxy.ts                  # host-based tenant resolution + auth gate (edge)
-supabase/migrations/      # SQL placeholders (schema + RLS), not executed
+app/             Next.js App Router — marketing apex, auth, tenant app, APIs
+modules/         the services: briefing, actions, diary, people, ingestion,
+                 source-connection, model-gateway, tool-gateway (MCP), audit…
+lib/             env-backed config (secrets only in env), Supabase clients
+proxy.ts         host-based tenant resolution + auth gate
+supabase/        migrations — schema + RLS on every table
 ```
 
 **Module boundary rule:** modules expose a typed service interface and never
@@ -94,128 +78,85 @@ interface. `modules/shared` holds the tenant-context object and common types.
 ## Run locally
 
 ```bash
-cd app
+git clone https://github.com/Paylo-One/pilot.git
+cd pilot
 npm install
-npx supabase start          # local Postgres/Auth/Storage at :54321 (Mailpit :54324)
-npx supabase db reset       # apply migrations (tenancy + product schema + RLS)
-cp .env.example .env.local   # then set OPENAI_API_KEY (+ optional GitHub OAuth)
-npm run dev                  # http://lvh.me:3000
+npx supabase start         # local Postgres/Auth/Storage (API :54321, Mailpit :54324)
+npx supabase db reset      # apply schema + RLS migrations
+cp .env.example .env.local # set OPENAI_API_KEY (or any supported provider)
+npm run dev
 ```
 
-First run: open `http://lvh.me:3000/sign-in`, request a magic link, open it from
-Mailpit (`http://127.0.0.1:54324`), choose a subdomain at `/onboarding`, and you
-land in your workspace at `http://<slug>.lvh.me:3000`. `*.lvh.me` resolves to
-127.0.0.1, so subdomains work without DNS; the auth cookie is apex-scoped
-(`.lvh.me`) so the session spans subdomains.
+Then:
 
-GitHub connector (optional): create a GitHub OAuth app with callback
-`http://app.lvh.me:3000/api/oauth/github/callback` and set
-`GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET` in `.env.local`. File /
-paste upload works without it.
+1. Open `http://lvh.me:3000/sign-in` and request a magic link
+2. Read it in Mailpit at `http://127.0.0.1:54324`
+3. Pick a workspace subdomain at `/onboarding` — you land at `http://<slug>.lvh.me:3000`
 
-News Briefing is optional and off by default. Open **Sources → News**, choose
-categories/keywords/monitored entities, enable RSS and/or GDELT, then use
-**Fetch now**. Inngest dispatches durable per-tenant ingestion jobs every four
-hours; the internal `POST /api/news/ingest` endpoint can enqueue the same jobs
-with `Authorization: Bearer $NEWS_INGESTION_TOKEN`. Full implementation and API
-contracts are in [`docs/news-briefing.md`](docs/news-briefing.md).
+`*.lvh.me` resolves to 127.0.0.1, so subdomains work locally without DNS. File/paste upload works immediately; OAuth connectors work once you register the corresponding app (see [Integrations](#integrations)).
 
-### Daily briefing email + notifications (SendGrid)
+## Self-hosting in production
 
-The Actions board is backed by in-app notifications (bell in the topbar) and a
-daily briefing email. Every 15 minutes Inngest (`daily-briefing-email-dispatch`)
-checks which tenant owners have passed their local briefing time
-(`user_profiles.timezone` + `briefing_time`) and sends at most one email per
-user per local calendar day. Idempotency is enforced twice: the Inngest event
-key and a unique claim row in `notification_deliveries`. Empty days send
-nothing. Users can opt out in **Settings → Profile** or via the unsubscribe
-link in every email (`/api/notifications/unsubscribe`, RFC 8058 one-click).
-
-Configuration (see `.env.example`): `SENDGRID_API_KEY` (required for delivery;
-without it the job logs the skip and sends nothing) and `SENDGRID_FROM_EMAIL`
-(optional, defaults to `pilot@paylo.one`; must be a verified SendGrid sender).
-
-### Paddle fulfilment (webhooks + customer portal)
-
-Paddle fulfils the public self-service tiers (Starter/Pro/Advanced) sold on the
-marketing site. The app receives Paddle webhooks at
-`POST /api/webhooks/paddle`, mirrors state into `paddle_customers` /
-`tenant_subscriptions` (with `paddle_subscriptions_unlinked` staging anonymous
-checkouts until the buyer registers), and mints customer-portal sessions at
-`POST /api/billing/paddle-portal`.
-
-One-time operator setup (manual — do this in the Paddle dashboard matching
-`PADDLE_ENV`, sandbox first):
-
-1. **Developer tools → Authentication**: create/copy an API key into
-   `PADDLE_API_KEY`.
-2. **Developer tools → Notifications**: create a notification destination of
-   type *webhook* pointing at `https://<app-domain>/api/webhooks/paddle`,
-   subscribed to exactly these six event types: `subscription.created`,
-   `subscription.updated`, `subscription.canceled`, `customer.created`,
-   `customer.updated`, `transaction.completed`.
-3. Copy that destination's **signing secret** into `PADDLE_WEBHOOK_SECRET`.
-   This is a *different* credential from the API key — the API key
-   authenticates outbound calls, the signing secret verifies inbound webhooks.
-4. Set `PADDLE_ENV` (`sandbox` or `production`) and the six
-   `PADDLE_PRICE_*` ids (same variable names as the marketing repo).
-5. In production, the webhook route fetches Paddle's current live `/32` CIDRs
-   from `https://api.paddle.com/ips`, caches them for one hour, and rejects any
-   other Vercel-forwarded source IP. Do not replace this with a hard-coded list;
-   configure the Vercel WAF to bypass bot checks for the same webhook path.
-
-Until the secret is configured the endpoint answers 500, so Paddle keeps
-retrying and no events are lost; invalid signatures answer 400 and write
-nothing. Every verified event is ledgered in `billing_events` (idempotent on
-the Paddle event id) before any state change.
-
-> **Do not delete live fulfilment state.** Never delete (or suggest deleting)
-> the notification destination or its signing secret, the products/prices
-> behind the pricing page, or any customers/subscriptions/transactions in
-> Paddle or in the database (`paddle_customers`,
-> `paddle_subscriptions_unlinked` rows are stamped `promoted_at`, never
-> removed). The only deletable thing is a throwaway artifact you yourself
-> created purely for a test — name it and confirm first.
-
-Access posture (ADR-053): `tenants.status` is the sole access authority.
-Paddle payment states are operational signals only — webhook handlers never
-mutate `tenants.status`, `past_due` keeps access (banner-only), and a
-scheduled cancel/pause never revokes anything until Paddle applies it.
-
-Checks:
+Pilot is a standard Next.js server plus Postgres — it runs anywhere Node 22 does. The shortest path:
 
 ```bash
-npm run typecheck   # tsc --noEmit
-npm run lint
-npm run build
+git clone https://github.com/Paylo-One/pilot.git
+cd pilot
+cp .env.example .env       # fill in: Supabase, model provider, app apex
+docker compose up          # app + migrations against your Postgres/Supabase
 ```
 
-## Continuous integration
+Full guide — infrastructure requirements, every environment variable, authentication, model providers, connector setup, backups, upgrades, and security hardening: **[docs/self-hosting.md](docs/self-hosting.md)**.
 
-CI runs on every push/PR (`.github/workflows/ci.yml`), in two jobs:
+## Configuration
 
-- **quality** — `npm ci`, lint, typecheck, unit tests (Node 22). The runtime
-  tenant-isolation suite self-skips here (no DB env), so this stays fast.
-- **tenant-isolation** — boots the Supabase local stack (real Postgres + Auth +
-  PostgREST with all migrations applied) and runs the runtime RLS test, proving
-  a member of one tenant cannot read another tenant's rows.
+Everything sensitive is an environment variable; `.env.example` is the annotated reference. The essentials:
 
-Run the whole pipeline locally before pushing (needs Docker + the Supabase CLI,
-`brew install supabase/tap/supabase`):
+| Variable | Purpose |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SECRET_KEY` | Database + auth (publishable = browser, secret = server-only, bypasses RLS) |
+| `OPENAI_API_KEY` (or `LLM_BASE_URL` + `LLM_API_KEY` + `LLM_MODEL`) | Model provider — any OpenAI-compatible endpoint works |
+| `NEXT_PUBLIC_APP_APEX` | Registrable domain for tenant subdomains (e.g. `example.com`; wildcard DNS required) |
+| `*_OAUTH_CLIENT_ID` / `*_OAUTH_CLIENT_SECRET` | Optional per-connector OAuth apps |
+| `SENDGRID_API_KEY` / `SENDGRID_FROM_EMAIL` | Optional daily briefing email (unset = email disabled) |
+| `INNGEST_*` | Optional durable background jobs (news ingestion, briefing email) |
 
-```bash
-npm run ci:local              # lint + typecheck + unit + DB-backed isolation test
-KEEP_SUPABASE=1 npm run ci:local   # leave the stack up for faster re-runs
-```
+## Integrations
 
-`npm run test:integration` runs only the runtime isolation test and expects a
-running stack (`supabase start`); it reads `SUPABASE_TEST_URL` /
-`SUPABASE_TEST_ANON_KEY` / `SUPABASE_TEST_SERVICE_KEY`. `scripts/ci-local.sh`
-wires those up from `supabase status` automatically.
+| Connector | Status | What you need |
+|---|---|---|
+| Files / paste | Works out of the box | nothing |
+| GitHub | Self-host ready | GitHub OAuth app (read-only) |
+| Google (Gmail, Calendar) | Self-host ready | Google OAuth client (read-only scopes) |
+| Microsoft 365 (Mail, Teams) | Self-host ready | Entra app registration (read-only) |
+| Slack / Discord | Self-host ready | OAuth app / bot with the documented scopes |
+| News (RSS + GDELT) | Self-host ready | nothing (GDELT is public) |
+| WhatsApp | **Hosted-only for now** | requires a separate bridge runtime that is not yet open-sourced — the in-app card runs a guided scaffold |
 
-## What is intentionally NOT here
+Each connector shows "Needs credentials" in the UI until its OAuth pair is set. Setup walkthroughs: [docs/self-hosting.md](docs/self-hosting.md#integrations).
 
-Real passkeys/WebAuthn (auth is magic-link, passkey-ready), payment processing,
-vLLM/GPU inference, durable Inngest jobs, and Cloudflare/DNS + production
-deploy. The non-OpenAI Model Gateway adapters and the Tool Gateway / MCP
-execution paths remain typed stubs. These are documented in `../governance/`.
+## Security
+
+- Row-level security on **every** tenant table, enforced by Postgres and tested in CI ([audit](docs/security/2026-07-11-tenant-isolation-rls-audit.md))
+- Secret-bearing tables (credentials, provider keys, session material) are server-only by default
+- All secrets via environment variables — nothing sensitive in the repo, ever
+- No telemetry, no analytics, no phone-home
+- Report vulnerabilities privately per **[SECURITY.md](SECURITY.md)** — please don't open public issues for security reports
+
+## Contributing
+
+Contributions are welcome — connectors, self-hosting improvements, bug fixes, docs. Read **[CONTRIBUTING.md](CONTRIBUTING.md)** (DCO sign-off, no CLA), check the **good first issue** label, and say hello in [Discussions](https://github.com/Paylo-One/pilot/discussions).
+
+## Roadmap
+
+See **[ROADMAP.md](ROADMAP.md)** — near-term: self-host polish, more connectors, and open-sourcing the WhatsApp bridge.
+
+## Pilot and Paylo One
+
+Pilot is open source under **AGPL-3.0** — see [LICENSE](LICENSE). [Paylo One](https://paylo.one) is the company stewarding the project and selling the **managed, hosted version**: same codebase, plus operated infrastructure, pre-configured integrations, onboarding, and support. The open-source edition is not artificially limited — if you can run it, you get all of it.
+
+"Pilot", the logo, and Paylo One branding are trademarks of Paylo One and are **not** licensed under the AGPL — forks are welcome, but may not present themselves as Pilot.
+
+---
+
+*Know what matters. Lose the noise.*
