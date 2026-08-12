@@ -16,6 +16,7 @@ import {
 import { REFERRAL_COOKIE, referralService } from "@/modules/referral";
 import { hasPaddleSubscriptionForEmail } from "@/modules/billing/paddle";
 import { tenantBaseUrl, activeApex } from "@/lib/config";
+import { openSignupEnabled } from "@/lib/signup-policy";
 import { OnboardingForm } from "./onboarding-form";
 
 export const metadata: Metadata = {
@@ -34,13 +35,15 @@ export default async function OnboardingPage({
   const existing = await findPrimaryTenantSlug(user.userId);
   if (existing) redirect(tenantBaseUrl(existing));
 
+  const isOpenSignup = openSignupEnabled();
+
   // The apex `paylo_ref` cookie is the primary carrier, but it can be lost over
   // the magic-link round-trip; `?ref=` (threaded through the link) is the
   // fallback. Re-validated below regardless of source.
   const cookieRef = (await cookies()).get(REFERRAL_COOKIE)?.value;
   const { ref: urlRef } = await searchParams;
   const candidateReferralCode = cookieRef ?? urlRef;
-  const validation = candidateReferralCode
+  const validation = !isOpenSignup && candidateReferralCode
     ? await referralService.validateCode(candidateReferralCode)
     : null;
   const referralCode =
@@ -49,7 +52,7 @@ export default async function OnboardingPage({
       : undefined;
 
   let hasPaidCheckout = false;
-  if (!referralCode && user.email) {
+  if (!isOpenSignup && !referralCode && user.email) {
     try {
       hasPaidCheckout = await hasPaddleSubscriptionForEmail(user.email);
     } catch (error) {
@@ -58,7 +61,7 @@ export default async function OnboardingPage({
     }
   }
 
-  if (!referralCode && !hasPaidCheckout) {
+  if (!isOpenSignup && !referralCode && !hasPaidCheckout) {
     const reason =
       validation?.ok &&
       (validation.value.status === "exhausted" ||
@@ -96,7 +99,11 @@ export default async function OnboardingPage({
         reference stays isolated inside this workspace.
       </p>
 
-      <OnboardingForm apexSuffix={activeApex()} referralCode={referralCode} />
+      <OnboardingForm
+        apexSuffix={activeApex()}
+        referralCode={referralCode}
+        requirePayloLegalAcceptance={!isOpenSignup}
+      />
     </>
   );
 }

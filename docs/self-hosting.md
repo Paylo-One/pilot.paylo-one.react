@@ -14,7 +14,7 @@ This guide takes you from a clean machine to a production Pilot instance you ope
 | **Docker + Compose** | recommended production path |
 | **A Supabase stack** | Pilot's database, auth, and storage layer — Supabase Cloud (free tier is enough to start) or [self-hosted Supabase](https://supabase.com/docs/guides/self-hosting) |
 | **A domain with wildcard DNS** | `*.example.com` → your server, for tenant subdomains. Single-machine testing can skip this with `lvh.me` |
-| **A model provider key** | OpenAI, Anthropic, Azure, Google, or any OpenAI-compatible endpoint |
+| **A model provider key** | OpenAI or an OpenAI-compatible endpoint; Anthropic completions are also implemented |
 | **Supabase CLI** | for schema provisioning (`brew install supabase/tap/supabase` or see supabase.com) |
 
 **Realistic footprint:** Pilot is a standard Next.js server — 1 vCPU / 1 GB RAM runs it comfortably for personal use. The database load is modest; Supabase's free tier or a small Postgres handles it.
@@ -38,7 +38,7 @@ Tenant workspaces live on subdomains (`<slug>.yourdomain.com`); the app resolves
 
 1. Create a Supabase project (cloud) or stand up a self-hosted stack.
 2. Get its API URL + keys (dashboard → Project Settings → API): the **publishable** key (browser-safe) and the **secret** key (server-only, bypasses RLS — guard it).
-3. Apply the schema:
+3. Apply the schema. Pilot never applies migrations automatically at app startup:
 
 ```bash
 npx supabase link --project-ref <your-project-ref>
@@ -55,6 +55,8 @@ Row-level security is enabled on every table by the migrations; the publishable 
 git clone https://github.com/Paylo-One/pilot.git
 cd pilot
 cp .env.example .env       # edit — see §5
+npx supabase link --project-ref <your-project-ref>
+npx supabase db push       # explicit, review migrations before production
 docker compose up --build -d
 ```
 
@@ -85,6 +87,7 @@ Everything is configured via environment variables; `.env.example` is fully anno
 | Variable | Purpose |
 |---|---|
 | `NEXT_PUBLIC_APP_APEX` | Your registrable domain (e.g. `example.com`) — tenant subdomains hang off it |
+| `PILOT_SIGNUP_MODE` | Set `open` for self-host registration; missing means fail-closed `gated` |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser-safe Supabase key |
 | `SUPABASE_SECRET_KEY` | **Secret.** Server-only; bypasses RLS |
@@ -104,21 +107,23 @@ Everything is configured via environment variables; `.env.example` is fully anno
 | Microsoft 365 | `MICROSOFT_OAUTH_CLIENT_ID/SECRET` (+ optional `MICROSOFT_OAUTH_TENANT`) | same |
 | Slack / Discord | `SLACK_CLIENT_ID/SECRET`, `DISCORD_CLIENT_ID/SECRET` (+ `DISCORD_BOT_TOKEN`) | same |
 
-Billing variables (`STRIPE_*`, `PADDLE_*`) exist for Paylo One's hosted service; self-hosted instances leave them unset.
+Billing variables (`STRIPE_*`, `PADDLE_*`) exist for Paylo One's hosted service; self-hosted instances set `PILOT_SIGNUP_MODE=open` and leave them unset. Open-registration tenants are recorded as complimentary and payment-enforcement-exempt; they never enter the hosted seven-day trial.
 
 ## 6. Authentication
 
 - **Magic links** — email via Supabase Auth. On Supabase Cloud, configure the SMTP sender (dashboard → Auth → SMTP) or use the built-in limited sender for testing. Self-hosted Supabase needs an SMTP server configured.
 - **Passkeys** — work out of the box: the WebAuthn relying-party ID is derived from `NEXT_PUBLIC_APP_APEX`, so one passkey spans all tenant subdomains. Requires HTTPS in production.
-- **First user** — register at `/sign-in`, pick a subdomain at onboarding, and that workspace is yours. Subsequent users join workspaces by invitation from within the app.
+- **First user** — with `PILOT_SIGNUP_MODE=open`, register at `/sign-in`, pick a subdomain at onboarding, and that workspace is yours. Open mode permits additional visitors to create their own workspaces; keep `gated` if the deployment is internet-accessible and you require an allowlist.
+- **Legal policy** — open-registration mode does not require acceptance of Paylo One's hosted-service terms. Self-hosting operators are responsible for publishing and enforcing any terms/privacy notice their deployment requires.
 
 ## 7. Model providers
 
 All inference goes through the Model Gateway and one OpenAI-compatible configuration point:
 
 - **OpenAI:** set `OPENAI_API_KEY` only.
-- **EU-resident / zero-retention:** point `LLM_BASE_URL` at an EU OpenAI-compatible router and choose EU-hosted models — `.env.example` ships working defaults (Mistral models incl. a transcription model).
-- **Anthropic / Azure / Google:** keys are supported by the gateway adapters (`ANTHROPIC_API_KEY`, `AZURE_OPENAI_API_KEY`, `GOOGLE_API_KEY`).
+- **EU-resident / zero-retention:** point `LLM_BASE_URL` at an EU OpenAI-compatible router and explicitly choose provider-valid chat, embedding, and transcription model IDs; `.env.example` leaves these deployment choices blank.
+- **Anthropic:** completions are implemented with `ANTHROPIC_API_KEY`; embeddings still require the OpenAI-compatible route.
+- **Azure OpenAI / Google:** runtime types exist, but their dedicated adapters are not implemented yet. Do not configure these stub routes in production.
 - **Your own endpoint** (vLLM, Ollama via a shim, etc.): set `LLM_BASE_URL` + `LLM_MODEL` accordingly. Embeddings and voice-note transcription use `LLM_EMBEDDING_MODEL` / `LLM_TRANSCRIPTION_MODEL`.
 
 You choose where prompts go. Pilot itself never sends your data anywhere else.
@@ -151,11 +156,13 @@ Pilot's state lives entirely in Postgres (plus Supabase Storage if you use file 
 
 ```bash
 git pull --ff-only
+# Read CHANGELOG/release notes and review new migration files first.
+# Back up, apply migrations, then deploy the matching application version.
+npx supabase db push
 docker compose up --build -d           # or: npm ci && npm run build && restart
-npx supabase db push                   # apply new migrations — always after pulling
 ```
 
-Migrations are forward-only and applied in order. Read the release notes before upgrading — pre-1.0, breaking changes are called out explicitly with their migration path. Back up before every upgrade.
+Migrations are forward-only and applied in order. Read the release notes before upgrading — pre-1.0, breaking changes are called out explicitly with their migration path. Back up before every upgrade and do not assume an application rollback can reverse a database migration.
 
 ## 11. Security hardening checklist
 

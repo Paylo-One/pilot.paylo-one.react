@@ -5,7 +5,7 @@
 Pilot reads the sources you connect — email, calendar, chat, files, news — and turns them into a calm, cited daily briefing: what matters, what's waiting on you, and what you can ignore. It runs on your own infrastructure, with your own model keys, and your data never has to leave your control.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
-[![CI](https://github.com/Paylo-One/pilot/actions/workflows/ci.yml/badge.svg)](https://github.com/Paylo-One/pilot/actions/workflows/ci.yml)
+[![CI](https://github.com/Paylo-One/pilot.paylo-one.react/actions/workflows/ci.yml/badge.svg)](https://github.com/Paylo-One/pilot.paylo-one.react/actions/workflows/ci.yml)
 
 > **Self-host it, or let us run it:** Pilot is open source (AGPL-3.0). If you'd rather skip the infrastructure, [Pilot by Paylo One](https://paylo.one) is the managed, hosted version of this same codebase.
 
@@ -20,8 +20,8 @@ If you lead things, your real inputs are scattered across a dozen tools — inbo
 - **A briefing, not a chatbot.** Pilot's core loop is the Daily Memo — a synthesised, prioritised morning brief with an actions queue, not another prompt box.
 - **Provenance-first.** Claims in your briefing link back to the source items they came from. You can check what the AI told you — the point is trust, not vibes.
 - **Self-hosted and private.** Postgres + your own API keys. No telemetry, no phone-home, no usage reporting. Your data stays on infrastructure you control.
-- **Bring your own models.** One OpenAI-compatible switch routes inference to OpenAI, Anthropic, Azure, Google, an EU-resident router, or your own endpoint.
-- **Real product, not a scaffold.** Multi-tenant workspaces, passkey auth, row-level security on every table, i18n, and a CI-enforced tenant-isolation test suite.
+- **Bring your own models.** Route inference through OpenAI, an OpenAI-compatible endpoint, or Anthropic. Embeddings currently require the OpenAI-compatible path.
+- **A working core with honest edges.** Multi-tenant workspaces, passkey auth, row-level security, i18n, and the Daily Memo are implemented; incomplete gateways and hosted-only components are labelled rather than presented as finished.
 
 ## Major capabilities
 
@@ -33,7 +33,7 @@ If you lead things, your real inputs are scattered across a dozen tools — inbo
 - **Source connectors** — file/paste upload, GitHub, Google (Gmail + Calendar), Microsoft 365 (Mail + Teams), Slack, Discord — read-only, OAuth, your own apps
 - **Passkey-first auth** — native WebAuthn via Supabase, magic link as fallback
 - **Model Gateway** — policy, routing, usage + audit in front of every inference call
-- **Tool Gateway (MCP)** — governed tool access with risk classification and human approval
+- **Tool Gateway (MCP)** — contracts, risk classification, and deny-by-default HTTP boundaries are present; real tool execution is still a scaffold
 - **Multi-tenant** — subdomain workspaces with Postgres RLS isolation (proven in CI)
 
 ## Architecture at a glance
@@ -49,41 +49,21 @@ proxy.ts         host-based tenant resolution + auth gate
 supabase/        migrations — schema + RLS on every table
 ```
 
-**Module boundary rule:** modules expose a typed service interface and never
-reach into another module's internals. Cross-module calls go through the
-interface. `modules/shared` holds the tenant-context object and common types.
+- **Stack:** Next.js (App Router) · React 19 · TypeScript · Supabase (Postgres + Auth + Storage + pgvector) · Tailwind 4 · next-intl
+- **Tenancy:** tenant-per-subdomain, server-side re-derivation, RLS as the database backstop — verified by a runtime CI test that boots the full stack and proves tenant A cannot read tenant B
+- **Inference:** shared OpenAI-compatible configuration covers the implemented model paths; the Model Gateway also supports Anthropic completions. Azure OpenAI, Google, and vLLM-specific adapters remain explicit stubs.
 
-## The four governed pillars
+## Quick start (local development)
 
-- **Multi-tenancy** (`modules/identity-tenant`, `lib/tenant`, `proxy.ts`):
-  tenant-per-workspace, subdomain routing with a shared reserved-subdomain
-  blocklist, server-side tenant re-derivation, and RLS as the database backstop.
-- **Passkey auth** (`(auth)/sign-in`, `(app)/settings`): native Supabase
-  WebAuthn — registration, credential management, and passkey-first login
-  (`auth.registerPasskey` / `signInWithPasskey` / `auth.passkey.*`; Settings →
-  Security, sign-in; RP ID = the registrable apex; Supabase owns credentials +
-  session). Recovery codes and the email-recovery flow remain documented
-  contracts in `modules/authentication`.
-- **MCP / Tool Gateway** (`modules/tool-gateway`, `modules/mcp-registry`,
-  `api/tool-gateway`): the single front door for tool calls — policy, risk
-  classification, human approval, routing, output sanitisation, audit. MCP
-  servers are the runtimes behind it; nothing executes in the scaffold.
-- **Model Gateway** (`modules/model-gateway` + siblings, `api/model-gateway`):
-  the single front door for inference — policy, prompt assembly, routing,
-  output validation, usage + audit. Providers/vLLM sit behind adapters that
-  throw `NotImplementedError`. Tenant manifesto prompt context is optional at
-  inference time: a storage failure omits it and is logged, while a confirmed
-  missing record may be seeded. Read failures never trigger seed writes.
-
-## Run locally
+**Prerequisites:** Node 22+, Docker (for the local Supabase stack), and the [Supabase CLI](https://supabase.com/docs/guides/local-development).
 
 ```bash
-git clone https://github.com/Paylo-One/pilot.git
-cd pilot
-npm install
+git clone https://github.com/Paylo-One/pilot.paylo-one.react.git
+cd pilot.paylo-one.react
+npm ci
 npx supabase start         # local Postgres/Auth/Storage (API :54321, Mailpit :54324)
 npx supabase db reset      # apply schema + RLS migrations
-cp .env.example .env.local # set OPENAI_API_KEY (or any supported provider)
+cp .env.example .env.local # map local Supabase keys; set PILOT_SIGNUP_MODE=open and a model key
 npm run dev
 ```
 
@@ -100,10 +80,12 @@ Then:
 Pilot is a standard Next.js server plus Postgres — it runs anywhere Node 22 does. The shortest path:
 
 ```bash
-git clone https://github.com/Paylo-One/pilot.git
-cd pilot
-cp .env.example .env       # fill in: Supabase, model provider, app apex
-docker compose up          # app + migrations against your Postgres/Supabase
+git clone https://github.com/Paylo-One/pilot.paylo-one.react.git
+cd pilot.paylo-one.react
+cp .env.example .env       # fill in: Supabase, model provider, app apex, signup policy
+npx supabase link --project-ref <ref>
+npx supabase db push       # explicit: Compose never mutates your database
+docker compose up --build
 ```
 
 Full guide — infrastructure requirements, every environment variable, authentication, model providers, connector setup, backups, upgrades, and security hardening: **[docs/self-hosting.md](docs/self-hosting.md)**.
@@ -114,6 +96,7 @@ Everything sensitive is an environment variable; `.env.example` is the annotated
 
 | Variable | Purpose |
 |---|---|
+| `PILOT_SIGNUP_MODE` | `open` for self-host registration; defaults to fail-closed `gated` |
 | `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SECRET_KEY` | Database + auth (publishable = browser, secret = server-only, bypasses RLS) |
 | `OPENAI_API_KEY` (or `LLM_BASE_URL` + `LLM_API_KEY` + `LLM_MODEL`) | Model provider — any OpenAI-compatible endpoint works |
 | `NEXT_PUBLIC_APP_APEX` | Registrable domain for tenant subdomains (e.g. `example.com`; wildcard DNS required) |
@@ -127,9 +110,9 @@ Everything sensitive is an environment variable; `.env.example` is the annotated
 |---|---|---|
 | Files / paste | Works out of the box | nothing |
 | GitHub | Self-host ready | GitHub OAuth app (read-only) |
-| Google (Gmail, Calendar) | Self-host ready | Google OAuth client (read-only scopes) |
-| Microsoft 365 (Mail, Teams) | Self-host ready | Entra app registration (read-only) |
-| Slack / Discord | Self-host ready | OAuth app / bot with the documented scopes |
+| Google (Gmail, Calendar) | Implemented; setup validation required | Google OAuth client (read-only scopes) |
+| Microsoft 365 (Mail, Teams) | Implemented; setup validation required | Entra app registration (read-only) |
+| Slack / Discord | Implemented; setup validation required | OAuth app / bot with the documented scopes |
 | News (RSS + GDELT) | Self-host ready | nothing (GDELT is public) |
 | WhatsApp | **Hosted-only for now** | requires a separate bridge runtime that is not yet open-sourced — the in-app card runs a guided scaffold |
 

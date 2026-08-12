@@ -6,7 +6,7 @@
 
 Report vulnerabilities via either:
 
-- **GitHub private vulnerability reporting** — [github.com/Paylo-One/pilot/security/advisories/new](../../security/advisories/new)
+- **GitHub private vulnerability reporting** — [github.com/Paylo-One/pilot.paylo-one.react/security/advisories/new](../../security/advisories/new)
 - **Email** — security@paylo.one
 
 Include: affected version/commit, reproduction steps, impact, and any suggested mitigation. We aim to acknowledge reports within **3 business days** and will keep you informed as we investigate.
