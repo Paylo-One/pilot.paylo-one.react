@@ -48,7 +48,7 @@ beforeEach(() => {
     id: "sug1",
     candidate_person_id: "p1",
     source_system: "email",
-    observed_identity: "jacques@acme.com",
+    observed_identity: "alex@example.com",
     source_item_id: "item1",
   };
   state.readError = null;

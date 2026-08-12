@@ -49,13 +49,33 @@ proxy.ts         host-based tenant resolution + auth gate
 supabase/        migrations — schema + RLS on every table
 ```
 
-- **Stack:** Next.js (App Router) · React 19 · TypeScript · Supabase (Postgres + Auth + Storage + pgvector) · Tailwind 4 · next-intl
-- **Tenancy:** tenant-per-subdomain, server-side re-derivation, RLS as the database backstop — verified by a runtime CI test that boots the full stack and proves tenant A cannot read tenant B
-- **Inference:** all model calls go through the Model Gateway; providers sit behind adapters and are selected by env vars — no code changes to switch
+**Module boundary rule:** modules expose a typed service interface and never
+reach into another module's internals. Cross-module calls go through the
+interface. `modules/shared` holds the tenant-context object and common types.
 
-## Quick start (local development)
+## The four governed pillars
 
-**Prerequisites:** Node 22+, Docker (for the local Supabase stack), and the [Supabase CLI](https://supabase.com/docs/guides/local-development).
+- **Multi-tenancy** (`modules/identity-tenant`, `lib/tenant`, `proxy.ts`):
+  tenant-per-workspace, subdomain routing with a shared reserved-subdomain
+  blocklist, server-side tenant re-derivation, and RLS as the database backstop.
+- **Passkey auth** (`(auth)/sign-in`, `(app)/settings`): native Supabase
+  WebAuthn — registration, credential management, and passkey-first login
+  (`auth.registerPasskey` / `signInWithPasskey` / `auth.passkey.*`; Settings →
+  Security, sign-in; RP ID = the registrable apex; Supabase owns credentials +
+  session). Recovery codes and the email-recovery flow remain documented
+  contracts in `modules/authentication`.
+- **MCP / Tool Gateway** (`modules/tool-gateway`, `modules/mcp-registry`,
+  `api/tool-gateway`): the single front door for tool calls — policy, risk
+  classification, human approval, routing, output sanitisation, audit. MCP
+  servers are the runtimes behind it; nothing executes in the scaffold.
+- **Model Gateway** (`modules/model-gateway` + siblings, `api/model-gateway`):
+  the single front door for inference — policy, prompt assembly, routing,
+  output validation, usage + audit. Providers/vLLM sit behind adapters that
+  throw `NotImplementedError`. Tenant manifesto prompt context is optional at
+  inference time: a storage failure omits it and is logged, while a confirmed
+  missing record may be seeded. Read failures never trigger seed writes.
+
+## Run locally
 
 ```bash
 git clone https://github.com/Paylo-One/pilot.git
