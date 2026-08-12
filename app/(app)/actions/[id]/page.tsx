@@ -36,15 +36,23 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
     .eq("tenant_id", ctx.tenantId)
     .maybeSingle();
 
-  if (actionErr || !actionData) {
+  if (actionErr) {
+    throw new Error(`Could not read action: ${actionErr.message}`);
+  }
+
+  if (!actionData) {
     notFound();
   }
 
   // Fetch references
-  const { data: refData } = await supabase
+  const { data: refData, error: refError } = await supabase
     .from("source_references")
     .select("id, suggested_action_id, source_system, item_timestamp, confidence, excerpt_or_pointer, diary_entry_id")
     .eq("suggested_action_id", id);
+
+  if (refError) {
+    throw new Error(`Could not read action references: ${refError.message}`);
+  }
 
   const references = (refData ?? []).map((row) => ({
     id: row.id,
@@ -81,10 +89,14 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
   const people = await listPeopleDirectory();
 
   // Fetch all existing unique topics to provide autocomplete context
-  const { data: allActionsTopics } = await supabase
+  const { data: allActionsTopics, error: topicsError } = await supabase
     .from("suggested_actions")
     .select("topics")
     .eq("tenant_id", ctx.tenantId);
+
+  if (topicsError) {
+    throw new Error(`Could not read action topics: ${topicsError.message}`);
+  }
 
   const existingTopicsSet = new Set<string>();
   if (allActionsTopics) {

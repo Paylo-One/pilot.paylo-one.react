@@ -70,3 +70,37 @@ export function calendarDayInTimeZone(date: Date, timeZone: string): number {
   const { year, month, day } = zonedParts(date, timeZone);
   return year * 10000 + month * 100 + day;
 }
+
+/**
+ * UTC instants that bound the operator's local calendar day.
+ *
+ * Timezone offsets are not constant (DST can make a local day 23 or 25 hours),
+ * so derive both boundaries from the monotonic local-day value rather than
+ * applying a fixed offset. The ±36 hour window covers every IANA timezone.
+ */
+export function calendarDayBoundsInTimeZone(
+  date: Date,
+  timeZone: string,
+): { readonly start: Date; readonly end: Date } {
+  const target = calendarDayInTimeZone(date, timeZone);
+  const window = 36 * 60 * 60 * 1000;
+
+  const firstInstantMatching = (matches: (day: number) => boolean): Date => {
+    let low = date.getTime() - window;
+    let high = date.getTime() + window;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (matches(calendarDayInTimeZone(new Date(middle), timeZone))) {
+        high = middle;
+      } else {
+        low = middle + 1;
+      }
+    }
+    return new Date(low);
+  };
+
+  return {
+    start: firstInstantMatching((day) => day >= target),
+    end: firstInstantMatching((day) => day > target),
+  };
+}

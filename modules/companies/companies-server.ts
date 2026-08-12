@@ -369,12 +369,24 @@ export async function removeCompanyTag(companyId: string, tag: string): Promise<
  */
 export async function generateCompanyLinkSuggestions(tenantId: string): Promise<number> {
   const supabase = await createSupabaseServerClient();
-  const [{ data: domainData }, { data: identityData }, { data: peopleData }] =
-    await Promise.all([
-      supabase.from("company_domains").select("company_id, domain"),
-      supabase.from("person_identities").select("person_id, identity_value").eq("identity_type", "email"),
-      supabase.from("people").select("id, display_name, company_id"),
-    ]);
+  const [
+    { data: domainData, error: domainErr },
+    { data: identityData, error: identityErr },
+    { data: peopleData, error: peopleErr },
+  ] = await Promise.all([
+    supabase.from("company_domains").select("company_id, domain"),
+    supabase.from("person_identities").select("person_id, identity_value").eq("identity_type", "email"),
+    supabase.from("people").select("id, display_name, company_id"),
+  ]);
+  // Fail loud on any feeder read. If a read errors and we swallow it, this
+  // correlation pass silently under-generates (or returns 0) and the operator
+  // reads "no new links to suggest" when the truth is the read failed — the
+  // same silent-loss the fail-loud contract forbids on the correlation surface
+  // (see decision-log 2026-07-30 read-path + 2026-08-01 people-suggestion, whose
+  // follow-up #3 asks for exactly this sweep of the write-feeding reads).
+  if (domainErr) throw new Error(domainErr.message);
+  if (identityErr) throw new Error(identityErr.message);
+  if (peopleErr) throw new Error(peopleErr.message);
 
   const domains = (domainData ?? []) as { company_id: string; domain: string }[];
   if (domains.length === 0) return 0;
