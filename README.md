@@ -1,5 +1,7 @@
 # Pilot
 
+![Pilot — a calm intelligence layer for senior technology leaders](assets/social-card.png)
+
 **The open-source personal AI assistant that briefs you every morning.**
 
 Pilot reads the sources you connect — email, calendar, chat, files, news — and turns them into a calm, cited daily briefing: what matters, what's waiting on you, and what you can ignore. It runs on your own infrastructure, with your own model keys, and your data never has to leave your control.
