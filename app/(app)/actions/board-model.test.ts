@@ -172,12 +172,20 @@ describe("partitionDoneCards", () => {
 });
 
 describe("isOverdue", () => {
-  it("is true only for open actions past their due date", () => {
-    const now = new Date("2026-07-30T12:00:00Z");
+  it("keeps an open action due today out of overdue for the whole day", () => {
+    const now = new Date(2026, 6, 30, 23, 59);
     expect(isOverdue(action({ dueAt: "2026-07-29T00:00:00Z" }), now)).toBe(true);
+    expect(isOverdue(action({ dueAt: "2026-07-30T00:00:00Z" }), now)).toBe(false);
     expect(isOverdue(action({ dueAt: "2026-07-31T00:00:00Z" }), now)).toBe(false);
+  });
+
+  it("never marks a finished action overdue", () => {
+    const now = new Date(2026, 6, 30, 12);
     expect(
       isOverdue(action({ dueAt: "2026-07-29T00:00:00Z", status: "completed" }), now),
+    ).toBe(false);
+    expect(
+      isOverdue(action({ dueAt: "2026-07-29T00:00:00Z", status: "cancelled" }), now),
     ).toBe(false);
   });
 });

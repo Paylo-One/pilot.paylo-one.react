@@ -80,10 +80,23 @@ export function statusForDrop(columnId: BoardColumnId): ActionStatus {
   return column?.dropStatus ?? "planned";
 }
 
+/**
+ * The local calendar date for an instant. Actions are edited as date-only
+ * commitments, so their urgency follows the operator's browser calendar day
+ * rather than the UTC instant used to persist them.
+ */
+function localCalendarDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** An open action becomes overdue only after its whole due date has passed. */
 export function isOverdue(action: SuggestedActionView, now: Date = new Date()): boolean {
   return Boolean(
     action.dueAt &&
-      new Date(action.dueAt) < now &&
+      action.dueAt.slice(0, 10) < localCalendarDate(now) &&
       action.status !== "completed" &&
       action.status !== "cancelled",
   );

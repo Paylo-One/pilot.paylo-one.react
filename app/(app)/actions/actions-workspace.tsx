@@ -51,16 +51,20 @@ const PRIORITY_LABELS: Record<ActionPriority, string> = {
 
 function formatDate(value: string | null): string {
   if (!value) return "";
+  const [year, month, day] = value.slice(0, 10).split("-").map(Number);
   return new Intl.DateTimeFormat(undefined, {
     day: "numeric",
     month: "short",
-  }).format(new Date(value));
+  }).format(new Date(year!, month! - 1, day));
 }
 
 function addDays(days: number): string {
   const date = new Date();
   date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function personName(
