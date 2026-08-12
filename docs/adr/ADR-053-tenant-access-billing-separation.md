@@ -1,6 +1,6 @@
 # ADR-053 — Separate tenant access authority from billing lifecycle
 
-- **Status:** Proposed — **requires Bernard's approval.** Supersedes the accepted
+- **Status:** Proposed — **requires maintainer approval.** Supersedes the accepted
   enforcement posture in `governance/docs/02-monetisation/billing-subscription-logical-design.md`
   §6.6, §7.1, §8.2 if accepted. Draft PR is intentionally **not merged**.
 - **Date:** 2026-07-16

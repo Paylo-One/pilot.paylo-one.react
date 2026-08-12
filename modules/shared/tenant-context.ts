@@ -22,7 +22,7 @@ export type TenantRole = "owner" | "admin" | "member" | "viewer";
 export interface TenantContext {
   /** UUID of the resolved tenant. */
   readonly tenantId: string;
-  /** Canonical tenant slug (e.g. "bernard" for bernard.paylo.one). */
+  /** Canonical tenant slug (e.g. "alex" for alex.paylo.one). */
   readonly tenantSlug: string;
   /** Authenticated Supabase auth user id. */
   readonly userId: string;

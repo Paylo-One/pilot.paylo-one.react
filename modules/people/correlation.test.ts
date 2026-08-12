@@ -47,18 +47,18 @@ describe("observedIdentityFromItem", () => {
         system: "discord",
         title: null,
         body: "hello",
-        author: "bernard",
+        author: "alex",
         occurredAt: null,
       }),
-    ).toEqual({ type: "discord", value: "bernard" });
+    ).toEqual({ type: "discord", value: "alex" });
   });
 });
 
 describe("detectDuplicatePeople", () => {
   it("flags records sharing an identity value with high confidence", () => {
     const dups = detectDuplicatePeople([
-      person({ id: "a", displayName: "Jacques Becker", emails: ["jacques@acme.com"] }),
-      person({ id: "b", displayName: "J. Becker", emails: ["jacques@acme.com"] }),
+      person({ id: "a", displayName: "Alex Verhoeven", emails: ["alex@example.com"] }),
+      person({ id: "b", displayName: "A. Verhoeven", emails: ["alex@example.com"] }),
     ]);
     expect(dups).toHaveLength(1);
     expect(dups[0]?.confidence).toBeGreaterThanOrEqual(0.9);
@@ -67,8 +67,8 @@ describe("detectDuplicatePeople", () => {
 
   it("flags identical names without a shared identity at lower confidence", () => {
     const dups = detectDuplicatePeople([
-      person({ id: "a", displayName: "Priya Nair", emails: ["priya@one.com"] }),
-      person({ id: "b", displayName: "Priya Nair", emails: ["priya@two.com"] }),
+      person({ id: "a", displayName: "Petra Naicker", emails: ["petra@example.com"] }),
+      person({ id: "b", displayName: "Petra Naicker", emails: ["petra@example.org"] }),
     ]);
     expect(dups).toHaveLength(1);
     expect(dups[0]?.confidence).toBeCloseTo(0.7);
@@ -76,8 +76,8 @@ describe("detectDuplicatePeople", () => {
 
   it("does not flag clearly distinct people", () => {
     const dups = detectDuplicatePeople([
-      person({ id: "a", displayName: "Randy Coburn", emails: ["randy@one.com"] }),
-      person({ id: "b", displayName: "Priya Nair", emails: ["priya@two.com"] }),
+      person({ id: "a", displayName: "Robin Calloway", emails: ["robin@example.com"] }),
+      person({ id: "b", displayName: "Petra Naicker", emails: ["petra@example.org"] }),
     ]);
     expect(dups).toHaveLength(0);
   });
