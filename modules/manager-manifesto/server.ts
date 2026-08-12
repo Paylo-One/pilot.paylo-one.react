@@ -10,7 +10,9 @@ import "server-only";
  * activate_manifesto_version RPC), never client-side.
  *
  * `getActiveManifestoBody` is the read used during prompt resolution; it uses
- * the SECRET client (it runs inside the Gateway) and never throws.
+ * the SECRET client (it runs inside the Gateway) and degrades to `null` when
+ * storage is unavailable. Read failures must not be mistaken for missing data:
+ * doing so would turn a transient outage into an attempted seed write.
  */
 
 import {
@@ -78,11 +80,12 @@ export async function seedTenantManifesto(
   userId?: string,
 ): Promise<void> {
   const secret = createSupabaseSecretClient();
-  const { data: existing } = await secret
+  const { data: existing, error: existingError } = await secret
     .from("manager_manifesto")
     .select("id")
     .eq("tenant_id", tenantId)
     .maybeSingle();
+  if (existingError) throw new Error(existingError.message);
   if (existing) return;
 
   const { data: created, error } = await secret
@@ -163,22 +166,24 @@ export async function getActiveManifestoBody(
 ): Promise<string | null> {
   try {
     const secret = createSupabaseSecretClient();
-    const { data } = await secret
+    const { data, error } = await secret
       .from("manifesto_versions")
       .select("body, status, manager_manifesto!inner(tenant_id)")
       .eq("tenant_id", tenantId)
       .eq("status", "active")
       .maybeSingle();
+    if (error) throw new Error(error.message);
     if (data?.body) return data.body as string;
 
     // No active version yet (un-seeded tenant) — seed then re-read.
     await seedTenantManifesto(tenantId);
-    const { data: seeded } = await secret
+    const { data: seeded, error: seededError } = await secret
       .from("manifesto_versions")
       .select("body")
       .eq("tenant_id", tenantId)
       .eq("status", "active")
       .maybeSingle();
+    if (seededError) throw new Error(seededError.message);
     return (seeded?.body as string | undefined) ?? null;
   } catch (cause) {
     console.warn(
