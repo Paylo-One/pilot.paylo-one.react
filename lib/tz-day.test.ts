@@ -6,7 +6,11 @@
 
 import { describe, expect, it } from "vitest";
 
-import { calendarDayInTimeZone, hourInTimeZone } from "./tz-day";
+import {
+  calendarDayBoundsInTimeZone,
+  calendarDayInTimeZone,
+  hourInTimeZone,
+} from "./tz-day";
 
 describe("hourInTimeZone", () => {
   it("reads the wall-clock hour in the given zone, not UTC", () => {
@@ -27,6 +31,26 @@ describe("hourInTimeZone", () => {
   it("falls back to UTC for an unknown timezone", () => {
     const t = new Date("2026-07-17T23:30:00Z");
     expect(hourInTimeZone(t, "Not/AZone")).toBe(23);
+  });
+});
+
+describe("calendarDayBoundsInTimeZone", () => {
+  it("returns UTC instants for the operator's local midnight", () => {
+    const bounds = calendarDayBoundsInTimeZone(
+      new Date("2026-07-17T22:30:00Z"),
+      "Europe/Amsterdam",
+    );
+    expect(bounds.start.toISOString()).toBe("2026-07-17T22:00:00.000Z");
+    expect(bounds.end.toISOString()).toBe("2026-07-18T22:00:00.000Z");
+  });
+
+  it("respects DST days instead of assuming every day is 24 hours", () => {
+    const bounds = calendarDayBoundsInTimeZone(
+      new Date("2026-03-29T12:00:00Z"),
+      "Europe/Amsterdam",
+    );
+    expect(bounds.start.toISOString()).toBe("2026-03-28T23:00:00.000Z");
+    expect(bounds.end.toISOString()).toBe("2026-03-29T22:00:00.000Z");
   });
 });
 

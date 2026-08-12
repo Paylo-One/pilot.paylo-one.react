@@ -283,7 +283,7 @@ async function runDailyMemo(
   const agentRunId = randomUUID();
 
   // Billing capability check (observe-only)
-  await checkBriefingLimit(ctx.tenantId);
+  await checkBriefingLimit(ctx);
 
   const items = await listMemoSourceItems(ctx.tenantId, MEMO_ITEM_LIMIT);
   if (items.length === 0) {
