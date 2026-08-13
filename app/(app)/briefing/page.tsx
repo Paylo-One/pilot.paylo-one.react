@@ -38,6 +38,7 @@ import { FeedbackChip } from "@/components/refinement/feedback-chip";
 import { NewsFeedbackBar } from "@/components/news/news-feedback-bar";
 import { NEWS_CATEGORY_LABELS, type ExternalSignalView } from "@/modules/news";
 import { calendarDayInTimeZone, hourInTimeZone } from "@/lib/tz-day";
+import { MemoSourceReference } from "@/components/briefing/source-reference";
 
 /* --- Formatting ----------------------------------------------------------- */
 
@@ -443,7 +444,13 @@ function PeopleSection({ people }: { people: PersonInFocus[] }) {
 
 /* --- The memo ------------------------------------------------------------- */
 
-function RealReferences({ section }: { section: BriefingSectionView }) {
+function RealReferences({
+  section,
+  timezone,
+}: {
+  section: BriefingSectionView;
+  timezone: string;
+}) {
   if (section.references.length === 0) return null;
   const people = [
     ...new Map(
@@ -464,14 +471,9 @@ function RealReferences({ section }: { section: BriefingSectionView }) {
           ))}
         </div>
       ) : null}
-      <div className="source-ref-row">
+      <div className="source-ref-row" aria-label="Sources for this briefing section">
         {section.references.map((ref) => (
-          <span key={ref.id} className="source-ref" title={ref.excerptOrPointer ?? undefined}>
-            <span className="source-ref__system">{sourceSystemLabel(ref.sourceSystem)}</span>
-            {typeof ref.confidence === "number" ? (
-              <span className="source-ref__confidence">{Math.round(ref.confidence * 100)}%</span>
-            ) : null}
-          </span>
+          <MemoSourceReference key={ref.id} reference={ref} timezone={timezone} />
         ))}
       </div>
     </>
@@ -749,7 +751,7 @@ export default async function BriefingPage() {
                     {section.body}
                   </p>
                 ) : null}
-                <RealReferences section={section} />
+                <RealReferences section={section} timezone={timezone} />
               </section>
             ))}
 

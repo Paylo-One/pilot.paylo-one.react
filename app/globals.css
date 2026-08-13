@@ -1200,8 +1200,25 @@ button {
 .source-ref-row {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
   gap: var(--space-xs);
   margin-top: var(--space-sm);
+}
+.source-ref-detail {
+  max-width: min(100%, 42rem);
+}
+.source-ref-detail > summary {
+  cursor: pointer;
+  list-style-position: inside;
+}
+.source-ref-detail__excerpt {
+  margin: var(--space-xs) 0 0;
+  padding: var(--space-sm);
+  border-left: 2px solid var(--colour-border-strong);
+  color: var(--colour-text-secondary);
+  font-size: var(--text-small);
+  line-height: 1.5;
+  white-space: normal;
 }
 
 /* Confidence meter — agent metadata */

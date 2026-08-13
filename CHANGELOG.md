@@ -6,6 +6,7 @@ All notable changes to Pilot are documented here. The format follows [Keep a Cha
 
 ### Changed
 
+- Daily Memo citations now show the source occurrence time and confidence, with the stored evidence expandable in place for faster claim verification.
 - Prepared the repository for open-source release: new README, community files, AGPL-3.0 licence, self-hosting guide, fictional demo fixtures, and removal of internal tooling and identifiers. No product behaviour changes.
 
 ## How releases work
