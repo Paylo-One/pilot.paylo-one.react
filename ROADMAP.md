@@ -11,7 +11,7 @@ Pilot is pre-1.0. This roadmap is directional, not contractual — the [Discussi
 
 ## Next — depth in the core loop
 
-- Richer Daily Memo: more source types, better prioritisation, feedback loop on briefing quality
+- Richer Daily Memo: more source types and better prioritisation; one-tap quality feedback is now captured, with deterministic application and inspectable rule management next
 - Actions: recurrence, snoozing, cross-source commitment tracking
 - People & companies: stronger identity correlation, merge tooling
 - Mobile-friendly web experience
