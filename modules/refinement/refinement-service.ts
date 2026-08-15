@@ -1,12 +1,10 @@
 /**
  * modules/refinement/refinement-service.ts
  *
- * Typed mock data + pure helpers for the refinement loop. No persistence, no
- * server-only. Demonstrates the standing-rules model the operator builds by
- * correcting the system. Governance: services/refinement-rules-service.md.
+ * Typed mock data + pure helpers for the refinement loop. Feedback-event
+ * persistence lives in actions.ts; standing-rule application is not wired.
  *
- * Scaffold note: feedback affordances are wired in the UI but only emit local,
- * non-persisted events for now — no learning logic, no model fine-tuning.
+ * Capturing feedback does not mutate model or rule state.
  */
 
 import type { RefinementRule, FeedbackType } from "./refinement.types";

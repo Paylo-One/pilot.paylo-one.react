@@ -97,6 +97,7 @@ describe.skipIf(!hasEnv)("tenant isolation (runtime RLS enforcement)", () => {
   afterAll(async () => {
     // Best-effort teardown (service role bypasses RLS).
     for (const s of seeds) {
+      await admin.from("user_feedback_events").delete().eq("tenant_id", s.tenantId);
       await admin.from("people").delete().eq("tenant_id", s.tenantId);
       await admin.from("tenant_users").delete().eq("tenant_id", s.tenantId);
       await admin.from("tenants").delete().eq("id", s.tenantId);
@@ -125,6 +126,56 @@ describe.skipIf(!hasEnv)("tenant isolation (runtime RLS enforcement)", () => {
       .eq("tenant_id", b.tenantId);
     expect(error).toBeNull();
     expect(data ?? []).toHaveLength(0); // RLS filters to zero, not an error
+  });
+
+  it("attributes feedback writes to an allowed tenant and hides them from another tenant", async () => {
+    const a = seeds[0]!;
+    const b = seeds[1]!;
+    const clientA = await userClient(a);
+    const clientB = await userClient(b);
+    const eventId = crypto.randomUUID();
+
+    const { error: insertError } = await clientA.from("user_feedback_events").insert({
+      id: eventId,
+      tenant_id: a.tenantId,
+      user_id: a.userId,
+      feedback_type: "not_relevant",
+      target_type: "memo_section",
+      target_id: `${RUN}-section`,
+    });
+    expect(insertError).toBeNull();
+
+    const { data: ownRows, error: ownError } = await clientA
+      .from("user_feedback_events")
+      .select("tenant_id, user_id")
+      .eq("id", eventId);
+    expect(ownError).toBeNull();
+    expect(ownRows).toEqual([{ tenant_id: a.tenantId, user_id: a.userId }]);
+
+    const { data: foreignRows, error: foreignError } = await clientB
+      .from("user_feedback_events")
+      .select("id")
+      .eq("id", eventId);
+    expect(foreignError).toBeNull();
+    expect(foreignRows).toHaveLength(0);
+
+    const { error: forgedInsertError } = await clientA.from("user_feedback_events").insert({
+      tenant_id: b.tenantId,
+      user_id: a.userId,
+      feedback_type: "not_relevant",
+      target_type: "memo_section",
+      target_id: `${RUN}-forged-section`,
+    });
+    expect(forgedInsertError).not.toBeNull();
+
+    const { error: forgedUserError } = await clientA.from("user_feedback_events").insert({
+      tenant_id: a.tenantId,
+      user_id: b.userId,
+      feedback_type: "not_relevant",
+      target_type: "memo_section",
+      target_id: `${RUN}-forged-user`,
+    });
+    expect(forgedUserError).not.toBeNull();
   });
 });
 
