@@ -6,7 +6,7 @@ All notable changes to Pilot are documented here. The format follows [Keep a Cha
 
 ### Changed
 
-- Daily Memo refinement controls now acknowledge feedback only after it is durably captured in the tenant-scoped feedback log, and show a retryable error when saving fails.
+- Daily Memo sections now expose honest one-off relevance feedback. Controls acknowledge only durable capture, show a retryable error when saving fails, and no longer imply that unimplemented standing-rule changes were applied.
 - Daily Memo citations now show the source occurrence time and confidence, with the stored evidence expandable in place for faster claim verification.
 - Prepared the repository for open-source release: new README, community files, AGPL-3.0 licence, self-hosting guide, fictional demo fixtures, and removal of internal tooling and identifiers. No product behaviour changes.
 

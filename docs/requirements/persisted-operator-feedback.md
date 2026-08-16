@@ -31,6 +31,7 @@ Applicable constitution sequence: engineering principles → requirements → ar
 | FR-2 | Given invalid feedback, target type, target id, or event id, the system rejects the request without a database write. | F | Server-action unit tests |
 | FR-3 | Given a database failure, the control remains unapplied and shows an inline error; it can be retried. | F | Server-action and component inspection |
 | FR-4 | Replaying the same event id has one durable effect and returns success only when the existing event belongs to the same tenant, user, and payload. | F | Server-action unit tests |
+| FR-5 | Daily Memo sections expose one-off relevance feedback and label success as saved feedback, without implying that a standing rule or current entity state changed. | F | Briefing and component inspection |
 
 ## 4. Quality Attributes
 
@@ -52,6 +53,7 @@ Applicable constitution sequence: engineering principles → requirements → ar
 | INV-2 | The UI never displays applied state before persistence succeeds. | `FeedbackChip` transition result handling | Failure-path test/inspection |
 | INV-3 | One event id cannot produce more than one durable event or be reused to acknowledge a different payload. | Primary key plus replay comparison | Unit tests |
 | INV-4 | Capturing feedback does not silently create or apply a standing rule. | Refinement action scope | Code inspection |
+| INV-5 | Feedback controls do not promise persistent priority, inclusion, muting, or relationship changes until those effects are implemented and inspectable. | Feedback surface copy and allowed affordances | Component inspection |
 
 ## 6. Failure-Mode Requirements
 

@@ -422,10 +422,8 @@ function PeopleSection({ people }: { people: PersonInFocus[] }) {
                 ))}
               </div>
               <div className="refinement-actions">
-                <span className="refinement-actions__label mono">Refine</span>
-                <FeedbackChip feedback="raise_priority" targetType="person" targetId={p.personId} label="Always high priority" />
-                <FeedbackChip feedback="lower_priority" targetType="person" targetId={p.personId} />
-                <FeedbackChip feedback="do_not_show_again" targetType="person" targetId={p.personId} label="Mute" />
+                <span className="refinement-actions__label mono">Feedback</span>
+                <FeedbackChip feedback="not_relevant" targetType="person" targetId={p.personId} label="Not relevant today" />
               </div>
             </div>
             <div className="memo-item__aside">
@@ -752,6 +750,10 @@ export default async function BriefingPage() {
                   </p>
                 ) : null}
                 <RealReferences section={section} timezone={timezone} />
+                <RefinementActions
+                  targetType="memo_section"
+                  targetId={section.id}
+                />
               </section>
             ))}
 

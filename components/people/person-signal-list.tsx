@@ -5,7 +5,7 @@
  *
  * Recent source items correlated to a person — the relationship-aware view of
  * "what this person has touched lately", with a per-link confidence and a
- * one-tap "wrong person" refinement affordance. Scaffold display only.
+ * one-tap correction-reporting affordance.
  */
 
 import { SOURCE_SYSTEM_LABELS } from "@/modules/source-connection";
@@ -33,7 +33,12 @@ export function PersonSignalList({ signals }: { signals: readonly PersonSignal[]
               {formatTime(signal.occurredAt)} · {Math.round(signal.confidence * 100)}% match
             </p>
           </div>
-          <FeedbackChip feedback="wrong_person" targetType="source_item" targetId={signal.id} />
+          <FeedbackChip
+            feedback="wrong_person"
+            targetType="source_item"
+            targetId={signal.id}
+            label="Report wrong match"
+          />
         </li>
       ))}
     </ul>

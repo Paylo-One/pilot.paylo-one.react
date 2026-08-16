@@ -60,8 +60,7 @@ export function FeedbackChip({
           });
         }}
       >
-        {applied ? "✓ " : ""}
-        {pending ? "Saving…" : label ?? FEEDBACK_LABELS[feedback]}
+        {applied ? "✓ Feedback saved" : pending ? "Saving…" : label ?? FEEDBACK_LABELS[feedback]}
       </button>
       {error ? (
         <span className="form-message form-message--error" role="status">
