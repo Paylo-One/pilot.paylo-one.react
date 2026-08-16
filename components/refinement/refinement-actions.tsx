@@ -3,26 +3,19 @@
 /**
  * components/refinement/refinement-actions.tsx
  *
- * A row of refinement affordances attached to a piece of information (a memo
- * item, suggested action, or signal). This is where the operator corrects and
- * guides the system: "Not relevant", "Always include", "Wrong person", "Lower
- * priority", "Treat as action", "Link to project/topic"…
+ * A row of one-off feedback affordances attached to a piece of information.
+ * This lets the operator flag what was not useful without implying an
+ * immediate or persistent change to Pilot's rules.
  *
- * Scaffold: emits local feedback only. The standing rules these would create
- * (architecture/information-refinement-loop.md) are not persisted yet.
+ * This surface captures one-off feedback only. Standing-rule affordances stay
+ * out of the UI until the product can apply and let operators inspect them.
  */
 
 import type { FeedbackType, UserFeedbackEvent } from "@/modules/refinement/refinement.types";
 import { FeedbackChip } from "./feedback-chip";
 
-/** Sensible default affordances for a generic memo/action item. */
-const DEFAULT_FEEDBACK: FeedbackType[] = [
-  "not_relevant",
-  "always_include",
-  "lower_priority",
-  "treat_as_action",
-  "link_topic",
-];
+/** Honest default: this records a correction without promising a rule change. */
+const DEFAULT_FEEDBACK: FeedbackType[] = ["not_relevant"];
 
 export function RefinementActions({
   targetType,
