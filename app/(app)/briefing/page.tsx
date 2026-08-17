@@ -39,6 +39,7 @@ import { NewsFeedbackBar } from "@/components/news/news-feedback-bar";
 import { NEWS_CATEGORY_LABELS, type ExternalSignalView } from "@/modules/news";
 import { calendarDayInTimeZone, hourInTimeZone } from "@/lib/tz-day";
 import { MemoSourceReference } from "@/components/briefing/source-reference";
+import { listSavedFeedbackTargets } from "@/modules/refinement/server";
 
 /* --- Formatting ----------------------------------------------------------- */
 
@@ -561,6 +562,12 @@ export default async function BriefingPage() {
   const localHour = hourInTimeZone(now, timezone);
   const attention = buildAttention(actions, now, timezone);
   const isStale = briefing?.status === "stale";
+  const savedMemoFeedback = await listSavedFeedbackTargets(
+    ctx,
+    "memo_section",
+    "not_relevant",
+    briefing?.sections.map((section) => section.id) ?? [],
+  );
 
   /* -- State: no connected sources -- */
   if (!hasSources) {
@@ -753,6 +760,7 @@ export default async function BriefingPage() {
                 <RefinementActions
                   targetType="memo_section"
                   targetId={section.id}
+                  savedFeedback={savedMemoFeedback.has(section.id) ? ["not_relevant"] : []}
                 />
               </section>
             ))}

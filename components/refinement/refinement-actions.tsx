@@ -21,16 +21,24 @@ export function RefinementActions({
   targetType,
   targetId,
   feedback = DEFAULT_FEEDBACK,
+  savedFeedback = [],
 }: {
   targetType: UserFeedbackEvent["targetType"];
   targetId: string;
   feedback?: FeedbackType[];
+  savedFeedback?: readonly FeedbackType[];
 }) {
   return (
     <div className="refinement-actions" role="group" aria-label="Refine this">
       <span className="refinement-actions__label mono">Refine</span>
       {feedback.map((f) => (
-        <FeedbackChip key={f} feedback={f} targetType={targetType} targetId={targetId} />
+        <FeedbackChip
+          key={f}
+          feedback={f}
+          targetType={targetType}
+          targetId={targetId}
+          initiallySaved={savedFeedback.includes(f)}
+        />
       ))}
     </div>
   );
