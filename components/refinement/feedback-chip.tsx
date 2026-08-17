@@ -21,13 +21,15 @@ export function FeedbackChip({
   targetType,
   targetId,
   label,
+  initiallySaved = false,
 }: {
   feedback: FeedbackType;
   targetType: UserFeedbackEvent["targetType"];
   targetId: string;
   label?: string;
+  initiallySaved?: boolean;
 }) {
-  const [applied, setApplied] = useState(false);
+  const [applied, setApplied] = useState(initiallySaved);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const eventId = useRef<string | null>(null);
