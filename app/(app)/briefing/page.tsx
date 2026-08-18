@@ -562,12 +562,17 @@ export default async function BriefingPage() {
   const localHour = hourInTimeZone(now, timezone);
   const attention = buildAttention(actions, now, timezone);
   const isStale = briefing?.status === "stale";
-  const savedMemoFeedback = await listSavedFeedbackTargets(
-    ctx,
-    "memo_section",
-    "not_relevant",
-    briefing?.sections.map((section) => section.id) ?? [],
-  );
+  let savedMemoFeedback: ReadonlySet<string> | null = null;
+  try {
+    savedMemoFeedback = await listSavedFeedbackTargets(
+      ctx,
+      "memo_section",
+      "not_relevant",
+      briefing?.sections.map((section) => section.id) ?? [],
+    );
+  } catch (error) {
+    console.error("[briefing] failed to establish saved memo feedback state", error);
+  }
 
   /* -- State: no connected sources -- */
   if (!hasSources) {
@@ -760,7 +765,8 @@ export default async function BriefingPage() {
                 <RefinementActions
                   targetType="memo_section"
                   targetId={section.id}
-                  savedFeedback={savedMemoFeedback.has(section.id) ? ["not_relevant"] : []}
+                  savedFeedback={savedMemoFeedback?.has(section.id) ? ["not_relevant"] : []}
+                  unavailable={savedMemoFeedback === null}
                 />
               </section>
             ))}
