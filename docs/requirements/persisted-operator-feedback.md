@@ -33,6 +33,7 @@ Applicable constitution sequence: engineering principles → requirements → ar
 | FR-4 | Replaying the same event id has one durable effect and returns success only when the existing event belongs to the same tenant, user, and payload. | F | Server-action unit tests |
 | FR-5 | Daily Memo sections expose one-off relevance feedback and label success as saved feedback, without implying that a standing rule or current entity state changed. | F | Briefing and component inspection |
 | FR-6 | Reloading the current Daily Memo preserves the signed-in operator's saved state and prevents a duplicate submission from that control. | F | Read-path unit test and component inspection |
+| FR-7 | If saved feedback state cannot be read, the Daily Memo remains readable while its feedback controls are disabled and explain that feedback is temporarily unavailable. | F | Read-path failure test and component inspection |
 
 ## 4. Quality Attributes
 
@@ -54,8 +55,8 @@ Applicable constitution sequence: engineering principles → requirements → ar
 | INV-2 | The UI never displays applied state before persistence succeeds. | `FeedbackChip` transition result handling | Failure-path test/inspection |
 | INV-3 | One event id cannot produce more than one durable event or be reused to acknowledge a different payload. | Primary key plus replay comparison | Unit tests |
 | INV-4 | Capturing feedback does not silently create or apply a standing rule. | Refinement action scope | Code inspection |
-| INV-6 | Saved state is attributed to the current tenant and operator; one tenant member's feedback is never presented as another member's feedback. | Tenant/user-filtered read under RLS | Unit test and RLS integration coverage |
 | INV-5 | Feedback controls do not promise persistent priority, inclusion, muting, or relationship changes until those effects are implemented and inspectable. | Feedback surface copy and allowed affordances | Component inspection |
+| INV-6 | Saved state is attributed to the current tenant and operator; one tenant member's feedback is never presented as another member's feedback. | Tenant/user-filtered read under RLS | Unit test and RLS integration coverage |
 
 ## 6. Failure-Mode Requirements
 
@@ -66,6 +67,7 @@ Applicable constitution sequence: engineering principles → requirements → ar
 | FM-3 | Database down, slow, or errors | Surface failure; allow a fresh user retry; do not mutate UI to applied. Supabase/request infrastructure owns timeouts. |
 | FM-4 | Concurrent submission from one control | Disable the control while the request is pending. |
 | FM-5 | Process crash after commit before response | A replay with the same id resolves to the existing identical event. |
+| FM-6 | Saved-state read fails | Keep the briefing available, log the failure without memo content, and disable feedback so unknown state cannot be presented as unsaved. |
 
 ## 7. Constraints
 

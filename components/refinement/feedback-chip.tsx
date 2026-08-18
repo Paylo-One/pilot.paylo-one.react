@@ -10,11 +10,11 @@
 
 import { useRef, useState, useTransition } from "react";
 import { submitFeedbackAction } from "@/modules/refinement/actions";
-import {
-  FEEDBACK_LABELS,
-  type FeedbackType,
-  type UserFeedbackEvent,
+import type {
+  FeedbackType,
+  UserFeedbackEvent,
 } from "@/modules/refinement/refinement.types";
+import { feedbackPresentation } from "@/modules/refinement/feedback-presentation";
 
 export function FeedbackChip({
   feedback,
@@ -22,17 +22,27 @@ export function FeedbackChip({
   targetId,
   label,
   initiallySaved = false,
+  unavailable = false,
 }: {
   feedback: FeedbackType;
   targetType: UserFeedbackEvent["targetType"];
   targetId: string;
   label?: string;
   initiallySaved?: boolean;
+  unavailable?: boolean;
 }) {
   const [applied, setApplied] = useState(initiallySaved);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const eventId = useRef<string | null>(null);
+  const presentation = feedbackPresentation({
+    feedback,
+    targetType,
+    label,
+    unavailable,
+    applied,
+    pending,
+  });
 
   return (
     <span>
@@ -40,9 +50,9 @@ export function FeedbackChip({
         type="button"
         className={`feedback-chip${applied ? " feedback-chip--applied" : ""}`}
         aria-pressed={applied}
-        title={`${FEEDBACK_LABELS[feedback]} — ${targetType}`}
+        title={presentation.title}
         data-target-id={targetId}
-        disabled={pending || applied}
+        disabled={presentation.disabled}
         onClick={() => {
           eventId.current ??= crypto.randomUUID();
           setError(null);
@@ -62,7 +72,7 @@ export function FeedbackChip({
           });
         }}
       >
-        {applied ? "✓ Feedback saved" : pending ? "Saving…" : label ?? FEEDBACK_LABELS[feedback]}
+        {presentation.text}
       </button>
       {error ? (
         <span className="form-message form-message--error" role="status">

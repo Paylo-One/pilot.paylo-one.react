@@ -22,11 +22,13 @@ export function RefinementActions({
   targetId,
   feedback = DEFAULT_FEEDBACK,
   savedFeedback = [],
+  unavailable = false,
 }: {
   targetType: UserFeedbackEvent["targetType"];
   targetId: string;
   feedback?: FeedbackType[];
   savedFeedback?: readonly FeedbackType[];
+  unavailable?: boolean;
 }) {
   return (
     <div className="refinement-actions" role="group" aria-label="Refine this">
@@ -38,6 +40,7 @@ export function RefinementActions({
           targetType={targetType}
           targetId={targetId}
           initiallySaved={savedFeedback.includes(f)}
+          unavailable={unavailable}
         />
       ))}
     </div>
