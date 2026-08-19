@@ -34,6 +34,7 @@ Applicable constitution sequence: engineering principles → requirements → ar
 | FR-5 | Daily Memo sections expose one-off relevance feedback and label success as saved feedback, without implying that a standing rule or current entity state changed. | F | Briefing and component inspection |
 | FR-6 | Reloading the current Daily Memo preserves the signed-in operator's saved state and prevents a duplicate submission from that control. | F | Read-path unit test and component inspection |
 | FR-7 | If saved feedback state cannot be read, the Daily Memo remains readable while its feedback controls are disabled and explain that feedback is temporarily unavailable. | F | Read-path failure test and component inspection |
+| FR-8 | The operator can inspect their 20 most recent saved corrections in Settings, with available memo context and an explicit explanation that one-off feedback is not a standing rule or hidden model training. | F | Recent-feedback read-path tests and Settings inspection |
 
 ## 4. Quality Attributes
 
@@ -79,7 +80,7 @@ Applicable constitution sequence: engineering principles → requirements → ar
 
 - Applying events to Daily Memo ranking.
 - Creating, editing, pausing, or deleting standing rules.
-- A feedback-history or rules-management screen.
+- A dedicated feedback-history screen, pagination, search, or rule management. Settings exposes only a bounded recent audit view.
 - Undoing an append-only event; a second deliberate event may be added later as a governed correction model.
 
 ## 9. Requirement Conflicts and Priorities
