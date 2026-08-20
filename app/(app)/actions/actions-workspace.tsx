@@ -30,6 +30,7 @@ import {
   clearReviewQueue,
 } from "./actions";
 import type { PersonLinkOption } from "@/components/refinement/person-link-control";
+import { consumeActionDraft } from "./action-draft";
 import {
   BOARD_COLUMNS,
   DONE_PAGE_SIZE,
@@ -408,6 +409,17 @@ export function ActionsWorkspace({
   const [olderDoneVisible, setOlderDoneVisible] = useState(0);
   const [overrides, setOverrides] = useState<Map<string, ActionStatus>>(new Map());
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    const draft = consumeActionDraft(window.sessionStorage);
+    if (!draft) return;
+    const timer = window.setTimeout(() => {
+      setCaptureTitle(draft.title);
+      setCaptureNote(draft.note);
+      setCaptureOpen(Boolean(draft.note));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   // Drop an optimistic override once the server round-trip is reflected in
   // props (state adjusted during render, per the React "you might not need an
