@@ -22,6 +22,7 @@ export default async function ActionsPage() {
   return (
     <main className="workspace__content actions-page">
       <ActionsWorkspace
+        actionDraftContextId={`${ctx.tenantId}:${ctx.userId}`}
         actions={actions}
         people={people.map((person) => ({
           id: person.id,
