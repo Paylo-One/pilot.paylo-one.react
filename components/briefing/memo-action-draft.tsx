@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { storeActionDraft } from "@/app/(app)/actions/action-draft";
 
-export function MemoActionDraft({ title, note }: { title: string; note: string }) {
+export function MemoActionDraft({ title, note, contextId }: { title: string; note: string; contextId: string }) {
   const router = useRouter();
   const [failed, setFailed] = useState(false);
 
@@ -15,7 +15,7 @@ export function MemoActionDraft({ title, note }: { title: string; note: string }
         className="chip"
         onClick={() => {
           try {
-            storeActionDraft(window.sessionStorage, { title, note });
+            storeActionDraft(window.sessionStorage, { title, note, contextId });
             router.push("/actions");
           } catch {
             setFailed(true);

@@ -386,9 +386,11 @@ function DuplicateReview({
 // ---------------------------------------------------------------------------
 
 export function ActionsWorkspace({
+  actionDraftContextId,
   actions,
   people,
 }: {
+  readonly actionDraftContextId: string;
   readonly actions: readonly SuggestedActionView[];
   readonly people: readonly PersonLinkOption[];
 }) {
@@ -411,7 +413,7 @@ export function ActionsWorkspace({
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
-    const draft = consumeActionDraft(window.sessionStorage);
+    const draft = consumeActionDraft(window.sessionStorage, actionDraftContextId);
     if (!draft) return;
     const timer = window.setTimeout(() => {
       setCaptureTitle(draft.title);
@@ -419,7 +421,7 @@ export function ActionsWorkspace({
       setCaptureOpen(Boolean(draft.note));
     }, 0);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [actionDraftContextId]);
 
   // Drop an optimistic override once the server round-trip is reflected in
   // props (state adjusted during render, per the React "you might not need an

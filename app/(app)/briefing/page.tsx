@@ -767,6 +767,7 @@ export default async function BriefingPage() {
                   <MemoActionDraft
                     title={section.title || `Follow up: ${titleCase(section.kind)}`}
                     note={section.body ?? ""}
+                    contextId={`${ctx.tenantId}:${ctx.userId}`}
                   />
                 </div>
                 <RefinementActions

@@ -19,18 +19,33 @@ describe("Daily Memo action drafts", () => {
     storeActionDraft(session, {
       title: "Follow up with R&D",
       note: "The launch is blocked & needs a decision.",
+      contextId: "tenant-1:user-1",
     });
-    expect(consumeActionDraft(session)).toEqual({
+    expect(consumeActionDraft(session, "tenant-1:user-1")).toEqual({
       title: "Follow up with R&D",
       note: "The launch is blocked & needs a decision.",
+      contextId: "tenant-1:user-1",
     });
-    expect(consumeActionDraft(session)).toBeNull();
+    expect(consumeActionDraft(session, "tenant-1:user-1")).toBeNull();
   });
 
   it("rejects malformed storage and clears it", () => {
     const session = storage();
     session.setItem(ACTION_DRAFT_STORAGE_KEY, "not-json");
-    expect(consumeActionDraft(session)).toBeNull();
+    expect(consumeActionDraft(session, "tenant-1:user-1")).toBeNull();
     expect(session.length).toBe(0);
+  });
+
+  it("discards a draft from another authenticated context", () => {
+    const session = storage();
+    storeActionDraft(session, { title: "Private follow-up", note: "Sensitive context", contextId: "tenant-1:user-1" });
+    expect(consumeActionDraft(session, "tenant-2:user-2")).toBeNull();
+    expect(session.length).toBe(0);
+  });
+
+  it("degrades safely when browser storage cannot be read", () => {
+    const denied = storage();
+    denied.getItem = () => { throw new DOMException("Denied", "SecurityError"); };
+    expect(consumeActionDraft(denied, "tenant-1:user-1")).toBeNull();
   });
 });
