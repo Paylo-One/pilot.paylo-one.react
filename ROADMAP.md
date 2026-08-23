@@ -6,6 +6,7 @@ Pilot is pre-1.0. This roadmap is directional, not contractual — the [Discussi
 
 - Frictionless self-hosting: one-command setup, verified cold-install on a clean machine
 - Clean-machine validation and hardening of open-registration onboarding
+- Keep workspace invitation issuance paused until secure acceptance and least-privileged membership are complete
 - Docker Compose production path, backup/upgrade runbooks
 - Connector setup guides with screenshots per provider
 
@@ -28,4 +29,4 @@ Pilot is pre-1.0. This roadmap is directional, not contractual — the [Discussi
 - Billing/subscription systems (that layer is Paylo One's commercial adapter)
 - Hosted-infrastructure configuration, marketing site, admin tooling
 
-*Maintained by Paylo One. Last reviewed: 2026-08-10.*
+*Maintained by Paylo One. Last reviewed: 2026-08-23.*

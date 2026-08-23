@@ -1,16 +1,15 @@
 /**
  * Settings — workspace identity, profile, model use, security and privacy,
- * referral, tool access, and trust. Admin views live in the separate /admin
+ * tool access, and trust. Admin views live in the separate /admin
  * project and are intentionally not exposed in the user app.
  * Governance: multi-tenancy-design.md (tenant/subdomain), security-and-privacy.md
  * (storage + retention), authentication-architecture.md (passkeys),
- * model-inference-architecture.md (model use), product/access-and-invitations.md
- * (referrals), audit-and-source-traceability.md (audit).
+ * model-inference-architecture.md (model use), audit-and-source-traceability.md
+ * (audit).
  *
  * Server component. Interactive sections (profile, your own model key, passkeys)
- * are tagged "Available". The referral section is read-only here — the code is
- * created automatically and consumed during others' onboarding. Sections that
- * describe enforced behaviour you can read but not change are tagged "Read
+ * are tagged "Available". Sections that describe enforced behaviour you can
+ * read but not change are tagged "Read
  * only". Features that are not open yet are tagged "Planned".
  */
 
@@ -24,7 +23,6 @@ import { LanguageSelector } from "@/components/language-selector";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isEuInference } from "@/lib/llm";
 import { listTenantModelProviders } from "@/modules/tenant-models/server";
-import { referralService } from "@/modules/referral";
 import { modelUsageCostService } from "@/modules/model-usage-cost";
 import { listMcpGrants } from "@/modules/mcp";
 import {
@@ -144,17 +142,6 @@ export default async function SettingsPage() {
     briefingTime: (profile?.briefing_time as string | null)?.slice(0, 5) ?? "",
     dailyBriefingEmail: (profile?.daily_briefing_email as boolean | null) ?? true,
   };
-
-  // Invitations: a slim summary here; the full experience lives at /invitations.
-  const referralOverviewRes = await referralService.getOverview(ctx);
-  const referral = referralOverviewRes.ok ? referralOverviewRes.value : null;
-  const invitationSummary = referral
-    ? referral.status === "suspended"
-      ? ts("invitations.linkPaused")
-      : referral.limitReached
-        ? ts("invitations.limitReached")
-        : ts("invitations.available", { count: referral.remaining })
-    : null;
 
   const sections = [
     { id: "workspace", label: ts("nav.workspace") },
@@ -339,16 +326,16 @@ export default async function SettingsPage() {
 
         <SectionCard
           label="Invitations"
-          title="Your private invitation link"
-          tag="active"
+          title="Workspace invitations"
+          tag="planned"
+          tagLabel={tagLabelFor("planned")}
         >
           <p
             className="action-card__rationale"
             style={{ marginBottom: "var(--space-md)" }}
           >
-            Paylo One is invite-only. Your link lets the people you choose
-            request their own workspace. Manage it, copy it, and see who&rsquo;s
-            joined on the Invitations page.
+            Invitations are paused while we complete secure acceptance and
+            workspace membership. No new invitation links can be issued yet.
           </p>
           <div className="meta-row">
             <span className="meta-row__key">Status</span>
@@ -362,23 +349,9 @@ export default async function SettingsPage() {
                 flexWrap: "wrap",
               }}
             >
-              {invitationSummary ? (
-                <span
-                  className={`status status--${
-                    referral?.status === "suspended"
-                      ? "neutral"
-                      : referral?.limitReached
-                        ? "warn"
-                        : "ok"
-                  }`}
-                >
-                  {invitationSummary}
-                </span>
-              ) : (
-                <span className="status status--info">Preparing</span>
-              )}
+              <span className="status status--info">Paused</span>
               <a className="btn btn--ghost btn--sm" href="/invitations">
-                Manage invitations
+                Learn more
               </a>
             </span>
           </div>
