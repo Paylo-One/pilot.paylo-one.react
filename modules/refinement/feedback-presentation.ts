@@ -23,9 +23,12 @@ export function feedbackPresentation({
     };
   }
 
+  const undoable = feedback === "not_relevant";
   return {
-    disabled: pending || applied,
-    title: `${FEEDBACK_LABELS[feedback]} — ${targetType}`,
-    text: applied ? "✓ Feedback saved" : pending ? "Saving…" : label ?? FEEDBACK_LABELS[feedback],
+    disabled: pending || (applied && !undoable),
+    title: applied && undoable ? "Undo saved feedback" : `${FEEDBACK_LABELS[feedback]} — ${targetType}`,
+    text: pending
+      ? applied && undoable ? "Undoing…" : "Saving…"
+      : applied ? `✓ Feedback saved${undoable ? " · Undo" : ""}` : label ?? FEEDBACK_LABELS[feedback],
   };
 }
