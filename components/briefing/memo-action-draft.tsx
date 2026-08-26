@@ -15,7 +15,7 @@ export function MemoActionDraft({ title, note, contextId }: { title: string; not
         className="chip"
         onClick={() => {
           try {
-            storeActionDraft(window.sessionStorage, { title, note, contextId });
+            storeActionDraft(window.sessionStorage, { title, note, contextId, createdFrom: "briefing" });
             router.push("/actions");
           } catch {
             setFailed(true);

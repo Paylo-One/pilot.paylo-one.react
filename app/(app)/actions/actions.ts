@@ -12,6 +12,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { auditService } from "@/modules/audit";
 import { ActionStatus, ActionPriority, ActionCreatedFrom } from "@/modules/action-extraction/server";
 import { createLlmClient, llmChatModel, hasLlm } from "@/lib/llm";
+import { actionOrigin, type ActionOrigin } from "./action-origin";
 
 export interface ActionDocument {
   readonly id: string;
@@ -47,6 +48,7 @@ export async function createAction(input: {
   topics?: string[];
   personId?: string | null;
   rationale?: string | null;
+  createdFrom: ActionOrigin;
 }): Promise<ActionResponse> {
   try {
     if (!input.title || !input.title.trim()) {
@@ -76,7 +78,7 @@ export async function createAction(input: {
         person_id: input.personId || null,
         rationale: input.rationale?.trim() || null,
         created_by: user.id,
-        created_from: "manual" as ActionCreatedFrom,
+        created_from: actionOrigin(input.createdFrom) as ActionCreatedFrom,
       })
       .select()
       .single();
@@ -88,7 +90,12 @@ export async function createAction(input: {
     await auditService.record(ctx, {
       action: "action.create",
       target: data.id,
-      metadata: { title: input.title, priority: input.priority, status: input.status },
+      metadata: {
+        title: input.title,
+        priority: input.priority,
+        status: input.status,
+        createdFrom: actionOrigin(input.createdFrom),
+      },
     });
 
     revalidatePath("/actions");

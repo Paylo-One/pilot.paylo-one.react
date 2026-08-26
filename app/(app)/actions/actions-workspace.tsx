@@ -30,6 +30,7 @@ import {
   clearReviewQueue,
 } from "./actions";
 import type { PersonLinkOption } from "@/components/refinement/person-link-control";
+import type { ActionOrigin } from "./action-origin";
 import { consumeActionDraft } from "./action-draft";
 import {
   BOARD_COLUMNS,
@@ -402,6 +403,7 @@ export function ActionsWorkspace({
   const [captureDue, setCaptureDue] = useState("");
   const [capturePriority, setCapturePriority] = useState<ActionPriority>("normal");
   const [captureNote, setCaptureNote] = useState("");
+  const [captureCreatedFrom, setCaptureCreatedFrom] = useState<ActionOrigin>("manual");
   const [justAdded, setJustAdded] = useState<string | null>(null);
   const [showDuplicates, setShowDuplicates] = useState(false);
   const [dismissedGroups, setDismissedGroups] = useState<string[]>([]);
@@ -418,6 +420,7 @@ export function ActionsWorkspace({
     const timer = window.setTimeout(() => {
       setCaptureTitle(draft.title);
       setCaptureNote(draft.note);
+      setCaptureCreatedFrom(draft.createdFrom);
       setCaptureOpen(Boolean(draft.note));
     }, 0);
     return () => window.clearTimeout(timer);
@@ -567,6 +570,7 @@ export function ActionsWorkspace({
         description: captureNote.trim() || undefined,
         dueAt: captureDue || null,
         priority: capturePriority,
+        createdFrom: captureCreatedFrom,
       });
       if (result.ok) {
         setCaptureTitle("");
@@ -574,6 +578,7 @@ export function ActionsWorkspace({
         setCaptureDue("");
         setCapturePriority("normal");
         setCaptureOpen(false);
+        setCaptureCreatedFrom("manual");
         setJustAdded(title);
       }
       return result;
