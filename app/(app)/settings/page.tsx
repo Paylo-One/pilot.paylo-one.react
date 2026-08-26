@@ -34,6 +34,8 @@ import { ByoModelCard } from "@/components/settings/byo-model-card";
 import { OnboardingLauncher } from "@/components/settings/onboarding-launcher";
 import { SettingsNav } from "./settings-nav";
 import { COMPANY_DETAILS } from "@/lib/company";
+import { FEEDBACK_LABELS } from "@/modules/refinement/refinement.types";
+import { listRecentSavedFeedback } from "@/modules/refinement/server";
 
 type SectionTag = "active" | "read-only" | "planned";
 
@@ -121,6 +123,9 @@ export default async function SettingsPage() {
           : undefined;
 
   const supabase = await createSupabaseServerClient();
+  const savedFeedbackPromise = listRecentSavedFeedback(ctx)
+    .then((value) => ({ value, error: null }))
+    .catch((error: unknown) => ({ value: null, error }));
   const { data: profile } = await supabase
     .from("user_profiles")
     .select("display_name, timezone, briefing_time, daily_briefing_email")
@@ -135,6 +140,11 @@ export default async function SettingsPage() {
   const usageRes = await modelUsageCostService.summarize(ctx, { windowDays: 30 });
   const usage = usageRes.ok ? usageRes.value : null;
   const topModel = usage?.byModel[0] ?? null;
+  const savedFeedbackResult = await savedFeedbackPromise;
+  const savedFeedback = savedFeedbackResult.value;
+  if (savedFeedbackResult.error) {
+    console.error("[settings] failed to load saved feedback", savedFeedbackResult.error);
+  }
 
   const values: ProfileFormValues = {
     displayName: profile?.display_name ?? "",
@@ -227,6 +237,48 @@ export default async function SettingsPage() {
 
         {/* ===== Intelligence ============================================= */}
         <GroupHeading id="intelligence">{ts("groups.intelligence")}</GroupHeading>
+
+        <SectionCard
+          label="Refinement"
+          title="Feedback Pilot has saved"
+          tag="read-only"
+          tagLabel={tagLabelFor("read-only")}
+        >
+          <p className="action-card__rationale" style={{ marginBottom: "var(--space-md)" }}>
+            These are your one-off corrections. They are kept as an audit trail;
+            they do not create standing rules or silently retrain a model.
+          </p>
+          {savedFeedback === null ? (
+            <p className="form-message form-message--error" role="status">
+              Saved feedback is temporarily unavailable. Refresh to try again.
+            </p>
+          ) : savedFeedback.length === 0 ? (
+            <div className="meta-row">
+              <span className="meta-row__key">Saved corrections</span>
+              <span className="meta-row__value">None yet</span>
+            </div>
+          ) : (
+            savedFeedback.map((event) => (
+              <div className="meta-row" key={event.id}>
+                <span className="meta-row__key">
+                  {FEEDBACK_LABELS[event.feedbackType as keyof typeof FEEDBACK_LABELS]
+                    ?? event.feedbackType.replace(/_/g, " ")}
+                  <span style={{ display: "block", marginTop: "var(--space-2xs)", fontSize: "var(--text-xs)", opacity: 0.72 }}>
+                    {new Date(event.createdAt).toLocaleDateString("en-GB", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                      timeZone: values.timezone,
+                    })}
+                  </span>
+                </span>
+                <span className="meta-row__value">
+                  {event.targetLabel ?? event.targetType.replace(/_/g, " ")}
+                </span>
+              </div>
+            ))
+          )}
+        </SectionCard>
 
         <SectionCard label="Model provider" title="Bring your own key" tag="active" tagLabel={tagLabelFor("active")}>
           <ByoModelCard providers={providers} />

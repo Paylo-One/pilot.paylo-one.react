@@ -30,6 +30,8 @@ import {
   clearReviewQueue,
 } from "./actions";
 import type { PersonLinkOption } from "@/components/refinement/person-link-control";
+import type { ActionOrigin } from "./action-origin";
+import { consumeActionDraft } from "./action-draft";
 import {
   BOARD_COLUMNS,
   DONE_PAGE_SIZE,
@@ -385,9 +387,11 @@ function DuplicateReview({
 // ---------------------------------------------------------------------------
 
 export function ActionsWorkspace({
+  actionDraftContextId,
   actions,
   people,
 }: {
+  readonly actionDraftContextId: string;
   readonly actions: readonly SuggestedActionView[];
   readonly people: readonly PersonLinkOption[];
 }) {
@@ -399,6 +403,7 @@ export function ActionsWorkspace({
   const [captureDue, setCaptureDue] = useState("");
   const [capturePriority, setCapturePriority] = useState<ActionPriority>("normal");
   const [captureNote, setCaptureNote] = useState("");
+  const [captureCreatedFrom, setCaptureCreatedFrom] = useState<ActionOrigin>("manual");
   const [justAdded, setJustAdded] = useState<string | null>(null);
   const [showDuplicates, setShowDuplicates] = useState(false);
   const [dismissedGroups, setDismissedGroups] = useState<string[]>([]);
@@ -408,6 +413,18 @@ export function ActionsWorkspace({
   const [olderDoneVisible, setOlderDoneVisible] = useState(0);
   const [overrides, setOverrides] = useState<Map<string, ActionStatus>>(new Map());
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    const draft = consumeActionDraft(window.sessionStorage, actionDraftContextId);
+    if (!draft) return;
+    const timer = window.setTimeout(() => {
+      setCaptureTitle(draft.title);
+      setCaptureNote(draft.note);
+      setCaptureCreatedFrom(draft.createdFrom);
+      setCaptureOpen(Boolean(draft.note));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [actionDraftContextId]);
 
   // Drop an optimistic override once the server round-trip is reflected in
   // props (state adjusted during render, per the React "you might not need an
@@ -553,6 +570,7 @@ export function ActionsWorkspace({
         description: captureNote.trim() || undefined,
         dueAt: captureDue || null,
         priority: capturePriority,
+        createdFrom: captureCreatedFrom,
       });
       if (result.ok) {
         setCaptureTitle("");
@@ -560,6 +578,7 @@ export function ActionsWorkspace({
         setCaptureDue("");
         setCapturePriority("normal");
         setCaptureOpen(false);
+        setCaptureCreatedFrom("manual");
         setJustAdded(title);
       }
       return result;

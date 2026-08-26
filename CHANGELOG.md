@@ -7,6 +7,8 @@ All notable changes to Pilot are documented here. The format follows [Keep a Cha
 ### Changed
 
 - Paused workspace invitation issuance and replaced unusable acceptance controls with an honest recovery path until secure membership acceptance is complete.
+- Daily Memo insights can now be carried into a prefilled, user-confirmed action without retyping their context; drafts are scoped to the originating workspace and operator, degrade safely when browser storage is unavailable, and retain their briefing origin for outcome measurement.
+- Added a bounded, operator-scoped Settings view of recently saved refinement feedback so corrections are inspectable without implying hidden learning or standing rules.
 - Daily Memos now remain readable when saved-feedback lookup fails, while correction controls clearly pause until their state can be verified.
 - Daily Memo feedback now remains visibly saved after refresh for the operator who submitted it, preventing accidental duplicate corrections.
 - Daily Memo sections now expose honest one-off relevance feedback. Controls acknowledge only durable capture, show a retryable error when saving fails, and no longer imply that unimplemented standing-rule changes were applied.
