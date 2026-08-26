@@ -34,7 +34,7 @@ export function FeedbackChip({
   const [applied, setApplied] = useState(initiallySaved);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const eventId = useRef<string | null>(null);
+  const pendingEventId = useRef<string | null>(null);
   const presentation = feedbackPresentation({
     feedback,
     targetType,
@@ -54,20 +54,26 @@ export function FeedbackChip({
         data-target-id={targetId}
         disabled={presentation.disabled}
         onClick={() => {
-          eventId.current ??= crypto.randomUUID();
           setError(null);
           startTransition(async () => {
             try {
+              const nextFeedback = applied && feedback === "not_relevant"
+                ? "relevant"
+                : feedback;
+              pendingEventId.current ??= crypto.randomUUID();
               const result = await submitFeedbackAction({
-                eventId: eventId.current,
-                feedbackType: feedback,
+                eventId: pendingEventId.current,
+                feedbackType: nextFeedback,
                 targetType,
                 targetId,
               });
-              if (result.ok) setApplied(true);
+              if (result.ok) {
+                pendingEventId.current = null;
+                setApplied(nextFeedback === feedback);
+              }
               else setError(result.error);
             } catch {
-              setError("Pilot could not save that feedback. Please try again.");
+              setError("Pilot could not update that feedback. Please try again.");
             }
           });
         }}

@@ -55,6 +55,11 @@ describe("submitFeedbackAction", () => {
     });
   });
 
+  it("records an append-only relevance correction", async () => {
+    await expect(submitFeedbackAction({ ...validInput, feedbackType: "relevant" })).resolves.toEqual({ ok: true });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ feedback_type: "relevant" }));
+  });
+
   it.each([
     null,
     {},
