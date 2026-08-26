@@ -40,6 +40,7 @@ import { NEWS_CATEGORY_LABELS, type ExternalSignalView } from "@/modules/news";
 import { calendarDayInTimeZone, hourInTimeZone } from "@/lib/tz-day";
 import { MemoSourceReference } from "@/components/briefing/source-reference";
 import { listSavedFeedbackTargets } from "@/modules/refinement/server";
+import { MemoActionDraft } from "@/components/briefing/memo-action-draft";
 
 /* --- Formatting ----------------------------------------------------------- */
 
@@ -762,6 +763,13 @@ export default async function BriefingPage() {
                   </p>
                 ) : null}
                 <RealReferences section={section} timezone={timezone} />
+                <div className="refinement-actions">
+                  <MemoActionDraft
+                    title={section.title || `Follow up: ${titleCase(section.kind)}`}
+                    note={section.body ?? ""}
+                    contextId={`${ctx.tenantId}:${ctx.userId}`}
+                  />
+                </div>
                 <RefinementActions
                   targetType="memo_section"
                   targetId={section.id}
