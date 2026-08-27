@@ -7,6 +7,7 @@ import { updateAction, snoozeAction, completeAction, registerActionDocument, rem
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { PersonLinkControl, type PersonLinkOption } from "@/components/refinement/person-link-control";
 import type { ActionStatus, ActionPriority } from "@/modules/action-extraction/server";
+import { actionOriginLabel } from "../action-origin";
 
 interface ActionDetailWorkspaceProps {
   readonly action: {
@@ -612,7 +613,7 @@ export function ActionDetailWorkspace({
                 <div className="timeline__body">
                   <p className="timeline__title">Created</p>
                   <p className="timeline__meta">
-                    {action.createdFrom === "manual" ? "Manually captured" : "AI pipeline extraction"}
+                    {actionOriginLabel(action.createdFrom)}
                   </p>
                 </div>
               </li>

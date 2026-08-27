@@ -6,6 +6,7 @@ All notable changes to Pilot are documented here. The format follows [Keep a Cha
 
 ### Changed
 
+- Action history now distinguishes user-confirmed Daily briefing handoffs, Pilot suggestions, and other known origins instead of labelling every non-manual action as AI extraction.
 - Saved Daily Memo relevance feedback can now be undone without deleting its audit history; the latest explicit operator correction determines the visible state.
 - Daily Memo insights can now be carried into a prefilled, user-confirmed action without retyping their context; drafts are scoped to the originating workspace and operator, degrade safely when browser storage is unavailable, and retain their briefing origin for outcome measurement.
 - Added a bounded, operator-scoped Settings view of recently saved refinement feedback so corrections are inspectable without implying hidden learning or standing rules.
