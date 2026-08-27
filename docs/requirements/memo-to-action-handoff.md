@@ -1,6 +1,6 @@
 # Daily briefing to action handoff
 
-Date: 2026-08-20 (revised 2026-08-26)
+Date: 2026-08-20 (revised 2026-08-27)
 Status: Implemented in PR #78
 
 ## Problem and intended outcome
@@ -22,6 +22,7 @@ Applicable sequence: engineering principles, requirements, architecture and syst
 - **FR-2:** A confirmed handoff stores `created_from = 'briefing'`; ordinary quick capture stores `manual`. Verified by the mandatory `createAction` contract and server-action tests.
 - **INV-3:** The server boundary allow-lists the supported origin and defaults unrecognised values to `manual`. Verified by boundary tests with omitted and malformed values.
 - **INV-4:** No source-reference claim is created: the copied section is editable context, while `created_from` records only the workflow origin. Verified by write-payload inspection.
+- **FR-3:** Action history presents a confirmed memo handoff as operator-confirmed Daily briefing provenance, never as generic AI extraction. Unknown or legacy values make no automation claim. Verified by exhaustive origin-presentation tests.
 
 Latency, throughput, and availability targets are unchanged because the slice adds no request or database round trip. Draft size is bounded to a 200-character title and 1,000-character note. Durability is the established action-write guarantee; the transient draft deliberately has none. No recurring cost is introduced.
 
