@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   inserted: null as Record<string, unknown> | null,
   audit: vi.fn(),
+  rpc: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -14,6 +15,7 @@ vi.mock("@/lib/llm", () => ({ createLlmClient: vi.fn(), llmChatModel: vi.fn(), h
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: vi.fn().mockResolvedValue({
     auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: "user-1" } }, error: null }) },
+    rpc: mocks.rpc,
     from: vi.fn(() => ({
       insert: vi.fn((payload: Record<string, unknown>) => {
         mocks.inserted = payload;
@@ -33,14 +35,32 @@ describe("createAction origin", () => {
   beforeEach(() => {
     mocks.inserted = null;
     mocks.audit.mockClear();
+    mocks.rpc.mockReset();
+    mocks.rpc.mockResolvedValue({ data: { id: "action-1" }, error: null });
   });
 
-  it("persists and audits an explicitly confirmed briefing handoff", async () => {
-    await expect(createAction({ title: "Follow up", createdFrom: "briefing" })).resolves.toMatchObject({ ok: true });
-    expect(mocks.inserted).toMatchObject({ tenant_id: "tenant-1", created_from: "briefing" });
+  it("rejects a briefing origin without its trusted memo section", async () => {
+    await expect(createAction({ title: "Follow up", createdFrom: "briefing" }))
+      .resolves.toEqual({ ok: false, error: "Daily briefing source context is required." });
+    expect(mocks.inserted).toBeNull();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it("uses the atomic evidence-preserving boundary for a memo section", async () => {
+    await expect(createAction({
+      title: "Follow up",
+      createdFrom: "briefing",
+      briefingSectionId: "section-1",
+    })).resolves.toMatchObject({ ok: true });
+
+    expect(mocks.inserted).toBeNull();
+    expect(mocks.rpc).toHaveBeenCalledWith("create_action_from_briefing_section", {
+      p_tenant_id: "tenant-1",
+      p_section_id: "section-1",
+      p_action: expect.objectContaining({ title: "Follow up", created_from: "briefing" }),
+    });
     expect(mocks.audit).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      action: "action.create",
-      metadata: expect.objectContaining({ createdFrom: "briefing" }),
+      metadata: expect.objectContaining({ sourceReferencesPreserved: true }),
     }));
   });
 

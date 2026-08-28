@@ -768,6 +768,7 @@ export default async function BriefingPage() {
                     title={section.title || `Follow up: ${titleCase(section.kind)}`}
                     note={section.body ?? ""}
                     contextId={`${ctx.tenantId}:${ctx.userId}`}
+                    briefingSectionId={section.id}
                   />
                 </div>
                 <RefinementActions

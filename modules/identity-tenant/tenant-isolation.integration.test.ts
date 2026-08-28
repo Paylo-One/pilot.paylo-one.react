@@ -31,7 +31,7 @@ const hasEnv = Boolean(URL && SERVICE_KEY && ANON_KEY);
 // A stable, obviously-synthetic marker so seeded rows are easy to clean up.
 const RUN = "rls-itest";
 
-type Seed = { tenantId: string; userId: string; email: string; password: string };
+type Seed = { tenantId: string; userId: string; email: string; password: string; sectionId: string };
 
 describe.skipIf(!hasEnv)("tenant isolation (runtime RLS enforcement)", () => {
   // Created in beforeAll, not at collection time: `describe.skipIf` still
@@ -71,7 +71,27 @@ describe.skipIf(!hasEnv)("tenant isolation (runtime RLS enforcement)", () => {
       .insert({ tenant_id: tenantId, display_name: `${RUN}-${label}-person` });
     if (pErr) throw pErr;
 
-    return { tenantId, userId, email, password };
+    const { data: briefing, error: briefingError } = await admin
+      .from("briefings")
+      .insert({ tenant_id: tenantId, status: "ready" })
+      .select("id")
+      .single();
+    if (briefingError || !briefing) throw briefingError ?? new Error("briefing create failed");
+    const { data: section, error: sectionError } = await admin
+      .from("briefing_sections")
+      .insert({ tenant_id: tenantId, briefing_id: briefing.id, kind: "decisions", title: `${RUN}-${label}-section` })
+      .select("id")
+      .single();
+    if (sectionError || !section) throw sectionError ?? new Error("section create failed");
+    const { error: referenceError } = await admin.from("source_references").insert({
+      tenant_id: tenantId,
+      briefing_section_id: section.id,
+      source_system: "integration-test",
+      excerpt_or_pointer: `${RUN}-${label}-evidence`,
+    });
+    if (referenceError) throw referenceError;
+
+    return { tenantId, userId, email, password, sectionId: section.id as string };
   }
 
   async function userClient(seed: Seed): Promise<SupabaseClient> {
@@ -98,6 +118,8 @@ describe.skipIf(!hasEnv)("tenant isolation (runtime RLS enforcement)", () => {
     // Best-effort teardown (service role bypasses RLS).
     for (const s of seeds) {
       await admin.from("user_feedback_events").delete().eq("tenant_id", s.tenantId);
+      await admin.from("suggested_actions").delete().eq("tenant_id", s.tenantId);
+      await admin.from("briefings").delete().eq("tenant_id", s.tenantId);
       await admin.from("people").delete().eq("tenant_id", s.tenantId);
       await admin.from("tenant_users").delete().eq("tenant_id", s.tenantId);
       await admin.from("tenants").delete().eq("id", s.tenantId);
@@ -176,6 +198,47 @@ describe.skipIf(!hasEnv)("tenant isolation (runtime RLS enforcement)", () => {
       target_id: `${RUN}-forged-user`,
     });
     expect(forgedUserError).not.toBeNull();
+  });
+
+  it("preserves memo evidence atomically and rejects a foreign section", async () => {
+    const a = seeds[0]!;
+    const b = seeds[1]!;
+    const clientA = await userClient(a);
+
+    const { data: action, error: ownError } = await clientA.rpc(
+      "create_action_from_briefing_section",
+      {
+        p_tenant_id: a.tenantId,
+        p_section_id: a.sectionId,
+        p_action: { title: `${RUN}-grounded-action`, status: "planned", priority: "normal" },
+      },
+    );
+    expect(ownError).toBeNull();
+    expect(action).toMatchObject({ tenant_id: a.tenantId, created_from: "briefing" });
+
+    const { data: references, error: referencesError } = await clientA
+      .from("source_references")
+      .select("suggested_action_id, excerpt_or_pointer")
+      .eq("suggested_action_id", action.id);
+    expect(referencesError).toBeNull();
+    expect(references).toEqual([{ suggested_action_id: action.id, excerpt_or_pointer: `${RUN}-a-evidence` }]);
+
+    const { error: foreignError } = await clientA.rpc(
+      "create_action_from_briefing_section",
+      {
+        p_tenant_id: a.tenantId,
+        p_section_id: b.sectionId,
+        p_action: { title: `${RUN}-forged-action` },
+      },
+    );
+    expect(foreignError).not.toBeNull();
+
+    const { count } = await admin
+      .from("suggested_actions")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", a.tenantId)
+      .eq("title", `${RUN}-forged-action`);
+    expect(count).toBe(0);
   });
 });
 

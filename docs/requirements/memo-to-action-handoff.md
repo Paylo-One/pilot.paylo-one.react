@@ -1,6 +1,6 @@
 # Daily briefing to action handoff
 
-Date: 2026-08-20 (revised 2026-08-26)
+Date: 2026-08-20 (revised 2026-08-28)
 Status: Implemented in PR #78
 
 ## Problem and intended outcome
@@ -21,7 +21,7 @@ Applicable sequence: engineering principles, requirements, architecture and syst
 - **INV-2:** The operator must review and submit through the existing Actions form. Verified by the absence of a write from the handoff component and workspace inspection.
 - **FR-2:** A confirmed handoff stores `created_from = 'briefing'`; ordinary quick capture stores `manual`. Verified by the mandatory `createAction` contract and server-action tests.
 - **INV-3:** The server boundary allow-lists the supported origin and defaults unrecognised values to `manual`. Verified by boundary tests with omitted and malformed values.
-- **INV-4:** No source-reference claim is created: the copied section is editable context, while `created_from` records only the workflow origin. Verified by write-payload inspection.
+- **FR-4:** A confirmed handoff atomically copies the selected memo section's existing source references onto the action. The trusted database boundary verifies that the section belongs to the active tenant before either the action or references are written. Verified by boundary and tenant-isolation tests.
 
 Latency, throughput, and availability targets are unchanged because the slice adds no request or database round trip. Draft size is bounded to a 200-character title and 1,000-character note. Durability is the established action-write guarantee; the transient draft deliberately has none. No recurring cost is introduced.
 
@@ -33,4 +33,4 @@ The privacy-respecting outcome signal is the number and proportion of explicitly
 
 Storage denial leaves the operator on the briefing with a visible error. Action-write failure preserves the populated form for retry. Rollback removes the handoff and origin parameter; existing `briefing` rows remain compatible with established readers.
 
-There is no observed user cohort yet, so acceptance rate and downstream completion remain unvalidated. Source-reference attachment is excluded until it can be performed atomically without weakening the trusted write boundary.
+There is no observed user cohort yet, so acceptance rate, downstream completion, and the effect of preserved evidence remain unvalidated.
