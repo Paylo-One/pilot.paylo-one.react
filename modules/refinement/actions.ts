@@ -5,7 +5,7 @@ import { requireTenantContext } from "@/modules/identity-tenant/server";
 import type { FeedbackType, UserFeedbackEvent } from "./refinement.types";
 
 const FEEDBACK_TYPES = new Set<FeedbackType>([
-  "not_relevant", "always_include", "link_person", "wrong_person",
+  "not_relevant", "relevant", "always_include", "link_person", "wrong_person",
   "lower_priority", "raise_priority", "treat_as_action",
   "do_not_show_again", "link_topic", "confirm",
 ]);

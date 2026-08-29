@@ -17,4 +17,38 @@ describe("feedbackPresentation", () => {
       text: "Feedback unavailable",
     });
   });
+
+  it("offers a clear, enabled undo for saved feedback", () => {
+    expect(feedbackPresentation({
+      feedback: "not_relevant",
+      targetType: "memo_section",
+      unavailable: false,
+      applied: true,
+      pending: false,
+    })).toEqual({
+      disabled: false,
+      title: "Undo saved feedback",
+      text: "✓ Feedback saved · Undo",
+    });
+  });
+
+  it("prevents duplicate input while undo is pending", () => {
+    expect(feedbackPresentation({
+      feedback: "not_relevant",
+      targetType: "memo_section",
+      unavailable: false,
+      applied: true,
+      pending: true,
+    })).toMatchObject({ disabled: true, text: "Undoing…" });
+  });
+
+  it("keeps non-correctable saved feedback disabled", () => {
+    expect(feedbackPresentation({
+      feedback: "raise_priority",
+      targetType: "person",
+      unavailable: false,
+      applied: true,
+      pending: false,
+    })).toMatchObject({ disabled: true, text: "✓ Feedback saved" });
+  });
 });

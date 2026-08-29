@@ -14,6 +14,7 @@ import type { SourceSystem } from "@/modules/shared";
 /** The kind of feedback the operator gave. */
 export type FeedbackType =
   | "not_relevant"
+  | "relevant"
   | "always_include"
   | "link_person"
   | "wrong_person"
@@ -123,6 +124,7 @@ export interface CorrelationFeedback {
 /** UI affordances grouped for the RefinementActions control. */
 export const FEEDBACK_LABELS: Record<FeedbackType, string> = {
   not_relevant: "Not relevant",
+  relevant: "Relevant",
   always_include: "Always include",
   link_person: "Link to person",
   wrong_person: "Wrong person",
