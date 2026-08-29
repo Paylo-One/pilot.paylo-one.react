@@ -1,54 +1,40 @@
 /**
- * Invitations — the dedicated home for a user's private invitation link.
- *
- * Server component. Reads the signed-in user's personal referral overview and
- * the people who have joined through it, then hands them to InvitationPanel.
- * Invite-only access is a deliberate part of how Paylo One grows, so this gets
- * its own surface rather than living as one card in Settings.
+ * Invitations — an honest holding surface while acceptance is unavailable.
  *
  * Governance: product/access-and-invitations.md.
  */
-
-import { requireTenantContext } from "@/modules/identity-tenant/server";
-import { referralService } from "@/modules/referral";
-import { InvitationPanel } from "./invitation-panel";
 
 export const metadata = {
   title: "Invitations",
 };
 
 export default async function InvitationsPage() {
-  const ctx = await requireTenantContext();
-
-  const [overviewRes, usagesRes] = await Promise.all([
-    referralService.getOverview(ctx),
-    referralService.listUsages(ctx),
-  ]);
-  const overview = overviewRes.ok ? overviewRes.value : null;
-  const usages = usagesRes.ok ? usagesRes.value : [];
-
   return (
     <main className="workspace__content">
       <div className="page-head">
         <p className="eyebrow">Invitations</p>
-        <h1 className="page-head__title">Invite people you trust</h1>
+        <h1 className="page-head__title">Invitations are paused</h1>
         <p className="page-head__lead">
-          Paylo One is invite-only. Your private link lets the people you choose
-          request their own workspace. It is a quiet way to bring the right
-          operators, founders, and managers into the network. Share it carefully.
+          We are completing secure invitation acceptance and workspace
+          membership before issuing new links. Existing links cannot be accepted
+          yet, so please do not share them.
         </p>
       </div>
 
-      {overview ? (
-        <InvitationPanel overview={overview} usages={usages} />
-      ) : (
-        <section className="card" style={{ maxWidth: "680px" }}>
-          <p className="action-card__rationale">
-            Your invitation link is being prepared. Refresh in a moment to see
-            it.
-          </p>
-        </section>
-      )}
+      <section className="card card--planned" style={{ maxWidth: "680px" }}>
+        <div className="card-head">
+          <div>
+            <p className="eyebrow">Workspace access</p>
+            <h2 className="card__title">What happens next</h2>
+          </div>
+          <span className="status status--info">Planned</span>
+        </div>
+        <p className="action-card__rationale">
+          Invitation controls will return when a recipient can verify the invited
+          email, join with a least-privileged role, and recover safely from an
+          expired or invalid link.
+        </p>
+      </section>
     </main>
   );
 }

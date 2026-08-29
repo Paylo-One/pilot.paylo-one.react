@@ -134,17 +134,6 @@ const GROUPS: NavGroup[] = [
     labelKey: "account",
     items: [
       {
-        href: "/invitations",
-        labelKey: "invitations",
-        icon: (
-          <svg {...ICON_PROPS}>
-            <path d="M3 6.5h13v11H3z" />
-            <path d="M3 7l6.5 5L16 7" />
-            <path d="M18 4l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2Z" />
-          </svg>
-        ),
-      },
-      {
         href: "/settings",
         labelKey: "settings",
         icon: (

@@ -15,9 +15,10 @@
  */
 
 import type { Metadata } from "next";
+import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Accept invite · Paylo.one",
+  title: "Invitation unavailable · Paylo.one",
   robots: { index: false, follow: false },
 };
 
@@ -26,65 +27,30 @@ export default function InviteAcceptancePage() {
     <>
       <p className="eyebrow">Invitation</p>
       <h1 style={{ fontSize: "var(--text-h1)", margin: "var(--space-xs) 0 var(--space-sm)" }}>
-        Accept your invite
+        This invitation is not available yet
       </h1>
       <p
         className="text-secondary"
         style={{ marginBottom: "var(--space-lg)", fontSize: "var(--text-small)" }}
       >
-        You&apos;ve been invited to a Paylo.one workspace. Accepting verifies your
-        identity, then sets up your first passkey — no password to choose, store,
-        or leak.
+        Workspace invitation acceptance is paused while we finish the identity
+        and membership safeguards. This link cannot add you to a workspace.
       </p>
 
       <div className="card">
-        <div className="steps">
-          <div className="step">
-            <span className="step__no">1</span>
-            <div>
-              <p className="step__title">Confirm the invite</p>
-              <p className="step__body">A one-time link verifies who you are.</p>
-            </div>
-          </div>
-          <div className="step">
-            <span className="step__no">2</span>
-            <div>
-              <p className="step__title">Create a passkey on this device</p>
-              <p className="step__body">
-                Phishing-resistant and device-bound; it works across every
-                &lt;slug&gt;.paylo.one.
-              </p>
-            </div>
-          </div>
-          <div className="step">
-            <span className="step__no">3</span>
-            <div>
-              <p className="step__title">Add a recovery method</p>
-              <p className="step__body">
-                A second passkey or recovery codes, so losing one device is a
-                non-event.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ marginTop: "var(--space-lg)" }}>
-          <button
-            type="button"
-            className="btn btn--primary"
-            disabled
-            title="Setting up your passkey from an invite is coming soon."
-          >
-            Create my passkey
-          </button>
+        <p className="action-card__rationale">
+          Ask the person who shared this link to wait before sending another
+          one. If you want your own workspace, you can request access instead.
+        </p>
+        <div style={{ marginTop: "var(--space-lg)", display: "flex", gap: "var(--space-sm)", flexWrap: "wrap" }}>
+          <Link href="/request-access" className="btn btn--primary">
+            Request access
+          </Link>
+          <Link href="/sign-in" className="btn btn--secondary">
+            Sign in
+          </Link>
         </div>
       </div>
-
-      <p className="scaffold-note" style={{ marginTop: "var(--space-lg)" }}>
-        Accepting an invitation and setting up your passkey here is coming soon.
-        If you have an invite link, keep it handy and we will guide you through
-        the rest.
-      </p>
     </>
   );
 }
