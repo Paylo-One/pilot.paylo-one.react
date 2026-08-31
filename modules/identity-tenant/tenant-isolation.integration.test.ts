@@ -289,12 +289,30 @@ describe.skipIf(!hasEnv)("tenant isolation (runtime RLS enforcement)", () => {
     );
     expect(foreignError).not.toBeNull();
 
+    const { error: forgedTenantError } = await clientA.rpc(
+      "create_action_from_briefing_section",
+      {
+        p_tenant_id: b.tenantId,
+        p_section_id: b.sectionId,
+        p_handoff_key: "55555555-5555-4555-8555-555555555555",
+        p_action: { title: `${RUN}-forged-tenant-action` },
+      },
+    );
+    expect(forgedTenantError).not.toBeNull();
+
     const { count } = await admin
       .from("suggested_actions")
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", a.tenantId)
       .eq("title", `${RUN}-forged-action`);
     expect(count).toBe(0);
+
+    const { count: forgedTenantCount } = await admin
+      .from("suggested_actions")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", b.tenantId)
+      .eq("title", `${RUN}-forged-tenant-action`);
+    expect(forgedTenantCount).toBe(0);
 
     const invalidPayloads: Array<{ key: string; action: unknown }> = [
       { key: "30000000-0000-4000-8000-000000000001", action: "not-an-object" },
