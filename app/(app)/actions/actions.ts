@@ -49,6 +49,8 @@ export async function createAction(input: {
   personId?: string | null;
   rationale?: string | null;
   createdFrom: ActionOrigin;
+  briefingSectionId?: string | null;
+  handoffKey?: string | null;
 }): Promise<ActionResponse> {
   try {
     if (!input.title || !input.title.trim()) {
@@ -64,9 +66,11 @@ export async function createAction(input: {
       return { ok: false, error: "Authenticated user context not found." };
     }
 
-    const { data, error } = await supabase
-      .from("suggested_actions")
-      .insert({
+    const origin = actionOrigin(input.createdFrom);
+    if (origin === "briefing" && (!input.briefingSectionId || !input.handoffKey)) {
+      return { ok: false, error: "Daily briefing source context is required." };
+    }
+    const payload = {
         tenant_id: ctx.tenantId,
         title: input.title.trim(),
         description: input.description?.trim() || null,
@@ -78,10 +82,18 @@ export async function createAction(input: {
         person_id: input.personId || null,
         rationale: input.rationale?.trim() || null,
         created_by: user.id,
-        created_from: actionOrigin(input.createdFrom) as ActionCreatedFrom,
-      })
-      .select()
-      .single();
+        created_from: origin as ActionCreatedFrom,
+      };
+
+    const groundedBriefingHandoff = origin === "briefing";
+    const { data, error } = groundedBriefingHandoff
+      ? await supabase.rpc("create_action_from_briefing_section", {
+          p_tenant_id: ctx.tenantId,
+          p_section_id: input.briefingSectionId,
+          p_handoff_key: input.handoffKey,
+          p_action: payload,
+        })
+      : await supabase.from("suggested_actions").insert(payload).select().single();
 
     if (error) {
       return { ok: false, error: error.message };
@@ -94,7 +106,8 @@ export async function createAction(input: {
         title: input.title,
         priority: input.priority,
         status: input.status,
-        createdFrom: actionOrigin(input.createdFrom),
+        createdFrom: origin,
+        sourceReferencesPreserved: groundedBriefingHandoff,
       },
     });
 

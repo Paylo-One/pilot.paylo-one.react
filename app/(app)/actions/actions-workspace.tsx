@@ -404,6 +404,8 @@ export function ActionsWorkspace({
   const [capturePriority, setCapturePriority] = useState<ActionPriority>("normal");
   const [captureNote, setCaptureNote] = useState("");
   const [captureCreatedFrom, setCaptureCreatedFrom] = useState<ActionOrigin>("manual");
+  const [captureBriefingSectionId, setCaptureBriefingSectionId] = useState<string | null>(null);
+  const [captureHandoffKey, setCaptureHandoffKey] = useState<string | null>(null);
   const [justAdded, setJustAdded] = useState<string | null>(null);
   const [showDuplicates, setShowDuplicates] = useState(false);
   const [dismissedGroups, setDismissedGroups] = useState<string[]>([]);
@@ -421,6 +423,8 @@ export function ActionsWorkspace({
       setCaptureTitle(draft.title);
       setCaptureNote(draft.note);
       setCaptureCreatedFrom(draft.createdFrom);
+      setCaptureBriefingSectionId(draft.briefingSectionId);
+      setCaptureHandoffKey(draft.handoffKey);
       setCaptureOpen(Boolean(draft.note));
     }, 0);
     return () => window.clearTimeout(timer);
@@ -571,6 +575,8 @@ export function ActionsWorkspace({
         dueAt: captureDue || null,
         priority: capturePriority,
         createdFrom: captureCreatedFrom,
+        briefingSectionId: captureBriefingSectionId,
+        handoffKey: captureHandoffKey,
       });
       if (result.ok) {
         setCaptureTitle("");
@@ -579,6 +585,8 @@ export function ActionsWorkspace({
         setCapturePriority("normal");
         setCaptureOpen(false);
         setCaptureCreatedFrom("manual");
+        setCaptureBriefingSectionId(null);
+        setCaptureHandoffKey(null);
         setJustAdded(title);
       }
       return result;

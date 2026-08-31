@@ -21,12 +21,16 @@ describe("Daily Memo action drafts", () => {
       title: "Follow up with R&D",
       note: "The launch is blocked & needs a decision.",
       contextId: "tenant-1:user-1",
+      briefingSectionId: "section-1",
+      handoffKey: "11111111-1111-4111-8111-111111111111",
       createdFrom: "briefing",
     }, now);
     expect(consumeActionDraft(session, "tenant-1:user-1", now)).toEqual({
       title: "Follow up with R&D",
       note: "The launch is blocked & needs a decision.",
       contextId: "tenant-1:user-1",
+      briefingSectionId: "section-1",
+      handoffKey: "11111111-1111-4111-8111-111111111111",
       createdFrom: "briefing",
       createdAt: now,
     });
@@ -40,9 +44,21 @@ describe("Daily Memo action drafts", () => {
     expect(session.length).toBe(0);
   });
 
+  it("rejects a legacy draft without a trusted memo section", () => {
+    const session = storage();
+    session.setItem(ACTION_DRAFT_STORAGE_KEY, JSON.stringify({
+      title: "Untraceable follow-up",
+      note: "Context without evidence identity",
+      contextId: "tenant-1:user-1",
+      createdFrom: "briefing",
+      createdAt: Date.now(),
+    }));
+    expect(consumeActionDraft(session, "tenant-1:user-1")).toBeNull();
+  });
+
   it("discards a draft from another authenticated context", () => {
     const session = storage();
-    storeActionDraft(session, { title: "Private follow-up", note: "Sensitive context", contextId: "tenant-1:user-1", createdFrom: "briefing" });
+    storeActionDraft(session, { title: "Private follow-up", note: "Sensitive context", contextId: "tenant-1:user-1", briefingSectionId: "section-1", handoffKey: "11111111-1111-4111-8111-111111111111", createdFrom: "briefing" });
     expect(consumeActionDraft(session, "tenant-2:user-2")).toBeNull();
     expect(session.length).toBe(0);
   });
@@ -59,6 +75,8 @@ describe("Daily Memo action drafts", () => {
       title: "t".repeat(250),
       note: "n".repeat(1_100),
       contextId: "tenant-1:user-1",
+      briefingSectionId: "section-1",
+      handoffKey: "11111111-1111-4111-8111-111111111111",
       createdFrom: "briefing",
     });
     const result = consumeActionDraft(session, "tenant-1:user-1");
@@ -73,6 +91,8 @@ describe("Daily Memo action drafts", () => {
       title: "Old follow up",
       note: "No longer current",
       contextId: "tenant-1:user-1",
+      briefingSectionId: "section-1",
+      handoffKey: "11111111-1111-4111-8111-111111111111",
       createdFrom: "briefing",
     }, createdAt);
     expect(consumeActionDraft(session, "tenant-1:user-1", createdAt + 15 * 60 * 1_000 + 1)).toBeNull();
@@ -85,6 +105,8 @@ describe("Daily Memo action drafts", () => {
       title: "Boundary follow up",
       note: "Still current",
       contextId: "tenant-1:user-1",
+      briefingSectionId: "section-1",
+      handoffKey: "11111111-1111-4111-8111-111111111111",
       createdFrom: "briefing",
     }, createdAt);
     expect(consumeActionDraft(session, "tenant-1:user-1", createdAt + 15 * 60 * 1_000))
@@ -98,6 +120,8 @@ describe("Daily Memo action drafts", () => {
       title: "Suspicious follow up",
       note: "Future context",
       contextId: "tenant-1:user-1",
+      briefingSectionId: "section-1",
+      handoffKey: "11111111-1111-4111-8111-111111111111",
       createdFrom: "briefing",
     }, now + 1);
     expect(consumeActionDraft(session, "tenant-1:user-1", now)).toBeNull();
@@ -110,6 +134,8 @@ describe("Daily Memo action drafts", () => {
       title: "Follow up",
       note: "Context",
       contextId: "tenant-1:user-1",
+      briefingSectionId: "section-1",
+      handoffKey: "11111111-1111-4111-8111-111111111111",
       createdFrom: "briefing",
     })).toThrow(/Denied/);
   });

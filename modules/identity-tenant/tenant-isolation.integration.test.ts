@@ -31,7 +31,7 @@ const hasEnv = Boolean(URL && SERVICE_KEY && ANON_KEY);
 // A stable, obviously-synthetic marker so seeded rows are easy to clean up.
 const RUN = "rls-itest";
 
-type Seed = { tenantId: string; userId: string; email: string; password: string };
+type Seed = { tenantId: string; userId: string; email: string; password: string; sectionId: string };
 
 describe.skipIf(!hasEnv)("tenant isolation (runtime RLS enforcement)", () => {
   // Created in beforeAll, not at collection time: `describe.skipIf` still
@@ -71,7 +71,27 @@ describe.skipIf(!hasEnv)("tenant isolation (runtime RLS enforcement)", () => {
       .insert({ tenant_id: tenantId, display_name: `${RUN}-${label}-person` });
     if (pErr) throw pErr;
 
-    return { tenantId, userId, email, password };
+    const { data: briefing, error: briefingError } = await admin
+      .from("briefings")
+      .insert({ tenant_id: tenantId, status: "ready" })
+      .select("id")
+      .single();
+    if (briefingError || !briefing) throw briefingError ?? new Error("briefing create failed");
+    const { data: section, error: sectionError } = await admin
+      .from("briefing_sections")
+      .insert({ tenant_id: tenantId, briefing_id: briefing.id, kind: "decisions", title: `${RUN}-${label}-section` })
+      .select("id")
+      .single();
+    if (sectionError || !section) throw sectionError ?? new Error("section create failed");
+    const { error: referenceError } = await admin.from("source_references").insert({
+      tenant_id: tenantId,
+      briefing_section_id: section.id,
+      source_system: "integration-test",
+      excerpt_or_pointer: `${RUN}-${label}-evidence`,
+    });
+    if (referenceError) throw referenceError;
+
+    return { tenantId, userId, email, password, sectionId: section.id as string };
   }
 
   async function userClient(seed: Seed): Promise<SupabaseClient> {
@@ -98,6 +118,8 @@ describe.skipIf(!hasEnv)("tenant isolation (runtime RLS enforcement)", () => {
     // Best-effort teardown (service role bypasses RLS).
     for (const s of seeds) {
       await admin.from("user_feedback_events").delete().eq("tenant_id", s.tenantId);
+      await admin.from("suggested_actions").delete().eq("tenant_id", s.tenantId);
+      await admin.from("briefings").delete().eq("tenant_id", s.tenantId);
       await admin.from("people").delete().eq("tenant_id", s.tenantId);
       await admin.from("tenant_users").delete().eq("tenant_id", s.tenantId);
       await admin.from("tenants").delete().eq("id", s.tenantId);
@@ -176,6 +198,156 @@ describe.skipIf(!hasEnv)("tenant isolation (runtime RLS enforcement)", () => {
       target_id: `${RUN}-forged-user`,
     });
     expect(forgedUserError).not.toBeNull();
+  });
+
+  it("preserves memo evidence atomically and rejects a foreign section", async () => {
+    const a = seeds[0]!;
+    const b = seeds[1]!;
+    const clientA = await userClient(a);
+    const handoffKey = "11111111-1111-4111-8111-111111111111";
+
+    const { data: action, error: ownError } = await clientA.rpc(
+      "create_action_from_briefing_section",
+      {
+        p_tenant_id: a.tenantId,
+        p_section_id: a.sectionId,
+        p_handoff_key: handoffKey,
+        p_action: { title: `${RUN}-grounded-action`, status: "planned", priority: "normal" },
+      },
+    );
+    expect(ownError).toBeNull();
+    expect(action).toMatchObject({ tenant_id: a.tenantId, created_from: "briefing" });
+
+    const { data: references, error: referencesError } = await clientA
+      .from("source_references")
+      .select("suggested_action_id, excerpt_or_pointer")
+      .eq("suggested_action_id", action.id);
+    expect(referencesError).toBeNull();
+    expect(references).toEqual([{ suggested_action_id: action.id, excerpt_or_pointer: `${RUN}-a-evidence` }]);
+
+    const { data: retriedAction, error: retryError } = await clientA.rpc(
+      "create_action_from_briefing_section",
+      {
+        p_tenant_id: a.tenantId,
+        p_section_id: a.sectionId,
+        p_handoff_key: handoffKey,
+        p_action: { title: `${RUN}-grounded-action`, status: "planned", priority: "normal" },
+      },
+    );
+    expect(retryError).toBeNull();
+    expect(retriedAction.id).toBe(action.id);
+
+    const { count: retryCount } = await admin
+      .from("suggested_actions")
+      .select("id", { count: "exact", head: true })
+      .eq("briefing_handoff_key", handoffKey);
+    expect(retryCount).toBe(1);
+
+    const concurrentKey = "44444444-4444-4444-8444-444444444444";
+    const concurrentResults = await Promise.all([
+      clientA.rpc("create_action_from_briefing_section", {
+        p_tenant_id: a.tenantId,
+        p_section_id: a.sectionId,
+        p_handoff_key: concurrentKey,
+        p_action: { title: `${RUN}-concurrent-action` },
+      }),
+      clientA.rpc("create_action_from_briefing_section", {
+        p_tenant_id: a.tenantId,
+        p_section_id: a.sectionId,
+        p_handoff_key: concurrentKey,
+        p_action: { title: `${RUN}-concurrent-action` },
+      }),
+    ]);
+    expect(concurrentResults.every((result) => result.error === null)).toBe(true);
+    expect(concurrentResults[0]!.data.id).toBe(concurrentResults[1]!.data.id);
+
+    const { count: concurrentCount } = await admin
+      .from("suggested_actions")
+      .select("id", { count: "exact", head: true })
+      .eq("briefing_handoff_key", concurrentKey);
+    expect(concurrentCount).toBe(1);
+
+    const { error: conflictingKeyError } = await clientA.rpc(
+      "create_action_from_briefing_section",
+      {
+        p_tenant_id: a.tenantId,
+        p_section_id: b.sectionId,
+        p_handoff_key: handoffKey,
+        p_action: { title: `${RUN}-conflicting-key` },
+      },
+    );
+    expect(conflictingKeyError).not.toBeNull();
+
+    const { error: foreignError } = await clientA.rpc(
+      "create_action_from_briefing_section",
+      {
+        p_tenant_id: a.tenantId,
+        p_section_id: b.sectionId,
+        p_handoff_key: "22222222-2222-4222-8222-222222222222",
+        p_action: { title: `${RUN}-forged-action` },
+      },
+    );
+    expect(foreignError).not.toBeNull();
+
+    const { error: forgedTenantError } = await clientA.rpc(
+      "create_action_from_briefing_section",
+      {
+        p_tenant_id: b.tenantId,
+        p_section_id: b.sectionId,
+        p_handoff_key: "55555555-5555-4555-8555-555555555555",
+        p_action: { title: `${RUN}-forged-tenant-action` },
+      },
+    );
+    expect(forgedTenantError).not.toBeNull();
+
+    const { count } = await admin
+      .from("suggested_actions")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", a.tenantId)
+      .eq("title", `${RUN}-forged-action`);
+    expect(count).toBe(0);
+
+    const { count: forgedTenantCount } = await admin
+      .from("suggested_actions")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", b.tenantId)
+      .eq("title", `${RUN}-forged-tenant-action`);
+    expect(forgedTenantCount).toBe(0);
+
+    const invalidPayloads: Array<{ key: string; action: unknown }> = [
+      { key: "30000000-0000-4000-8000-000000000001", action: "not-an-object" },
+      { key: "30000000-0000-4000-8000-000000000002", action: { title: "x".repeat(201) } },
+      { key: "30000000-0000-4000-8000-000000000003", action: { title: "valid", description: "x".repeat(1001) } },
+      { key: "30000000-0000-4000-8000-000000000004", action: { title: "valid", rationale: "x".repeat(2001) } },
+      { key: "30000000-0000-4000-8000-000000000005", action: { title: "valid", topics: "not-an-array" } },
+      { key: "30000000-0000-4000-8000-000000000006", action: { title: "valid", topics: Array(21).fill("topic") } },
+      { key: "30000000-0000-4000-8000-000000000007", action: { title: "valid", topics: ["x".repeat(101)] } },
+      { key: "30000000-0000-4000-8000-000000000008", action: { title: "valid", ignored: "x".repeat(33_000) } },
+    ];
+
+    for (const invalid of invalidPayloads) {
+      const { error } = await clientA.rpc("create_action_from_briefing_section", {
+        p_tenant_id: a.tenantId,
+        p_section_id: a.sectionId,
+        p_handoff_key: invalid.key,
+        p_action: invalid.action,
+      });
+      expect(error, invalid.key).not.toBeNull();
+    }
+
+    const { error: missingKeyError } = await clientA.rpc("create_action_from_briefing_section", {
+      p_tenant_id: a.tenantId,
+      p_section_id: a.sectionId,
+      p_handoff_key: null,
+      p_action: { title: "valid" },
+    });
+    expect(missingKeyError).not.toBeNull();
+
+    const { count: invalidCount } = await admin
+      .from("suggested_actions")
+      .select("id", { count: "exact", head: true })
+      .in("briefing_handoff_key", invalidPayloads.map((invalid) => invalid.key));
+    expect(invalidCount).toBe(0);
   });
 });
 
