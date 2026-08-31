@@ -50,6 +50,7 @@ export async function createAction(input: {
   rationale?: string | null;
   createdFrom: ActionOrigin;
   briefingSectionId?: string | null;
+  handoffKey?: string | null;
 }): Promise<ActionResponse> {
   try {
     if (!input.title || !input.title.trim()) {
@@ -66,7 +67,7 @@ export async function createAction(input: {
     }
 
     const origin = actionOrigin(input.createdFrom);
-    if (origin === "briefing" && !input.briefingSectionId) {
+    if (origin === "briefing" && (!input.briefingSectionId || !input.handoffKey)) {
       return { ok: false, error: "Daily briefing source context is required." };
     }
     const payload = {
@@ -89,6 +90,7 @@ export async function createAction(input: {
       ? await supabase.rpc("create_action_from_briefing_section", {
           p_tenant_id: ctx.tenantId,
           p_section_id: input.briefingSectionId,
+          p_handoff_key: input.handoffKey,
           p_action: payload,
         })
       : await supabase.from("suggested_actions").insert(payload).select().single();

@@ -15,7 +15,14 @@ export function MemoActionDraft({ title, note, contextId, briefingSectionId }: {
         className="chip"
         onClick={() => {
           try {
-            storeActionDraft(window.sessionStorage, { title, note, contextId, briefingSectionId, createdFrom: "briefing" });
+            storeActionDraft(window.sessionStorage, {
+              title,
+              note,
+              contextId,
+              briefingSectionId,
+              handoffKey: window.crypto.randomUUID(),
+              createdFrom: "briefing",
+            });
             router.push("/actions");
           } catch {
             setFailed(true);

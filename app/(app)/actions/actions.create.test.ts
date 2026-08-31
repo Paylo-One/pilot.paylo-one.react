@@ -51,12 +51,14 @@ describe("createAction origin", () => {
       title: "Follow up",
       createdFrom: "briefing",
       briefingSectionId: "section-1",
+      handoffKey: "11111111-1111-4111-8111-111111111111",
     })).resolves.toMatchObject({ ok: true });
 
     expect(mocks.inserted).toBeNull();
     expect(mocks.rpc).toHaveBeenCalledWith("create_action_from_briefing_section", {
       p_tenant_id: "tenant-1",
       p_section_id: "section-1",
+      p_handoff_key: "11111111-1111-4111-8111-111111111111",
       p_action: expect.objectContaining({ title: "Follow up", created_from: "briefing" }),
     });
     expect(mocks.audit).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({

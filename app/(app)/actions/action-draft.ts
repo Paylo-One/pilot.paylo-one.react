@@ -8,6 +8,7 @@ export interface ActionDraft {
   readonly note: string;
   readonly contextId: string;
   readonly briefingSectionId: string;
+  readonly handoffKey: string;
   readonly createdFrom: "briefing";
   readonly createdAt: number;
 }
@@ -21,6 +22,7 @@ function bounded(input: Partial<ActionDraft>, createdAt: number): ActionDraft {
     contextId: typeof input.contextId === "string" ? input.contextId : "",
     briefingSectionId:
       typeof input.briefingSectionId === "string" ? input.briefingSectionId : "",
+    handoffKey: typeof input.handoffKey === "string" ? input.handoffKey : "",
     createdFrom: "briefing",
     createdAt: typeof input.createdAt === "number" ? input.createdAt : createdAt,
   };
@@ -45,7 +47,7 @@ export function consumeActionDraft(storage: Storage, contextId: string, now = Da
     if (!parsed || typeof parsed !== "object") return null;
     const draft = bounded(parsed as Partial<ActionDraft>, 0);
     const age = now - draft.createdAt;
-    return draft.title && draft.contextId === contextId && draft.briefingSectionId && age >= 0 && age <= MAX_DRAFT_AGE_MS
+    return draft.title && draft.contextId === contextId && draft.briefingSectionId && draft.handoffKey && age >= 0 && age <= MAX_DRAFT_AGE_MS
       ? draft
       : null;
   } catch {

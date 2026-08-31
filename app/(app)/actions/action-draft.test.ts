@@ -22,6 +22,7 @@ describe("Daily Memo action drafts", () => {
       note: "The launch is blocked & needs a decision.",
       contextId: "tenant-1:user-1",
       briefingSectionId: "section-1",
+      handoffKey: "11111111-1111-4111-8111-111111111111",
       createdFrom: "briefing",
     }, now);
     expect(consumeActionDraft(session, "tenant-1:user-1", now)).toEqual({
@@ -29,6 +30,7 @@ describe("Daily Memo action drafts", () => {
       note: "The launch is blocked & needs a decision.",
       contextId: "tenant-1:user-1",
       briefingSectionId: "section-1",
+      handoffKey: "11111111-1111-4111-8111-111111111111",
       createdFrom: "briefing",
       createdAt: now,
     });
@@ -56,7 +58,7 @@ describe("Daily Memo action drafts", () => {
 
   it("discards a draft from another authenticated context", () => {
     const session = storage();
-    storeActionDraft(session, { title: "Private follow-up", note: "Sensitive context", contextId: "tenant-1:user-1", briefingSectionId: "section-1", createdFrom: "briefing" });
+    storeActionDraft(session, { title: "Private follow-up", note: "Sensitive context", contextId: "tenant-1:user-1", briefingSectionId: "section-1", handoffKey: "11111111-1111-4111-8111-111111111111", createdFrom: "briefing" });
     expect(consumeActionDraft(session, "tenant-2:user-2")).toBeNull();
     expect(session.length).toBe(0);
   });
@@ -74,6 +76,7 @@ describe("Daily Memo action drafts", () => {
       note: "n".repeat(1_100),
       contextId: "tenant-1:user-1",
       briefingSectionId: "section-1",
+      handoffKey: "11111111-1111-4111-8111-111111111111",
       createdFrom: "briefing",
     });
     const result = consumeActionDraft(session, "tenant-1:user-1");
@@ -89,6 +92,7 @@ describe("Daily Memo action drafts", () => {
       note: "No longer current",
       contextId: "tenant-1:user-1",
       briefingSectionId: "section-1",
+      handoffKey: "11111111-1111-4111-8111-111111111111",
       createdFrom: "briefing",
     }, createdAt);
     expect(consumeActionDraft(session, "tenant-1:user-1", createdAt + 15 * 60 * 1_000 + 1)).toBeNull();
@@ -102,6 +106,7 @@ describe("Daily Memo action drafts", () => {
       note: "Still current",
       contextId: "tenant-1:user-1",
       briefingSectionId: "section-1",
+      handoffKey: "11111111-1111-4111-8111-111111111111",
       createdFrom: "briefing",
     }, createdAt);
     expect(consumeActionDraft(session, "tenant-1:user-1", createdAt + 15 * 60 * 1_000))
@@ -116,6 +121,7 @@ describe("Daily Memo action drafts", () => {
       note: "Future context",
       contextId: "tenant-1:user-1",
       briefingSectionId: "section-1",
+      handoffKey: "11111111-1111-4111-8111-111111111111",
       createdFrom: "briefing",
     }, now + 1);
     expect(consumeActionDraft(session, "tenant-1:user-1", now)).toBeNull();
@@ -129,6 +135,7 @@ describe("Daily Memo action drafts", () => {
       note: "Context",
       contextId: "tenant-1:user-1",
       briefingSectionId: "section-1",
+      handoffKey: "11111111-1111-4111-8111-111111111111",
       createdFrom: "briefing",
     })).toThrow(/Denied/);
   });
